@@ -9,6 +9,13 @@
 - Show the root repo as [main] (not [main repository]) unless we're already there
 - Fix: Interactive mode doesn't actually change pwd in shell (CLI runs in subprocess)
 
+### Add branch argument to rm command
+- Allow `git-wt rm <branch-name>` to remove a specific worktree
+- Currently rm only works on the current worktree
+- Should navigate to the worktree first, then remove it
+- Example: `git-wt rm feature-branch` removes the feature-branch worktree
+- Should work with branch names containing slashes
+
 ### Support invoking commands from subdirectories
 - `go` and `rm` should work when invoked from subdirectories within a worktree
 - Currently may fail if not run from worktree root
