@@ -78,6 +78,15 @@ pub fn main() !void {
         return;
     }
 
+    if (std.mem.eql(u8, arg1, "--alias")) {
+        if (final_args.len < 3) {
+            printAliasUsage();
+            return;
+        }
+        printAliasFunction(final_args[2]);
+        return;
+    }
+
     const command_args = if (final_args.len > 2) final_args[2..] else &[_][]const u8{};
     
     // Find and execute command
@@ -117,6 +126,7 @@ fn printUsage() void {
     print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
     print("  -h, --help             Show help\n", .{});
     print("  -v, --version          Show version\n", .{});
+    print("  --alias <name>         Generate shell function for directory navigation\n", .{});
     print("\nUse 'git-wt --help' for more information\n", .{});
 }
 
@@ -129,6 +139,60 @@ fn printHelp() void {
     print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
     print("  git-wt go main              Navigate to the main repository\n", .{});
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
+}
+
+fn printAliasUsage() void {
+    print("Usage: git-wt --alias <alias-name>\n\n", .{});
+    print("Generate shell function for proper directory navigation.\n\n", .{});
+    print("Example:\n", .{});
+    print("  # Add to your .zshrc or .bashrc:\n", .{});
+    print("  eval \"$(git-wt --alias gwt)\"\n\n", .{});
+    print("  # Then use:\n", .{});
+    print("  gwt go feature-branch    # This will actually change directories\n", .{});
+}
+
+fn printAliasFunction(alias_name: []const u8) void {
+    // Print a shell function that wraps git-wt and handles directory changes
+    print("# git-wt shell function for {s}\n", .{alias_name});
+    print("{s}() {{\n", .{alias_name});
+    print("    local git_wt_bin=\"git-wt\"\n", .{});
+    print("    \n", .{});
+    print("    # Handle the go command specially\n", .{});
+    print("    if [ \"$1\" = \"go\" ]; then\n", .{});
+    print("        if [ -z \"$2\" ]; then\n", .{});
+    print("            # Interactive mode - capture output and execute cd if found\n", .{});
+    print("            local output\n", .{});
+    print("            output=$(\"$git_wt_bin\" go 2>&1)\n", .{});
+    print("            echo \"$output\"\n", .{});
+    print("            # Check if output contains a cd command (non-interactive mode)\n", .{});
+    print("            if echo \"$output\" | grep -q '^cd '; then\n", .{});
+    print("                eval \"$(echo \"$output\" | grep '^cd ')\"\n", .{});
+    print("            fi\n", .{});
+    print("        else\n", .{});
+    print("            # Direct navigation - use non-interactive mode\n", .{});
+    print("            shift # remove 'go'\n", .{});
+    print("            local cd_cmd=$(\"$git_wt_bin\" go --non-interactive \"$@\")\n", .{});
+    print("            if [ -n \"$cd_cmd\" ]; then\n", .{});
+    print("                eval \"$cd_cmd\"\n", .{});
+    print("            fi\n", .{});
+    print("        fi\n", .{});
+    print("    elif [ \"$1\" = \"new\" ]; then\n", .{});
+    print("        # For new command, run it and then cd to the new worktree\n", .{});
+    print("        shift # remove 'new'\n", .{});
+    print("        local branch=\"$1\"\n", .{});
+    print("        \"$git_wt_bin\" new \"$@\"\n", .{});
+    print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{});
+    print("            # Try to navigate to the new worktree\n", .{});
+    print("            local cd_cmd=$(\"$git_wt_bin\" go --non-interactive \"$branch\")\n", .{});
+    print("            if [ -n \"$cd_cmd\" ]; then\n", .{});
+    print("                eval \"$cd_cmd\"\n", .{});
+    print("            fi\n", .{});
+    print("        fi\n", .{});
+    print("    else\n", .{});
+    print("        # For all other commands, just pass through\n", .{});
+    print("        \"$git_wt_bin\" \"$@\"\n", .{});
+    print("    fi\n", .{});
+    print("}}\n", .{});
 }
 
 test {

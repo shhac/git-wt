@@ -141,6 +141,12 @@ Originally planned to use external libraries but simplified:
 
 ## Key Features Implemented
 
+### Shell Integration
+- **--alias command** generates shell functions to handle directory changes
+- Since CLI tools can't change the parent shell's pwd, the alias wraps git-wt
+- Enables commands like `gwt go branch` to actually change directories
+- Setup: `eval "$(git-wt --alias gwt)"` in .zshrc or .bashrc
+
 ### Worktree Management
 - Creates worktrees in `../repo-trees/branch-name` structure
 - Automatic branch creation with `-b` flag

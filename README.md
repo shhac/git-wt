@@ -74,6 +74,23 @@ gh release create v0.1.0 \
   zig-out/bin/git-wt-*
 ```
 
+## Setup Shell Integration
+
+Since CLI tools can't change the parent shell's directory, you'll need to set up a shell function wrapper. Add this to your `.zshrc` or `.bashrc`:
+
+```bash
+# Generate and evaluate the shell function
+eval "$(git-wt --alias gwt)"
+```
+
+Then use `gwt` instead of `git-wt` for commands that change directories:
+
+```bash
+gwt new feature-branch    # Creates worktree AND navigates to it
+gwt go main              # Actually changes to the main repository
+gwt rm                   # Works the same as git-wt rm
+```
+
 ## Usage
 
 ### Create a new worktree
