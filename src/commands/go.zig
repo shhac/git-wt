@@ -323,19 +323,15 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             return;
         }
         
-        // In show_command mode, output the first (most recent) worktree automatically
-        if (show_command) {
-            if (worktrees.items.len > 0) {
-                const selected = worktrees.items[0];
-                try stdout.print("cd {s}\n", .{selected.path});
-            }
-            return;
-        }
-        
         const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
         defer allocator.free(prompt);
         
-        if (try input.readLine(allocator, prompt)) |response| {
+        // In show_command mode, send prompt to stderr instead of stdout
+        if (show_command) {
+            try stderr.print("{s} ", .{prompt});
+        }
+        
+        if (try input.readLine(allocator, if (show_command) "" else prompt)) |response| {
             defer allocator.free(response);
             
             if (response.len > 0 and (response[0] == 'q' or response[0] == 'Q')) {
@@ -354,8 +350,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             }
             
             const selected = worktrees.items[selection - 1];
-            try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
-            try process.changeCurDir(selected.path);
+            if (show_command) {
+                try stdout.print("cd {s}\n", .{selected.path});
+            } else {
+                try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
+                try process.changeCurDir(selected.path);
+            }
         }
     }
 }
