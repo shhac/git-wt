@@ -117,6 +117,28 @@ Originally planned to use external libraries but simplified:
 - Manual testing in git repositories is essential
 - Consider edge cases like being in main repo vs worktree
 
+## Robustness and Safety Features
+
+### Input Validation
+- **Branch name validation**: Rejects invalid characters, reserved names, and improper formatting
+- **Path validation**: Checks for existing worktree paths to prevent conflicts
+- **Branch existence checks**: Prevents creating worktrees for branches that already exist
+
+### Git State Validation
+- **Repository state checks**: Detects ongoing merges, rebases, cherry-picks, and bisects
+- **Uncommitted changes detection**: Warns when removing worktrees with uncommitted work
+- **Clean operation guarantees**: Ensures git operations happen in clean repository states
+
+### Error Handling
+- **Graceful failure modes**: All errors provide clear, actionable feedback to users
+- **Process isolation**: Claude spawning uses detached processes to prevent hangs
+- **Resource cleanup**: Proper memory management and file handle cleanup throughout
+
+### Testing and Verification
+- **Comprehensive test suite**: 13 automated tests covering normal and edge cases
+- **Outcome verification**: Tests actually verify that operations succeed (not just that commands run)
+- **Non-interactive mode**: Full CLI functionality available for scripting and automation
+
 ## Key Features Implemented
 
 ### Worktree Management
@@ -138,10 +160,11 @@ When creating a new worktree, automatically copies:
 - Proper PATH rehashing after nvm changes
 
 ### User Experience
-- Colored output for better visibility
-- Interactive prompts with sensible defaults (Y/n patterns)
-- Clear error messages with context
-- Progress indicators for long operations
+- **Colored output** for better visibility and status clarity
+- **Interactive prompts** with sensible defaults (Y/n patterns)
+- **Comprehensive help system** with per-command help (`git-wt new --help`)
+- **Clear error messages** with context and suggested actions
+- **Progress indicators** for long operations like yarn install
 
 ## Testing Approach
 
