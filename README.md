@@ -13,16 +13,64 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 
 ## Installation
 
-### Build from source
-
-Requirements:
+### Requirements
 - Zig 0.14.1 or later
+- Git (obviously!)
+- Optional: nvm and yarn for Node.js project support
+
+### Build from source
 
 ```bash
 git clone https://github.com/yourusername/git-wt.git
 cd git-wt
+
+# Debug build (for development)
+zig build
+
+# Release build (optimized)
 zig build -Doptimize=ReleaseFast
+
+# Run tests
+zig build test
+
+# Install to ~/.local/bin
 cp zig-out/bin/git-wt ~/.local/bin/
+
+# Or install system-wide
+sudo cp zig-out/bin/git-wt /usr/local/bin/
+```
+
+### Building for different platforms
+
+```bash
+# macOS (Intel)
+zig build -Doptimize=ReleaseFast -Dtarget=x86_64-macos
+
+# macOS (Apple Silicon) 
+zig build -Doptimize=ReleaseFast -Dtarget=aarch64-macos
+
+# Linux x86_64
+zig build -Doptimize=ReleaseFast -Dtarget=x86_64-linux
+
+# Linux ARM64
+zig build -Doptimize=ReleaseFast -Dtarget=aarch64-linux
+
+# Windows
+zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows
+```
+
+### Creating a release
+
+```bash
+# 1. Update version in src/main.zig
+# 2. Build for all platforms
+./scripts/build-release.sh  # (create this script with above commands)
+
+# 3. Create GitHub release
+gh release create v0.1.0 \
+  --title "v0.1.0" \
+  --notes "Initial release" \
+  zig-out/bin/git-wt-*
 ```
 
 ## Usage
@@ -72,6 +120,22 @@ The following files are automatically copied when creating new worktrees:
 - `CLAUDE.local.md` - Local Claude instructions
 - `.ai-cache` - AI cache directory
 
+## How It Works
+
+1. **Worktree Structure**: Creates worktrees in a parallel directory structure:
+   ```
+   parent-dir/
+   ├── my-repo/          (main repository)
+   └── my-repo-trees/    (worktrees)
+       ├── feature-a/
+       ├── feature-b/
+       └── bugfix-123/
+   ```
+
+2. **Configuration Syncing**: Automatically copies important files that are typically gitignored but needed for development (env vars, editor configs, etc.)
+
+3. **Smart Navigation**: The `go` command sorts worktrees by modification time, making it easy to jump to recently used branches.
+
 ## Development
 
 ```bash
@@ -81,9 +145,48 @@ zig build test
 # Build debug version
 zig build
 
-# Run directly
+# Run directly without installing
 zig build run -- new test-branch
+
+# Enable verbose output (if implemented)
+DEBUG=1 git-wt new test-branch
 ```
+
+### Project Structure
+
+```
+src/
+├── main.zig           # CLI entry point and command dispatch
+├── commands/          # Command implementations
+│   ├── new.zig       
+│   ├── remove.zig    
+│   └── go.zig        
+└── utils/            # Shared utilities
+    ├── git.zig       # Git operations
+    ├── fs.zig        # Filesystem helpers
+    ├── colors.zig    # Terminal colors
+    ├── input.zig     # User input handling
+    └── process.zig   # Process execution
+```
+
+## Troubleshooting
+
+### "Not in a git repository" error
+Make sure you're running the command from within a git repository.
+
+### Colors not showing
+The tool uses ANSI escape codes. Make sure your terminal supports them. You can disable colors by setting `NO_COLOR=1`.
+
+### nvm/yarn commands not found
+These are optional dependencies. The tool will skip them if not installed.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git-wt new my-feature`)
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 

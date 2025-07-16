@@ -15,11 +15,23 @@ This is a Zig implementation of the git-wt shell script, providing:
 - Use Zig standard library conventions
 - Prefer explicit error handling over panics
 - Keep functions focused and testable
+- Extract common patterns into utility modules
 
 ### Architecture
-- `src/main.zig` - Entry point and command routing
-- `src/commands/` - Command implementations
-- `src/utils/` - Shared utilities (git, terminal, fs, node)
+
+```
+src/
+├── main.zig           # Entry point, command dispatch using command table pattern
+├── commands/
+│   ├── new.zig       # Create worktree with setup (config copy, nvm, yarn)
+│   ├── remove.zig    # Remove worktree with safety checks
+│   └── go.zig        # Navigate between worktrees (interactive/direct)
+└── utils/
+    ├── git.zig       # Git command wrapper, repository info
+    ├── fs.zig        # File operations, config copying, Node.js detection
+    ├── colors.zig    # ANSI color codes and formatted printing
+    ├── input.zig     # User input utilities (confirmations, line reading)
+    └── process.zig   # External command execution helpers
 
 ### Building
 ```bash
@@ -39,9 +51,9 @@ cp zig-out/bin/git-wt ~/.local/bin/
 
 ## Dependencies
 
-Using established Zig libraries to minimize custom code:
-- **zig-clap** (v0.10.0) - Command line argument parsing
-- **ansi_term** - Terminal colors and ANSI escape sequences
+Originally planned to use external libraries but simplified:
+- **zig-clap** - Added to build.zig.zon but not actively used (simplified to basic arg parsing)
+- **ansi_term** - Removed in favor of simple ANSI constants
 
 ## Implementation Notes
 
@@ -77,8 +89,50 @@ Using established Zig libraries to minimize custom code:
 - Manual testing in git repositories is essential
 - Consider edge cases like being in main repo vs worktree
 
+## Key Features Implemented
+
+### Worktree Management
+- Creates worktrees in `../repo-trees/branch-name` structure
+- Automatic branch creation with `-b` flag
+- Safe removal with confirmation prompts
+- Interactive navigation with modification time sorting
+
+### Configuration Copying
+When creating a new worktree, automatically copies:
+- `.claude` - Claude Code configuration
+- `.env*` - All environment files
+- `CLAUDE.local.md` - Local Claude instructions  
+- `.ai-cache` - AI cache directory
+
+### Node.js Integration
+- Detects and runs `nvm use` if `.nvmrc` exists
+- Detects yarn in package.json and runs `yarn install`
+- Proper PATH rehashing after nvm changes
+
+### User Experience
+- Colored output for better visibility
+- Interactive prompts with sensible defaults (Y/n patterns)
+- Clear error messages with context
+- Progress indicators for long operations
+
+## Testing Approach
+
+```bash
+# Run unit tests
+zig build test
+
+# Manual testing in a git repository
+./zig-out/bin/git-wt new test-branch
+cd ../repo-trees/test-branch
+./zig-out/bin/git-wt rm
+./zig-out/bin/git-wt go
+```
+
 ## Future Improvements
 - Add shell completion scripts
-- Consider configuration file support
+- Consider configuration file support  
 - Add dry-run mode for commands
 - Improve error messages with more context
+- Add `--force` flag for rm command
+- Support for custom worktree locations
+- Integration with git aliases
