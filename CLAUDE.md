@@ -11,6 +11,12 @@ This is a Zig implementation of the git-wt shell script, providing:
 
 ## Development Guidelines
 
+### Git Workflow
+- **Commit early and often** - Make commits as you complete logical units of work
+- Use conventional commits with `gm` (e.g., `gm feat cli "add argument parsing"`)
+- Don't wait until the end to commit - commit after each feature/fix is working
+- Run tests before committing to ensure changes don't break existing functionality
+
 ### Code Style
 - Use Zig standard library conventions
 - Prefer explicit error handling over panics
@@ -32,6 +38,20 @@ src/
     ├── colors.zig    # ANSI color codes and formatted printing
     ├── input.zig     # User input utilities (confirmations, line reading)
     └── process.zig   # External command execution helpers
+
+### Typical Development Workflow
+
+1. Make changes to the code
+2. Run `zig build` to check compilation
+3. Run `zig build test` to ensure tests pass
+4. Test manually with `./zig-out/bin/git-wt [command]`
+5. Commit with `gm [type] [scope] "description"`:
+   ```bash
+   gm feat new "add branch validation"
+   gm fix go "handle missing worktrees"
+   gm test utils "add tests for trimNewline"
+   gm refactor cli "simplify argument parsing"
+   ```
 
 ### Building
 ```bash
@@ -67,6 +87,12 @@ Originally planned to use external libraries but simplified:
 - Match general features rather than exact shell script behavior
 
 ## Implementation Learnings
+
+### Version Control Best Practices
+- Commit after each working feature, not at the end of the session
+- Use conventional commits to maintain clear history
+- Small, focused commits are easier to review and debug
+- Run tests before committing to catch issues early
 
 ### Dependencies
 - Started with zig-clap for CLI parsing but simplified to basic arg parsing due to compatibility issues
