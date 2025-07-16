@@ -2,6 +2,18 @@
 
 ## Features
 
+### Improve `go` command behavior
+- Current location/worktree should not be shown in the list
+- Default behavior if no index is provided should be to go to the most recent worktree (index 1)
+- Worktrees should be ordered by most recently modified first (currently implemented but verify)
+- Show the root repo as [main] (not [main repository]) unless we're already there
+- Fix: Interactive mode doesn't actually change pwd in shell (CLI runs in subprocess)
+
+### Support invoking commands from subdirectories
+- `go` and `rm` should work when invoked from subdirectories within a worktree
+- Currently may fail if not run from worktree root
+- Need to find git root directory first before operations
+
 ### Support specifying worktree parent directory with command line flag
 - Add `--parent-dir` or `-p` flag to `git-wt new` command
 - Allow users to override the default `../repo-trees/` location
