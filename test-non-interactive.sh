@@ -1,53 +1,99 @@
 #!/bin/bash
-# Simple non-interactive test script
+# Simple working test script
 
 set -euo pipefail
 
-echo "Building git-wt..."
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+FAILED_TESTS=0
+PASSED_TESTS=0
+
+pass() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    ((PASSED_TESTS++))
+    return 0
+}
+
+fail() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    ((FAILED_TESTS++))
+    return 0
+}
+
+info() {
+    echo -e "${YELLOW}[INFO]${NC} $1"
+}
+
+# Build
+info "Building git-wt..."
 zig build
 
-BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/zig-out/bin/git-wt"
+BIN="$(pwd)/zig-out/bin/git-wt"
 
-echo ""
-echo "Testing help:"
-$BIN --help
+# Test basic commands
+info "Testing basic commands..."
 
-echo ""
-echo "Testing version:"
-$BIN --version
+$BIN --version >/dev/null 2>&1 && pass "Version command works" || fail "Version command failed"
+$BIN --help >/dev/null 2>&1 && pass "Help command works" || fail "Help command failed"
+$BIN new --help >/dev/null 2>&1 && pass "New help works" || fail "New help failed"
 
-echo ""
-echo "Testing in test directory..."
+# Test validation
+info "Testing validation..."
+! $BIN --non-interactive new 'invalid branch' >/dev/null 2>&1 && pass "Rejects invalid branch" || fail "Should reject invalid branch"
+
+# Test worktree creation
+info "Testing worktree functionality..."
 TEST_DIR="$(mktemp -d)"
 cd "$TEST_DIR"
 
-# Create test repo
 git init test-repo
 cd test-repo
 echo "# Test" > README.md
 git add README.md
 git commit -m "Initial commit"
 
-echo ""
-echo "Creating worktree with --non-interactive:"
-$BIN --non-interactive new feature-branch
+REPO_ROOT="$(pwd)"
+TREES_DIR="$(dirname "$REPO_ROOT")/test-repo-trees"
 
-echo ""
-echo "Listing worktrees:"
-git worktree list
+# Create worktree
+$BIN --non-interactive new feature-branch && pass "Worktree creation succeeded" || fail "Worktree creation failed"
 
-echo ""
-echo "Testing go command:"
-$BIN --non-interactive go feature-branch
+# Verify creation
+[ -d "$TREES_DIR/feature-branch" ] && pass "Worktree directory exists" || fail "Worktree directory missing"
+[ -f "$TREES_DIR/feature-branch/.git" ] && pass "Worktree has .git file" || fail "Worktree missing .git file"
+git show-ref --verify --quiet refs/heads/feature-branch && pass "Branch was created" || fail "Branch not created"
 
-echo ""
-echo "Navigating to worktree and removing:"
-cd ../test-repo-trees/feature-branch
-$BIN --non-interactive rm
+# Test go command
+cd "$REPO_ROOT"
+GO_OUTPUT=$($BIN --non-interactive go feature-branch 2>&1)
+echo "$GO_OUTPUT" | grep -q "cd $TREES_DIR/feature-branch" && pass "Go command works" || fail "Go command failed: $GO_OUTPUT"
 
-echo ""
-echo "Cleaning up..."
+# Test removal
+cd "$TREES_DIR/feature-branch"
+$BIN --non-interactive rm && pass "Removal succeeded" || fail "Removal failed"
+
+# Verify removal
+[ ! -d "$TREES_DIR/feature-branch" ] && pass "Worktree directory removed" || fail "Worktree directory still exists"
+[ "$(pwd)" = "$REPO_ROOT" ] && pass "Returned to main repo" || fail "Not in main repo: $(pwd)"
+
+# Clean up
 cd /
 rm -rf "$TEST_DIR"
 
-echo "Tests completed!"
+# Summary
+echo ""
+echo "================ TEST SUMMARY ================"
+echo -e "${GREEN}Passed: $PASSED_TESTS${NC}"
+echo -e "${RED}Failed: $FAILED_TESTS${NC}"
+echo "=============================================="
+
+if [ $FAILED_TESTS -eq 0 ]; then
+    echo -e "${GREEN}All tests passed!${NC}"
+    exit 0
+else
+    echo -e "${RED}Some tests failed!${NC}"
+    exit 1
+fi
