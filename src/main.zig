@@ -206,16 +206,10 @@ fn printAliasUsage() void {
 }
 
 fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
-    // Print a shell function that wraps git-wt and handles directory changes
-    print("# git-wt shell function for {s}\n", .{alias_name});
     print("{s}() {{\n", .{alias_name});
-    print("    # Use the exact path to git-wt that generated this alias\n", .{});
     print("    local git_wt_bin=\"{s}\"\n", .{exe_path});
-    print("    \n", .{});
-    print("    # Handle the go command specially\n", .{});
     print("    if [ \"$1\" = \"go\" ]; then\n", .{});
-    print("        shift # remove 'go'\n", .{});
-    print("        # Check if we have a non-flag argument (branch name)\n", .{});
+    print("        shift\n", .{});
     print("        local has_branch=0\n", .{});
     print("        for arg in \"$@\"; do\n", .{});
     print("            if [[ \"$arg\" != -* ]]; then\n", .{});
@@ -223,35 +217,27 @@ fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     print("                break\n", .{});
     print("            fi\n", .{});
     print("        done\n", .{});
-    print("        \n", .{});
     print("        if [ $has_branch -eq 0 ]; then\n", .{});
-    print("            # No branch name - just run normally\n", .{});
     print("            \"$git_wt_bin\" go \"$@\"\n", .{});
     print("        else\n", .{});
-    print("            # We have a branch name - use show-command to get cd command\n", .{});
     print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{});
-    print("            # Check if output is a cd command\n", .{});
     print("            if echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{});
     print("                eval \"$cd_cmd\"\n", .{});
     print("            else\n", .{});
-    print("                # Not a cd command, just print the output\n", .{});
     print("                echo \"$cd_cmd\"\n", .{});
     print("            fi\n", .{});
     print("        fi\n", .{});
     print("    elif [ \"$1\" = \"new\" ]; then\n", .{});
-    print("        # For new command, run it and then cd to the new worktree\n", .{});
-    print("        shift # remove 'new'\n", .{});
+    print("        shift\n", .{});
     print("        local branch=\"$1\"\n", .{});
     print("        \"$git_wt_bin\" new \"$@\"\n", .{});
     print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{});
-    print("            # Try to navigate to the new worktree\n", .{});
     print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$branch\")\n", .{});
     print("            if [ -n \"$cd_cmd\" ]; then\n", .{});
     print("                eval \"$cd_cmd\"\n", .{});
     print("            fi\n", .{});
     print("        fi\n", .{});
     print("    else\n", .{});
-    print("        # For all other commands, just pass through\n", .{});
     print("        \"$git_wt_bin\" \"$@\"\n", .{});
     print("    fi\n", .{});
     print("}}\n", .{});
