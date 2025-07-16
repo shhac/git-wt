@@ -41,13 +41,25 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         return err;
     };
     
-    // Get repository info
+    // Get repository info first (needed for other checks)
     const repo_info = git.getRepoInfo(allocator) catch |err| {
         try colors.printError(stderr, "Not in a git repository", .{});
         return err;
     };
     defer allocator.free(repo_info.root);
     defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    
+    // Check if branch already exists
+    if (try git.branchExists(allocator, branch_name)) {
+        try colors.printError(stderr, "Branch '{s}' already exists", .{branch_name});
+        return error.BranchAlreadyExists;
+    }
+    
+    // Check if repository is in a clean state
+    if (!try git.isRepositoryClean(allocator)) {
+        try colors.printError(stderr, "Repository is not in a clean state (ongoing merge, rebase, etc.)", .{});
+        return error.RepositoryNotClean;
+    }
     
     // Construct worktree path
     const worktree_path = try fs_utils.constructWorktreePath(allocator, repo_info.root, branch_name);

@@ -44,6 +44,24 @@ $BIN new --help >/dev/null 2>&1 && pass "New help works" || fail "New help faile
 info "Testing validation..."
 ! $BIN --non-interactive new 'invalid branch' >/dev/null 2>&1 && pass "Rejects invalid branch" || fail "Should reject invalid branch"
 
+# Test branch existence check
+info "Testing branch existence handling..."
+TEST_DIR="$(mktemp -d)"
+cd "$TEST_DIR"
+git init test-repo2
+cd test-repo2
+echo "# Test" > README.md
+git add README.md
+git commit -m "Initial commit"
+
+# Create a branch first
+git branch existing-branch
+! $BIN --non-interactive new existing-branch >/dev/null 2>&1 && pass "Rejects existing branch" || fail "Should reject existing branch"
+
+# Clean up
+cd "$TEST_DIR/.."
+rm -rf "$TEST_DIR"
+
 # Test worktree creation
 info "Testing worktree functionality..."
 TEST_DIR="$(mktemp -d)"

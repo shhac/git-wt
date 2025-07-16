@@ -41,6 +41,17 @@ pub fn execute(allocator: std.mem.Allocator, non_interactive: bool) !void {
         return error.NotInWorktree;
     }
     
+    // Check if there are uncommitted changes
+    if (try git.hasUncommittedChanges(allocator)) {
+        try colors.printError(stderr, "Worktree has uncommitted changes", .{});
+        if (!non_interactive) {
+            if (!try input.confirm("Are you sure you want to continue?", false)) {
+                try colors.printInfo(stdout, "Cancelled", .{});
+                return;
+            }
+        }
+    }
+    
     // Get the current branch name
     const current_branch = try git.getCurrentBranch(allocator);
     defer allocator.free(current_branch);

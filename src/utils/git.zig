@@ -163,6 +163,54 @@ pub fn deleteBranch(allocator: std.mem.Allocator, branch: []const u8, force: boo
     defer allocator.free(result);
 }
 
+/// Check if repository is in a clean state (no ongoing rebase, merge, etc.)
+pub fn isRepositoryClean(allocator: std.mem.Allocator) !bool {
+    // Check for various git state files that indicate ongoing operations
+    const git_dir = execTrimmed(allocator, &.{ "rev-parse", "--git-dir" }) catch return false;
+    defer allocator.free(git_dir);
+    
+    const state_files = [_][]const u8{
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD", 
+        "REVERT_HEAD",
+        "BISECT_LOG",
+        "rebase-merge",
+        "rebase-apply",
+    };
+    
+    for (state_files) |state_file| {
+        const state_path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ git_dir, state_file }) catch continue;
+        defer allocator.free(state_path);
+        
+        // Check if file or directory exists
+        std.fs.cwd().access(state_path, .{}) catch continue;
+        // If we can access it, repo is not clean
+        return false;
+    }
+    
+    return true;
+}
+
+/// Check if there are uncommitted changes in the repository
+pub fn hasUncommittedChanges(allocator: std.mem.Allocator) !bool {
+    const status_output = exec(allocator, &.{ "status", "--porcelain" }) catch return true;
+    defer allocator.free(status_output);
+    
+    // If output is empty, no uncommitted changes
+    return status_output.len > 0;
+}
+
+/// Check if a branch already exists
+pub fn branchExists(allocator: std.mem.Allocator, branch: []const u8) !bool {
+    const ref_name = try std.fmt.allocPrint(allocator, "refs/heads/{s}", .{branch});
+    defer allocator.free(ref_name);
+    
+    const result = exec(allocator, &.{ "show-ref", "--verify", "--quiet", ref_name }) catch return false;
+    defer allocator.free(result);
+    
+    return true;
+}
+
 test "git exec" {
     const allocator = std.testing.allocator;
     
