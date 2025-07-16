@@ -52,6 +52,7 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
 /// Execute a git command and return trimmed output
 pub fn execTrimmed(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     const output = try exec(allocator, args);
+    defer allocator.free(output);
     const trimmed = trimNewline(output);
     return try allocator.dupe(u8, trimmed);
 }
@@ -169,7 +170,35 @@ test "git exec" {
     try std.testing.expect(std.mem.startsWith(u8, version, "git version"));
 }
 
-test "RepoInfo parsing" {
-    // This test would need to be run in a git repository
-    // Skipping for now as it requires a specific environment
+test "trimNewline" {
+    // Test with newline
+    const with_nl = "hello\n";
+    const trimmed1 = trimNewline(with_nl);
+    try std.testing.expectEqualStrings("hello", trimmed1);
+    
+    // Test without newline
+    const without_nl = "world";
+    const trimmed2 = trimNewline(without_nl);
+    try std.testing.expectEqualStrings("world", trimmed2);
+    
+    // Test empty string
+    const empty = "";
+    const trimmed3 = trimNewline(empty);
+    try std.testing.expectEqualStrings("", trimmed3);
+    
+    // Test multiple newlines
+    const multi_nl = "test\n\n\n";
+    const trimmed4 = trimNewline(multi_nl);
+    try std.testing.expectEqualStrings("test", trimmed4);
+}
+
+test "execTrimmed" {
+    const allocator = std.testing.allocator;
+    
+    // Test that it trims output
+    const version = try execTrimmed(allocator, &.{"--version"});
+    defer allocator.free(version);
+    
+    try std.testing.expect(std.mem.startsWith(u8, version, "git version"));
+    try std.testing.expect(!std.mem.endsWith(u8, version, "\n"));
 }

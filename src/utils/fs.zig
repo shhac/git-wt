@@ -138,9 +138,52 @@ test "constructWorktreePath" {
     defer allocator.free(path);
     
     try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature-branch", path);
+    
+    // Test with root directory
+    const path2 = try constructWorktreePath(allocator, "/myrepo", "test");
+    defer allocator.free(path2);
+    try std.testing.expectEqualStrings("//myrepo-trees/test", path2);
 }
 
 test "config files list" {
     try std.testing.expect(CONFIG_FILES.len > 0);
     try std.testing.expectEqualStrings(".claude", CONFIG_FILES[0]);
+    
+    // Ensure all important files are in the list
+    var has_env = false;
+    var has_claude_local = false;
+    for (CONFIG_FILES) |file| {
+        if (std.mem.eql(u8, file, ".env")) has_env = true;
+        if (std.mem.eql(u8, file, "CLAUDE.local.md")) has_claude_local = true;
+    }
+    try std.testing.expect(has_env);
+    try std.testing.expect(has_claude_local);
+}
+
+test "fileExists and ensureDir" {
+    const allocator = std.testing.allocator;
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    // Test fileExists with non-existent file
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+    
+    try std.testing.expect(!try fileExists(tmp_path, "test.txt"));
+    
+    // Create file and test again
+    const file = try tmp_dir.dir.createFile("test.txt", .{});
+    file.close();
+    
+    try std.testing.expect(try fileExists(tmp_path, "test.txt"));
+    
+    // Test ensureDir
+    const test_dir = try std.fmt.allocPrint(allocator, "{s}/testdir", .{tmp_path});
+    defer allocator.free(test_dir);
+    
+    try ensureDir(test_dir);
+    
+    // Check directory was created
+    var dir = try fs.cwd().openDir(test_dir, .{});
+    dir.close();
 }
