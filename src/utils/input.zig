@@ -1,7 +1,15 @@
 const std = @import("std");
+const env = @import("env.zig");
 
 /// Read user confirmation (y/n)
 pub fn confirm(prompt: []const u8, default: bool) !bool {
+    // In non-interactive mode, always return the default
+    if (env.isNonInteractive()) {
+        const stdout = std.io.getStdOut().writer();
+        try stdout.print("{s} [auto: {s}]\n", .{ prompt, if (default) "yes" else "no" });
+        return default;
+    }
+    
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
     
@@ -19,6 +27,13 @@ pub fn confirm(prompt: []const u8, default: bool) !bool {
 
 /// Read user input string
 pub fn readLine(allocator: std.mem.Allocator, prompt: []const u8) !?[]u8 {
+    // In non-interactive mode, return null (empty input)
+    if (env.isNonInteractive()) {
+        const stdout = std.io.getStdOut().writer();
+        try stdout.print("{s} [auto: skip]\n", .{prompt});
+        return null;
+    }
+    
     const stdout = std.io.getStdOut().writer();
     const stdin = std.io.getStdIn().reader();
     
