@@ -206,41 +206,42 @@ fn printAliasUsage() void {
 }
 
 fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
-    print("{s}() {{\n", .{alias_name});
-    print("    local git_wt_bin=\"{s}\"\n", .{exe_path});
-    print("    if [ \"$1\" = \"go\" ]; then\n", .{});
-    print("        shift\n", .{});
-    print("        local has_branch=0\n", .{});
-    print("        for arg in \"$@\"; do\n", .{});
-    print("            if [[ \"$arg\" != -* ]]; then\n", .{});
-    print("                has_branch=1\n", .{});
-    print("                break\n", .{});
-    print("            fi\n", .{});
-    print("        done\n", .{});
-    print("        if [ $has_branch -eq 0 ]; then\n", .{});
-    print("            \"$git_wt_bin\" go \"$@\"\n", .{});
-    print("        else\n", .{});
-    print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{});
-    print("            if echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{});
-    print("                eval \"$cd_cmd\"\n", .{});
-    print("            else\n", .{});
-    print("                echo \"$cd_cmd\"\n", .{});
-    print("            fi\n", .{});
-    print("        fi\n", .{});
-    print("    elif [ \"$1\" = \"new\" ]; then\n", .{});
-    print("        shift\n", .{});
-    print("        local branch=\"$1\"\n", .{});
-    print("        \"$git_wt_bin\" new \"$@\"\n", .{});
-    print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{});
-    print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$branch\")\n", .{});
-    print("            if [ -n \"$cd_cmd\" ]; then\n", .{});
-    print("                eval \"$cd_cmd\"\n", .{});
-    print("            fi\n", .{});
-    print("        fi\n", .{});
-    print("    else\n", .{});
-    print("        \"$git_wt_bin\" \"$@\"\n", .{});
-    print("    fi\n", .{});
-    print("}}\n", .{});
+    const stdout = std.io.getStdOut().writer();
+    stdout.print("{s}() {{\n", .{alias_name}) catch return;
+    stdout.print("    local git_wt_bin=\"{s}\"\n", .{exe_path}) catch return;
+    stdout.print("    if [ \"$1\" = \"go\" ]; then\n", .{}) catch return;
+    stdout.print("        shift\n", .{}) catch return;
+    stdout.print("        local has_branch=0\n", .{}) catch return;
+    stdout.print("        for arg in \"$@\"; do\n", .{}) catch return;
+    stdout.print("            if [[ \"$arg\" != -* ]]; then\n", .{}) catch return;
+    stdout.print("                has_branch=1\n", .{}) catch return;
+    stdout.print("                break\n", .{}) catch return;
+    stdout.print("            fi\n", .{}) catch return;
+    stdout.print("        done\n", .{}) catch return;
+    stdout.print("        if [ $has_branch -eq 0 ]; then\n", .{}) catch return;
+    stdout.print("            \"$git_wt_bin\" go \"$@\"\n", .{}) catch return;
+    stdout.print("        else\n", .{}) catch return;
+    stdout.print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{}) catch return;
+    stdout.print("            if echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;
+    stdout.print("                eval \"$cd_cmd\"\n", .{}) catch return;
+    stdout.print("            else\n", .{}) catch return;
+    stdout.print("                echo \"$cd_cmd\"\n", .{}) catch return;
+    stdout.print("            fi\n", .{}) catch return;
+    stdout.print("        fi\n", .{}) catch return;
+    stdout.print("    elif [ \"$1\" = \"new\" ]; then\n", .{}) catch return;
+    stdout.print("        shift\n", .{}) catch return;
+    stdout.print("        local branch=\"$1\"\n", .{}) catch return;
+    stdout.print("        \"$git_wt_bin\" new \"$@\"\n", .{}) catch return;
+    stdout.print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{}) catch return;
+    stdout.print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$branch\")\n", .{}) catch return;
+    stdout.print("            if [ -n \"$cd_cmd\" ]; then\n", .{}) catch return;
+    stdout.print("                eval \"$cd_cmd\"\n", .{}) catch return;
+    stdout.print("            fi\n", .{}) catch return;
+    stdout.print("        fi\n", .{}) catch return;
+    stdout.print("    else\n", .{}) catch return;
+    stdout.print("        \"$git_wt_bin\" \"$@\"\n", .{}) catch return;
+    stdout.print("    fi\n", .{}) catch return;
+    stdout.print("}}\n", .{}) catch return;
 }
 
 test {
