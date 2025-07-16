@@ -16,6 +16,31 @@ const WorktreeInfo = struct {
 
 const MAX_RECURSION_DEPTH = 5;
 
+fn formatDuration(seconds: u64) struct { value: u64, unit: []const u8 } {
+    const minute = 60;
+    const hour = minute * 60;
+    const day = hour * 24;
+    const week = day * 7;
+    const month = day * 30;
+    const year = day * 365;
+    
+    if (seconds < minute) {
+        return .{ .value = seconds, .unit = "s" };
+    } else if (seconds < hour) {
+        return .{ .value = seconds / minute, .unit = "m" };
+    } else if (seconds < day) {
+        return .{ .value = seconds / hour, .unit = "h" };
+    } else if (seconds < week) {
+        return .{ .value = seconds / day, .unit = "d" };
+    } else if (seconds < month) {
+        return .{ .value = seconds / week, .unit = "w" };
+    } else if (seconds < year) {
+        return .{ .value = seconds / month, .unit = "mo" };
+    } else {
+        return .{ .value = seconds / year, .unit = "y" };
+    }
+}
+
 fn findWorktreesRecursively(
     allocator: std.mem.Allocator,
     worktrees: *std.ArrayList(WorktreeInfo),
@@ -222,7 +247,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 break :blk fs.path.basename(wt.path);
             };
             const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
-            const time_ago = std.time.timestamp() - timestamp;
+            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+            const duration = formatDuration(time_ago_seconds);
             
             if (non_interactive) {
                 if (plain) {
@@ -232,13 +258,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     // Non-interactive mode with formatting
                     
                     if (no_color) {
-                        try stdout.print("  {s} @ {s} - {d}s ago\n", .{
+                        try stdout.print("  {s} @ {s} - {d}{s} ago\n", .{
                             display_name,
                             wt.branch,
-                            time_ago,
+                            duration.value,
+                            duration.unit,
                         });
                     } else {
-                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{d}s ago{s}\n", .{
+                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{d}{s} ago{s}\n", .{
                             colors.path_color,
                             display_name,
                             colors.reset,
@@ -246,7 +273,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                             wt.branch,
                             colors.reset,
                             colors.yellow,
-                            time_ago,
+                            duration.value,
+                            duration.unit,
                             colors.reset,
                         });
                     }
@@ -264,11 +292,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     colors.reset,
                 });
                 
-                // Format timestamp (simplified)
-                try stdout.print("     {s}Last modified:{s} {d} seconds ago\n", .{
+                // Format timestamp
+                try stdout.print("     {s}Last modified:{s} {d}{s} ago\n", .{
                     colors.yellow,
                     colors.reset,
-                    std.time.timestamp() - timestamp,
+                    duration.value,
+                    duration.unit,
                 });
             }
         }
