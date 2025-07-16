@@ -54,7 +54,31 @@ Using established Zig libraries to minimize custom code:
 - Focus on clear, maintainable implementation
 - Match general features rather than exact shell script behavior
 
-## Next Steps
-- Implement git operations wrapper
-- Add filesystem utilities
-- Implement the three main commands (new, rm, go)
+## Implementation Learnings
+
+### Dependencies
+- Started with zig-clap for CLI parsing but simplified to basic arg parsing due to compatibility issues
+- Removed ansi_term dependency in favor of simple ANSI escape constants
+- Lesson: Sometimes simpler is better - don't over-engineer with dependencies
+
+### Code Organization
+- Extracted common utilities (colors, input, process) to reduce duplication
+- Used command table pattern in main.zig for cleaner command dispatch
+- Helper functions like `trimNewline` and `fileExists` eliminate repeated patterns
+
+### Zig-Specific Patterns
+- Use `defer` for cleanup consistently
+- Handle const-correctness carefully (e.g., `openDir` returns const Dir)
+- Arena allocators work well for CLI tools
+- Error unions and explicit error handling make code robust
+
+### Testing
+- Run `zig build test` to execute unit tests
+- Manual testing in git repositories is essential
+- Consider edge cases like being in main repo vs worktree
+
+## Future Improvements
+- Add shell completion scripts
+- Consider configuration file support
+- Add dry-run mode for commands
+- Improve error messages with more context
