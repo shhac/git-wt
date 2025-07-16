@@ -207,6 +207,7 @@ fn printAliasUsage() void {
 
 fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     const stdout = std.io.getStdOut().writer();
+    stdout.print("# Shell function wrapper for git-wt to enable directory navigation\n", .{}) catch return;
     stdout.print("{s}() {{\n", .{alias_name}) catch return;
     stdout.print("    local git_wt_bin=\"{s}\"\n", .{exe_path}) catch return;
     stdout.print("    if [ \"$1\" = \"go\" ]; then\n", .{}) catch return;
