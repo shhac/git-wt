@@ -11,6 +11,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add dependencies
+    const clap = b.dependency("clap", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("clap", clap.module("clap"));
+
+    const ansi_term = b.dependency("ansi_term", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("ansi_term", ansi_term.module("ansi_term"));
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

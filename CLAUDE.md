@@ -37,8 +37,24 @@ zig build -Doptimize=ReleaseFast
 cp zig-out/bin/git-wt ~/.local/bin/
 ```
 
+## Dependencies
+
+Using established Zig libraries to minimize custom code:
+- **zig-clap** (v0.10.0) - Command line argument parsing
+- **ansi_term** - Terminal colors and ANSI escape sequences
+
+## Implementation Notes
+
+### Zig Version
+- Requires Zig 0.14.1 or later
+- Uses modern build.zig.zon for dependency management
+
+### Design Philosophy
+- Minimize custom code by using established libraries
+- Focus on clear, maintainable implementation
+- Match general features rather than exact shell script behavior
+
 ## Next Steps
-- Implement terminal color utilities
-- Add git command wrapper
-- Implement the three main commands
-- Add interactive prompt handling
+- Implement git operations wrapper
+- Add filesystem utilities
+- Implement the three main commands (new, rm, go)

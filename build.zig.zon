@@ -1,0 +1,25 @@
+.{
+    .fingerprint = 0x84ba8f2f7df68da3,
+    .name = .git_wt,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.13.0",
+
+    .dependencies = .{
+        .clap = .{
+            .url = "https://github.com/Hejsil/zig-clap/archive/refs/heads/master.tar.gz",
+            .hash = "clap-0.10.0-oBajB7jkAQAZ4cKLlzkeV9mDu2yGZvtN2QuOyfAfjBij",
+        },
+        .ansi_term = .{
+            .url = "git+https://github.com/ziglibs/ansi_term?ref=HEAD#73b7efddb1d871d7a3528e63bd391d202fb66128",
+            .hash = "ansi_term-0.1.0-_baAywpoAABEqsPmS5Jz_CddDCrG8qdIyRIESH8D2fzd",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+        "README.md",
+    },
+}
