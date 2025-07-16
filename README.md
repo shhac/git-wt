@@ -7,6 +7,7 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 - **Create worktrees** with automatic branch creation and setup
 - **Remove worktrees** safely with branch cleanup options
 - **Navigate between worktrees** interactively or directly
+- **Support for branch names with slashes** (creates subdirectory structures)
 - Automatic copying of configuration files (.env, .claude, etc.)
 - Node.js project support (nvm, yarn detection)
 - Colored terminal output for better UX
@@ -79,10 +80,14 @@ gh release create v0.1.0 \
 
 ```bash
 git-wt new feature-branch
+
+# Branch names with slashes are supported and create subdirectories
+git-wt new feature/auth-system
+git-wt new bugfix/issue-123
 ```
 
 This will:
-1. Create a new worktree at `../repo-trees/feature-branch`
+1. Create a new worktree at `../repo-trees/feature-branch` (or subdirectories for slashes)
 2. Create and checkout the new branch
 3. Copy configuration files from the main repository
 4. Run `nvm use` if .nvmrc exists
@@ -129,7 +134,11 @@ The following files are automatically copied when creating new worktrees:
    └── my-repo-trees/    (worktrees)
        ├── feature-a/
        ├── feature-b/
-       └── bugfix-123/
+       ├── bugfix-123/
+       └── feature/      (subdirectories for slash branches)
+           ├── auth/
+           └── ui/
+               └── dark-mode/
    ```
 
 2. **Configuration Syncing**: Automatically copies important files that are typically gitignored but needed for development (env vars, editor configs, etc.)

@@ -28,7 +28,7 @@ pub fn validateBranchName(branch_name: []const u8) ValidationError!void {
         return ValidationError.BranchNameHasSpaces;
     }
     
-    // Check for invalid characters
+    // Check for invalid characters (as per git check-ref-format)
     const invalid_chars = "~^:?*[\\";
     for (invalid_chars) |char| {
         if (std.mem.indexOf(u8, branch_name, &[_]u8{char}) != null) {

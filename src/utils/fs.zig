@@ -1,6 +1,70 @@
 const std = @import("std");
 const fs = std.fs;
 
+/// Characters that need to be escaped for filesystem paths
+const UNSAFE_CHARS = [_]struct { char: u8, replacement: []const u8 }{
+    .{ .char = ':', .replacement = "%3A" },
+    .{ .char = '?', .replacement = "%3F" },
+    .{ .char = '*', .replacement = "%2A" },
+    .{ .char = '|', .replacement = "%7C" },
+    .{ .char = '<', .replacement = "%3C" },
+    .{ .char = '>', .replacement = "%3E" },
+    .{ .char = '"', .replacement = "%22" },
+};
+
+/// Sanitize branch name for filesystem path (URL encode unsafe characters)
+pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+    
+    for (branch) |char| {
+        var found = false;
+        for (UNSAFE_CHARS) |unsafe| {
+            if (char == unsafe.char) {
+                try result.appendSlice(unsafe.replacement);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            try result.append(char);
+        }
+    }
+    
+    return result.toOwnedSlice();
+}
+
+/// Reverse sanitization for display (decode URL encoded characters)
+pub fn unsanitizeBranchPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+    
+    var i: usize = 0;
+    while (i < path.len) {
+        if (path[i] == '%' and i + 2 < path.len) {
+            // Check if this matches any of our encoded characters
+            var found = false;
+            for (UNSAFE_CHARS) |unsafe| {
+                if (std.mem.startsWith(u8, path[i..], unsafe.replacement)) {
+                    try result.append(unsafe.char);
+                    i += unsafe.replacement.len;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                try result.append(path[i]);
+                i += 1;
+            }
+        } else {
+            try result.append(path[i]);
+            i += 1;
+        }
+    }
+    
+    return result.toOwnedSlice();
+}
+
 /// Configuration files to copy when creating a new worktree
 pub const CONFIG_FILES = [_][]const u8{
     ".claude",
@@ -18,11 +82,26 @@ pub fn constructWorktreePath(allocator: std.mem.Allocator, repo_root: []const u8
     const repo_name = fs.path.basename(repo_root);
     const parent_dir = fs.path.dirname(repo_root) orelse ".";
     
-    return std.fmt.allocPrint(allocator, "{s}/{s}-trees/{s}", .{
+    // Sanitize the branch name for filesystem usage
+    const sanitized_branch = try sanitizeBranchPath(allocator, branch_name);
+    defer allocator.free(sanitized_branch);
+    
+    const worktree_path = try std.fmt.allocPrint(allocator, "{s}/{s}-trees/{s}", .{
         parent_dir,
         repo_name,
-        branch_name,
+        sanitized_branch,
     });
+    
+    // Ensure parent directories exist if branch contains slashes
+    if (std.mem.indexOf(u8, sanitized_branch, "/") != null) {
+        const worktree_parent = fs.path.dirname(worktree_path) orelse return worktree_path;
+        fs.cwd().makePath(worktree_parent) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => return err,
+        };
+    }
+    
+    return worktree_path;
 }
 
 /// Copy configuration files from source to destination
@@ -165,6 +244,40 @@ test "config files list" {
     }
     try std.testing.expect(has_env);
     try std.testing.expect(has_claude_local);
+}
+
+test "sanitizeBranchPath and unsanitizeBranchPath" {
+    const allocator = std.testing.allocator;
+    
+    // Test normal branch name (no changes)
+    const normal = try sanitizeBranchPath(allocator, "feature-branch");
+    defer allocator.free(normal);
+    try std.testing.expectEqualStrings("feature-branch", normal);
+    
+    // Test branch with slashes (preserved)
+    const with_slash = try sanitizeBranchPath(allocator, "feature/auth");
+    defer allocator.free(with_slash);
+    try std.testing.expectEqualStrings("feature/auth", with_slash);
+    
+    // Test branch with colon (encoded)
+    const with_colon = try sanitizeBranchPath(allocator, "feature:experimental");
+    defer allocator.free(with_colon);
+    try std.testing.expectEqualStrings("feature%3Aexperimental", with_colon);
+    
+    // Test branch with multiple special chars
+    const complex = try sanitizeBranchPath(allocator, "feat:test?v2");
+    defer allocator.free(complex);
+    try std.testing.expectEqualStrings("feat%3Atest%3Fv2", complex);
+    
+    // Test reverse sanitization
+    const reversed = try unsanitizeBranchPath(allocator, "feat%3Atest%3Fv2");
+    defer allocator.free(reversed);
+    try std.testing.expectEqualStrings("feat:test?v2", reversed);
+    
+    // Test reverse with normal path
+    const normal_reverse = try unsanitizeBranchPath(allocator, "feature/auth");
+    defer allocator.free(normal_reverse);
+    try std.testing.expectEqualStrings("feature/auth", normal_reverse);
 }
 
 test "fileExists and ensureDir" {

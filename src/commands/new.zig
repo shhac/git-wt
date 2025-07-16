@@ -21,6 +21,7 @@ pub fn printHelp() !void {
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt new feature-auth\n", .{});
     try stdout.print("  git-wt new bugfix-123\n", .{});
+    try stdout.print("  git-wt new feature/ui-update    # Creates subdirectory structure\n", .{});
     try stdout.print("  git-wt new --non-interactive hotfix-security\n\n", .{});
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. Create a new worktree in ../repo-trees/branch-name\n", .{});

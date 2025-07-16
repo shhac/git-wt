@@ -23,6 +23,12 @@
 - Should validate the parent directory exists and is writable
 - Update help documentation to explain this option
 
+### Add --debug flag
+- Add a global `--debug` flag that shows diagnostic information
+- Should display the current working directory where git-wt is invoked from
+- Useful for troubleshooting path-related issues
+- Could also show git repository information and worktree status
+
 ## Future Enhancements
 
 ### Additional ideas for consideration

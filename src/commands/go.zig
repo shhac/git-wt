@@ -14,6 +14,67 @@ const WorktreeInfo = struct {
     is_main: bool,
 };
 
+const MAX_RECURSION_DEPTH = 5;
+
+fn findWorktreesRecursively(
+    allocator: std.mem.Allocator,
+    worktrees: *std.ArrayList(WorktreeInfo),
+    base_path: []const u8,
+    relative_path: []const u8,
+    depth: usize,
+) !void {
+    if (depth > MAX_RECURSION_DEPTH) return;
+    
+    const current_path = if (relative_path.len > 0)
+        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ base_path, relative_path })
+    else
+        base_path;
+    defer if (relative_path.len > 0) allocator.free(current_path);
+    
+    // Check if this directory is a worktree (has .git file)
+    const git_file_path = try std.fmt.allocPrint(allocator, "{s}/.git", .{current_path});
+    defer allocator.free(git_file_path);
+    
+    if (fs.cwd().statFile(git_file_path)) |_| {
+        // This is a worktree
+        const stat = try fs.cwd().statFile(current_path);
+        
+        // Get current branch
+        var saved_cwd = try fs.cwd().openDir(".", .{});
+        defer saved_cwd.close();
+        try process.changeCurDir(current_path);
+        const branch = try git.getCurrentBranch(allocator);
+        try saved_cwd.setAsCwd();
+        
+        try worktrees.append(.{
+            .path = try allocator.dupe(u8, current_path),
+            .branch = branch,
+            .mod_time = stat.mtime,
+            .is_main = false,
+        });
+        
+        // Don't recurse into worktrees
+        return;
+    } else |_| {}
+    
+    // Not a worktree, recurse into subdirectories
+    var dir = fs.cwd().openDir(current_path, .{ .iterate = true }) catch return;
+    defer dir.close();
+    
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .directory) continue;
+        
+        const new_relative = if (relative_path.len > 0)
+            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ relative_path, entry.name })
+        else
+            try allocator.dupe(u8, entry.name);
+        defer allocator.free(new_relative);
+        
+        try findWorktreesRecursively(allocator, worktrees, base_path, new_relative, depth + 1);
+    }
+}
+
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
     try stdout.print("Usage: git-wt go [branch-name]\n\n", .{});
@@ -110,41 +171,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             });
         }
         
-        // Find worktrees in trees directory
+        // Find worktrees in trees directory (recursively)
         if (fs.cwd().openDir(trees_dir, .{ .iterate = true })) |dir| {
             var trees_dir_handle = dir;
             defer trees_dir_handle.close();
             
-            var iter = trees_dir_handle.iterate();
-            while (try iter.next()) |entry| {
-                if (entry.kind != .directory) continue;
-                
-                const wt_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ trees_dir, entry.name });
-                
-                // Check if it's a valid worktree
-                const git_file = try std.fmt.allocPrint(allocator, "{s}/.git", .{ wt_path });
-                defer allocator.free(git_file);
-                
-                if (fs.cwd().statFile(git_file)) |_| {
-                    const stat = try fs.cwd().statFile(wt_path);
-                    
-                    // Get current branch
-                    var saved_cwd = try fs.cwd().openDir(".", .{});
-                    defer saved_cwd.close();
-                    try process.changeCurDir(wt_path);
-                    const branch = try git.getCurrentBranch(allocator);
-                    try saved_cwd.setAsCwd();
-                    
-                    try worktrees.append(.{
-                        .path = wt_path,
-                        .branch = branch,
-                        .mod_time = stat.mtime,
-                        .is_main = false,
-                    });
-                } else |_| {
-                    allocator.free(wt_path);
-                }
-            }
+            try findWorktreesRecursively(allocator, &worktrees, trees_dir, "", 0);
         } else |_| {}
         
         if (worktrees.items.len == 0) {
@@ -169,7 +201,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         try colors.printInfo(stdout, "Available worktrees:\n", .{});
         
         for (worktrees.items, 1..) |wt, idx| {
-            const display_name = if (wt.is_main) "[main repository]" else fs.path.basename(wt.path);
+            const display_name = if (wt.is_main) "[main repository]" else blk: {
+                // Show relative path from trees directory for nested worktrees
+                if (std.mem.indexOf(u8, wt.path, trees_dir)) |trees_idx| {
+                    const relative_start = trees_idx + trees_dir.len + 1; // +1 for the slash
+                    if (relative_start < wt.path.len) {
+                        break :blk wt.path[relative_start..];
+                    }
+                }
+                break :blk fs.path.basename(wt.path);
+            };
             const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
             
             try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{

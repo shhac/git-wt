@@ -108,6 +108,34 @@ $BIN --non-interactive rm && pass "Removal succeeded" || fail "Removal failed"
 cd "$REPO_ROOT"  # Change to main repo for subsequent tests
 pass "Worktree removal completed (test shell adjusted to main repo)"
 
+# Test branches with slashes
+info "Testing branches with slashes..."
+$BIN --non-interactive new feature/test-ui && pass "Created worktree with slash" || fail "Failed to create worktree with slash"
+[ -d "$TREES_DIR/feature/test-ui" ] && pass "Slash branch created correct directory structure" || fail "Slash branch directory structure incorrect"
+
+# Test go command finds nested worktree
+GO_SLASH_OUTPUT=$($BIN --non-interactive go 2>&1)
+echo "$GO_SLASH_OUTPUT" | grep -q "feature/test-ui" && pass "Go command lists nested worktree" || fail "Go command doesn't list nested worktree"
+
+# Test direct navigation to nested worktree
+GO_NAV_OUTPUT=$($BIN --non-interactive go feature/test-ui 2>&1)
+echo "$GO_NAV_OUTPUT" | grep -q "cd.*feature/test-ui" && pass "Can navigate to nested worktree" || fail "Cannot navigate to nested worktree"
+
+# Test removal from nested worktree
+cd "$TREES_DIR/feature/test-ui"
+$BIN --non-interactive rm && pass "Removed nested worktree" || fail "Failed to remove nested worktree"
+[ ! -d "$TREES_DIR/feature/test-ui" ] && pass "Nested worktree directory removed" || fail "Nested worktree directory still exists"
+
+# Test deeply nested branches
+cd "$REPO_ROOT"
+$BIN --non-interactive new feature/ui/dark-mode && pass "Created deeply nested worktree" || fail "Failed to create deeply nested worktree"
+[ -d "$TREES_DIR/feature/ui/dark-mode" ] && pass "Deeply nested directory structure created" || fail "Deeply nested directory structure incorrect"
+
+# Clean up deeply nested
+cd "$TREES_DIR/feature/ui/dark-mode"
+$BIN --non-interactive rm
+cd "$REPO_ROOT"
+
 # Clean up
 cd /
 rm -rf "$TEST_DIR"
