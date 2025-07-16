@@ -3,10 +3,18 @@
 ## Features
 
 ### Support slashes in branch names
-- Allow branch names like `feature/auth-system` or `bugfix/issue-123`
-- Currently slashes in branch names would create subdirectories in the worktree path
-- Need to handle path construction to flatten or escape slashes appropriately
-- Consider using underscore or dash replacement for the directory name while preserving the actual branch name
+- Allow branch names like `feature/auth-system` or `bugfix/issue-123` to create subdirectory structures
+- Subdirectories in worktree paths are fine and actually desirable for organization
+- Need to update the `go` command to discover worktrees in subdirectories recursively
+- Need to handle other characters that are valid in git branch names but illegal in file paths:
+  - Colon `:` (Windows)
+  - Question mark `?` (Windows)
+  - Asterisk `*` (Windows/Unix)
+  - Pipe `|` (Windows)
+  - Less than/greater than `<>` (Windows)
+  - Double quote `"` (Windows)
+- Consider escaping strategy: URL encoding, underscore replacement, or other approaches
+- Ensure branch name is preserved correctly in git while filesystem path is safe
 
 ### Support specifying worktree parent directory with command line flag
 - Add `--parent-dir` or `-p` flag to `git-wt new` command
