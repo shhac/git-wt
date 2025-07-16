@@ -27,11 +27,14 @@ info() {
     echo -e "${YELLOW}[INFO]${NC} $1"
 }
 
+# Save starting directory
+ORIGINAL_DIR="$(pwd)"
+
 # Build
 info "Building git-wt..."
 zig build
 
-BIN="$(pwd)/zig-out/bin/git-wt"
+BIN="$ORIGINAL_DIR/zig-out/bin/git-wt"
 
 # Test basic commands
 info "Testing basic commands..."
@@ -46,7 +49,9 @@ info "Testing validation..."
 
 # Test branch existence check
 info "Testing branch existence handling..."
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$ORIGINAL_DIR/.e2e-test"
+rm -rf "$TEST_DIR"
+mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 git init test-repo2
 cd test-repo2
@@ -58,13 +63,14 @@ git commit -m "Initial commit"
 git branch existing-branch
 ! $BIN --non-interactive new existing-branch >/dev/null 2>&1 && pass "Rejects existing branch" || fail "Should reject existing branch"
 
-# Clean up
-cd "$TEST_DIR/.."
-rm -rf "$TEST_DIR"
+# Clean up first test
+cd "$ORIGINAL_DIR"
 
 # Test worktree creation
 info "Testing worktree functionality..."
-TEST_DIR="$(mktemp -d)"
+# Create fresh test directory
+rm -rf "$TEST_DIR"
+mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
 git init test-repo
@@ -131,13 +137,23 @@ cd "$REPO_ROOT"
 $BIN --non-interactive new feature/ui/dark-mode && pass "Created deeply nested worktree" || fail "Failed to create deeply nested worktree"
 [ -d "$TREES_DIR/feature/ui/dark-mode" ] && pass "Deeply nested directory structure created" || fail "Deeply nested directory structure incorrect"
 
-# Clean up deeply nested
+# Test navigation from nested worktree to main
 cd "$TREES_DIR/feature/ui/dark-mode"
+MAIN_NAV_OUTPUT=$($BIN --non-interactive go main 2>&1)
+if echo "$MAIN_NAV_OUTPUT" | grep -q "cd $REPO_ROOT"; then
+    pass "Can navigate from nested worktree to main"
+else
+    fail "Cannot navigate from nested worktree to main"
+    echo "Expected: cd $REPO_ROOT"
+    echo "Got: $MAIN_NAV_OUTPUT"
+fi
+
+# Clean up deeply nested
 $BIN --non-interactive rm
 cd "$REPO_ROOT"
 
 # Clean up
-cd /
+cd "$ORIGINAL_DIR"
 rm -rf "$TEST_DIR"
 
 # Summary

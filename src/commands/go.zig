@@ -164,8 +164,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     if (branch_name) |branch| {
         // Direct navigation
         if (std.mem.eql(u8, branch, "main")) {
-            try colors.printPath(stdout, "📁 Navigating to main repository:", main_repo);
-            try process.changeCurDir(main_repo);
+            if (non_interactive) {
+                try stdout.print("cd {s}\n", .{main_repo});
+            } else {
+                try colors.printPath(stdout, "📁 Navigating to main repository:", main_repo);
+                try process.changeCurDir(main_repo);
+            }
             return;
         }
         
