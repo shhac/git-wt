@@ -219,6 +219,20 @@ cd ../repo-trees/test-branch
 ./zig-out/bin/git-wt go
 ```
 
+### Testing Shell Alias Function
+**Important**: The shell alias function does not persist across different `Bash` tool invocations. When testing the alias function, you must set it up in the same session:
+
+```bash
+# WRONG - This won't work across multiple Bash tool calls:
+# First call: eval "$(./zig-out/bin/git-wt --alias gwt)"
+# Second call: gwt go  # This will fail - alias doesn't exist
+
+# CORRECT - Set up alias in the same session:
+eval "$(./zig-out/bin/git-wt --alias gwt)" && gwt go
+```
+
+This is a limitation of the Bash tool execution model where each tool call runs in a separate shell session.
+
 ### Test Directory for Development
 The `.e2e-test` directory is gitignored and reserved for:
 - Creating test repositories during development

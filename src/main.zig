@@ -220,7 +220,10 @@ fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     stdout.print("            fi\n", .{}) catch return;
     stdout.print("        done\n", .{}) catch return;
     stdout.print("        if [ $has_branch -eq 0 ]; then\n", .{}) catch return;
-    stdout.print("            \"$git_wt_bin\" go \"$@\"\n", .{}) catch return;
+    stdout.print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{}) catch return;
+    stdout.print("            if [ $? -eq 0 ] && [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;
+    stdout.print("                eval \"$cd_cmd\"\n", .{}) catch return;
+    stdout.print("            fi\n", .{}) catch return;
     stdout.print("        else\n", .{}) catch return;
     stdout.print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{}) catch return;
     stdout.print("            if echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;

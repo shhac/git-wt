@@ -319,7 +319,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         // In non-interactive mode without a specific selection, just list and exit
-        if (non_interactive or show_command) {
+        if (non_interactive) {
+            return;
+        }
+        
+        // In show_command mode, output the first (most recent) worktree automatically
+        if (show_command) {
+            if (worktrees.items.len > 0) {
+                const selected = worktrees.items[0];
+                try stdout.print("cd {s}\n", .{selected.path});
+            }
             return;
         }
         
