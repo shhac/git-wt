@@ -83,12 +83,16 @@ pub fn printHelp() !void {
     try stdout.print("  [branch-name]    Name of the branch/worktree to navigate to (optional)\n\n", .{});
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
-    try stdout.print("  -n, --non-interactive  List worktrees with navigation commands\n\n", .{});
+    try stdout.print("  -n, --non-interactive  List worktrees without interaction\n", .{});
+    try stdout.print("  --no-color       Disable colored output\n", .{});
+    try stdout.print("  --plain          Output plain paths only (one per line)\n\n", .{});
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt go                      # Interactive selection of worktrees\n", .{});
     try stdout.print("  git-wt go main                 # Navigate to main repository\n", .{});
     try stdout.print("  git-wt go feature-branch       # Navigate to feature-branch worktree\n", .{});
-    try stdout.print("  git-wt go --non-interactive    # List worktrees with commands\n\n", .{});
+    try stdout.print("  git-wt go --non-interactive    # List worktrees with timestamps\n", .{});
+    try stdout.print("  git-wt go -n --no-color        # List without colors\n", .{});
+    try stdout.print("  git-wt go -n --plain           # List paths only\n\n", .{});
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. List all available worktrees (sorted by modification time)\n", .{});
     try stdout.print("  2. Allow interactive selection if no branch specified\n", .{});
@@ -97,7 +101,7 @@ pub fn printHelp() !void {
     try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_color: bool, plain: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -198,10 +202,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }.lessThan);
         
         // Display worktrees
-        if (non_interactive) {
-            try stdout.print("Available worktrees:\n", .{});
-        } else {
-            try colors.printInfo(stdout, "Available worktrees:\n", .{});
+        if (!plain) {
+            if (non_interactive and no_color) {
+                try stdout.print("Available worktrees:\n", .{});
+            } else {
+                try colors.printInfo(stdout, "Available worktrees:\n", .{});
+            }
         }
         
         for (worktrees.items, 1..) |wt, idx| {
@@ -216,15 +222,35 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 break :blk fs.path.basename(wt.path);
             };
             const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
+            const time_ago = std.time.timestamp() - timestamp;
             
             if (non_interactive) {
-                // In non-interactive mode, show the command to navigate
-                const go_target = if (wt.is_main) "main" else wt.branch;
-                try stdout.print("  {s} @ {s} - git-wt go {s}\n", .{
-                    display_name,
-                    wt.branch,
-                    go_target,
-                });
+                if (plain) {
+                    // Plain mode - just paths
+                    try stdout.print("{s}\n", .{wt.path});
+                } else {
+                    // Non-interactive mode with formatting
+                    
+                    if (no_color) {
+                        try stdout.print("  {s} @ {s} - {d}s ago\n", .{
+                            display_name,
+                            wt.branch,
+                            time_ago,
+                        });
+                    } else {
+                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{d}s ago{s}\n", .{
+                            colors.path_color,
+                            display_name,
+                            colors.reset,
+                            colors.magenta,
+                            wt.branch,
+                            colors.reset,
+                            colors.yellow,
+                            time_ago,
+                            colors.reset,
+                        });
+                    }
+                }
             } else {
                 try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
                     colors.green,

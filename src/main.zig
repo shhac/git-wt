@@ -34,8 +34,25 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
 }
 
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
-    const branch = if (args.len > 0) args[0] else null;
-    try cmd_go.execute(allocator, branch, non_interactive);
+    var no_color = false;
+    var plain = false;
+    var branch: ?[]const u8 = null;
+    
+    // Parse go-specific flags
+    for (args) |arg| {
+        if (std.mem.eql(u8, arg, "--no-color")) {
+            no_color = true;
+        } else if (std.mem.eql(u8, arg, "--plain")) {
+            plain = true;
+        } else if (arg.len > 0 and arg[0] != '-') {
+            // First non-flag argument is the branch
+            if (branch == null) {
+                branch = arg;
+            }
+        }
+    }
+    
+    try cmd_go.execute(allocator, branch, non_interactive, no_color, plain);
 }
 
 pub fn main() !void {
