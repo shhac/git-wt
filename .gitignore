@@ -1,0 +1,34 @@
+# Zig build artifacts
+zig-cache/
+zig-out/
+build/
+*.exe
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.pdb
+
+# Local development
+.env
+.env.local
+.env.*.local
+CLAUDE.local.md
+.ai-cache/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Test coverage
+coverage/
+*.gcov
+*.gcda
+*.gcno
