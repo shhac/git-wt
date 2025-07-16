@@ -50,15 +50,18 @@ pub fn copyConfigFiles(allocator: std.mem.Allocator, src_root: []const u8, dst_r
     }
 }
 
-/// Copy directory recursively
-fn copyDir(src: []const u8, dst: []const u8) !void {
-    // Create destination directory
-    fs.cwd().makeDir(dst) catch |err| switch (err) {
+/// Helper to ensure directory exists
+fn ensureDir(path: []const u8) !void {
+    fs.cwd().makeDir(path) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => return err,
     };
+}
+
+/// Copy directory recursively
+fn copyDir(src: []const u8, dst: []const u8) !void {
+    try ensureDir(dst);
     
-    // Open source directory
     var src_dir = try fs.cwd().openDir(src, .{ .iterate = true });
     defer src_dir.close();
     
@@ -73,19 +76,11 @@ fn copyDir(src: []const u8, dst: []const u8) !void {
         defer std.heap.page_allocator.free(dst_path);
         
         switch (entry.kind) {
-            .directory => {
-                fs.cwd().makeDir(dst_path) catch |err| switch (err) {
-                    error.PathAlreadyExists => {},
-                    else => return err,
-                };
-            },
+            .directory => try ensureDir(dst_path),
             .file => {
                 // Ensure parent directory exists
                 if (fs.path.dirname(dst_path)) |parent| {
-                    fs.cwd().makePath(parent) catch |err| switch (err) {
-                        error.PathAlreadyExists => {},
-                        else => return err,
-                    };
+                    try fs.cwd().makePath(parent);
                 }
                 try fs.cwd().copyFile(src_path, fs.cwd(), dst_path, .{});
             },
@@ -94,12 +89,12 @@ fn copyDir(src: []const u8, dst: []const u8) !void {
     }
 }
 
-/// Check if we have node.js project files
-pub fn hasNodeProject(path: []const u8) !bool {
-    const package_json = try fs.path.join(std.heap.page_allocator, &.{ path, "package.json" });
-    defer std.heap.page_allocator.free(package_json);
+/// Check if a file exists in the given path
+fn fileExists(base_path: []const u8, file_name: []const u8) !bool {
+    const full_path = try fs.path.join(std.heap.page_allocator, &.{ base_path, file_name });
+    defer std.heap.page_allocator.free(full_path);
     
-    const stat = fs.cwd().statFile(package_json) catch |err| switch (err) {
+    const stat = fs.cwd().statFile(full_path) catch |err| switch (err) {
         error.FileNotFound => return false,
         else => return err,
     };
@@ -107,17 +102,14 @@ pub fn hasNodeProject(path: []const u8) !bool {
     return stat.kind == .file;
 }
 
+/// Check if we have node.js project files
+pub fn hasNodeProject(path: []const u8) !bool {
+    return try fileExists(path, "package.json");
+}
+
 /// Check if we have .nvmrc file
 pub fn hasNvmrc(path: []const u8) !bool {
-    const nvmrc_path = try fs.path.join(std.heap.page_allocator, &.{ path, ".nvmrc" });
-    defer std.heap.page_allocator.free(nvmrc_path);
-    
-    const stat = fs.cwd().statFile(nvmrc_path) catch |err| switch (err) {
-        error.FileNotFound => return false,
-        else => return err,
-    };
-    
-    return stat.kind == .file;
+    return try fileExists(path, ".nvmrc");
 }
 
 /// Check if package.json uses yarn

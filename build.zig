@@ -12,17 +12,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add dependencies
-    const clap = b.dependency("clap", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("clap", clap.module("clap"));
-
-    const ansi_term = b.dependency("ansi_term", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("ansi_term", ansi_term.module("ansi_term"));
+    // Note: We're not using clap anymore but keeping dependency for future use
 
     b.installArtifact(exe);
 

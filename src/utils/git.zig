@@ -22,6 +22,11 @@ pub const Worktree = struct {
     commit: []const u8,
 };
 
+/// Helper to trim trailing newlines
+fn trimNewline(str: []const u8) []const u8 {
+    return std.mem.trimRight(u8, str, "\n");
+}
+
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
@@ -44,25 +49,26 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     return result.stdout;
 }
 
+/// Execute a git command and return trimmed output
+pub fn execTrimmed(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
+    const output = try exec(allocator, args);
+    const trimmed = trimNewline(output);
+    return try allocator.dupe(u8, trimmed);
+}
+
 /// Get repository information
 pub fn getRepoInfo(allocator: std.mem.Allocator) !RepoInfo {
     // Get the repository root
-    const root = try exec(allocator, &.{ "rev-parse", "--show-toplevel" });
-    defer allocator.free(root);
-    
-    // Remove trailing newline
-    const root_trimmed = std.mem.trimRight(u8, root, "\n");
-    const root_path = try allocator.dupe(u8, root_trimmed);
+    const root_path = try execTrimmed(allocator, &.{ "rev-parse", "--show-toplevel" });
     
     // Get repository name
     const name = fs.path.basename(root_path);
     
     // Check if we're in a worktree
-    const git_dir = try exec(allocator, &.{ "rev-parse", "--git-dir" });
+    const git_dir = try execTrimmed(allocator, &.{ "rev-parse", "--git-dir" });
     defer allocator.free(git_dir);
     
-    const git_dir_trimmed = std.mem.trimRight(u8, git_dir, "\n");
-    const is_worktree = !std.mem.endsWith(u8, git_dir_trimmed, "/.git");
+    const is_worktree = !std.mem.endsWith(u8, git_dir, "/.git");
     
     var main_repo_root: ?[]const u8 = null;
     if (is_worktree) {
@@ -144,13 +150,7 @@ pub fn removeWorktree(allocator: std.mem.Allocator, path: []const u8) !void {
 
 /// Get current branch name
 pub fn getCurrentBranch(allocator: std.mem.Allocator) ![]u8 {
-    const output = try exec(allocator, &.{ "branch", "--show-current" });
-    // Remove trailing newline
-    if (std.mem.endsWith(u8, output, "\n")) {
-        output[output.len - 1] = 0;
-        return output[0 .. output.len - 1];
-    }
-    return output;
+    return try execTrimmed(allocator, &.{ "branch", "--show-current" });
 }
 
 /// Delete a branch
