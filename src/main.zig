@@ -83,7 +83,9 @@ pub fn main() !void {
             printAliasUsage();
             return;
         }
-        printAliasFunction(final_args[2]);
+        const exe_path = try std.fs.selfExePathAlloc(allocator);
+        defer allocator.free(exe_path);
+        printAliasFunction(final_args[2], exe_path);
         return;
     }
 
@@ -151,27 +153,12 @@ fn printAliasUsage() void {
     print("  gwt go feature-branch    # This will actually change directories\n", .{});
 }
 
-fn printAliasFunction(alias_name: []const u8) void {
+fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     // Print a shell function that wraps git-wt and handles directory changes
     print("# git-wt shell function for {s}\n", .{alias_name});
     print("{s}() {{\n", .{alias_name});
-    print("    # Find git-wt binary in PATH or common locations\n", .{});
-    print("    local git_wt_bin=\"git-wt\"\n", .{});
-    print("    if ! command -v \"$git_wt_bin\" >/dev/null 2>&1; then\n", .{});
-    print("        # Try common installation locations\n", .{});
-    print("        for bin in ~/.local/bin/git-wt /usr/local/bin/git-wt; do\n", .{});
-    print("            if [ -x \"$bin\" ]; then\n", .{});
-    print("                git_wt_bin=\"$bin\"\n", .{});
-    print("                break\n", .{});
-    print("            fi\n", .{});
-    print("        done\n", .{});
-    print("    fi\n", .{});
-    print("    \n", .{});
-    print("    # Verify we found the binary\n", .{});
-    print("    if ! [ -x \"$git_wt_bin\" ] && ! command -v \"$git_wt_bin\" >/dev/null 2>&1; then\n", .{});
-    print("        echo \"Error: git-wt binary not found in PATH or common locations\" >&2\n", .{});
-    print("        return 1\n", .{});
-    print("    fi\n", .{});
+    print("    # Use the exact path to git-wt that generated this alias\n", .{});
+    print("    local git_wt_bin=\"{s}\"\n", .{exe_path});
     print("    \n", .{});
     print("    # Handle the go command specially\n", .{});
     print("    if [ \"$1\" = \"go\" ]; then\n", .{});
