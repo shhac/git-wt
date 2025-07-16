@@ -16,7 +16,7 @@ const WorktreeInfo = struct {
 
 const MAX_RECURSION_DEPTH = 5;
 
-fn formatDuration(seconds: u64) struct { value: u64, unit: []const u8 } {
+fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
     const day = hour * 24;
@@ -24,20 +24,37 @@ fn formatDuration(seconds: u64) struct { value: u64, unit: []const u8 } {
     const month = day * 30;
     const year = day * 365;
     
-    if (seconds < minute) {
-        return .{ .value = seconds, .unit = "s" };
-    } else if (seconds < hour) {
-        return .{ .value = seconds / minute, .unit = "m" };
-    } else if (seconds < day) {
-        return .{ .value = seconds / hour, .unit = "h" };
-    } else if (seconds < week) {
-        return .{ .value = seconds / day, .unit = "d" };
-    } else if (seconds < month) {
-        return .{ .value = seconds / week, .unit = "w" };
-    } else if (seconds < year) {
-        return .{ .value = seconds / month, .unit = "mo" };
+    // Calculate each unit
+    const years = seconds / year;
+    const months = (seconds % year) / month;
+    const weeks = (seconds % year % month) / week;
+    const days = (seconds % year % month % week) / day;
+    const hours = (seconds % day) / hour;
+    const minutes = (seconds % hour) / minute;
+    const secs = seconds % minute;
+    
+    // Build array of non-zero units
+    var units = std.ArrayList(struct { value: u64, unit: []const u8 }).init(allocator);
+    defer units.deinit();
+    
+    if (years > 0) try units.append(.{ .value = years, .unit = "y" });
+    if (months > 0) try units.append(.{ .value = months, .unit = "mo" });
+    if (weeks > 0) try units.append(.{ .value = weeks, .unit = "w" });
+    if (days > 0) try units.append(.{ .value = days, .unit = "d" });
+    if (hours > 0) try units.append(.{ .value = hours, .unit = "h" });
+    if (minutes > 0) try units.append(.{ .value = minutes, .unit = "m" });
+    if (secs > 0 or units.items.len == 0) try units.append(.{ .value = secs, .unit = "s" });
+    
+    // Format the two most significant units
+    if (units.items.len == 1) {
+        return try std.fmt.allocPrint(allocator, "{d}{s}", .{ units.items[0].value, units.items[0].unit });
     } else {
-        return .{ .value = seconds / year, .unit = "y" };
+        return try std.fmt.allocPrint(allocator, "{d}{s} {d}{s}", .{
+            units.items[0].value,
+            units.items[0].unit,
+            units.items[1].value,
+            units.items[1].unit,
+        });
     }
 }
 
@@ -248,7 +265,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             };
             const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
             const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
-            const duration = formatDuration(time_ago_seconds);
+            const duration_str = try formatDuration(allocator, time_ago_seconds);
+            defer allocator.free(duration_str);
             
             if (non_interactive) {
                 if (plain) {
@@ -258,14 +276,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     // Non-interactive mode with formatting
                     
                     if (no_color) {
-                        try stdout.print("  {s} @ {s} - {d}{s} ago\n", .{
+                        try stdout.print("  {s} @ {s} - {s} ago\n", .{
                             display_name,
                             wt.branch,
-                            duration.value,
-                            duration.unit,
+                            duration_str,
                         });
                     } else {
-                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{d}{s} ago{s}\n", .{
+                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}\n", .{
                             colors.path_color,
                             display_name,
                             colors.reset,
@@ -273,8 +290,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                             wt.branch,
                             colors.reset,
                             colors.yellow,
-                            duration.value,
-                            duration.unit,
+                            duration_str,
                             colors.reset,
                         });
                     }
@@ -293,11 +309,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 });
                 
                 // Format timestamp
-                try stdout.print("     {s}Last modified:{s} {d}{s} ago\n", .{
+                try stdout.print("     {s}Last modified:{s} {s} ago\n", .{
                     colors.yellow,
                     colors.reset,
-                    duration.value,
-                    duration.unit,
+                    duration_str,
                 });
             }
         }
