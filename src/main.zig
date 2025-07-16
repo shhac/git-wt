@@ -86,7 +86,12 @@ pub fn main() !void {
     // Check for help/version flags
     const arg1 = final_args[1];
     if (std.mem.eql(u8, arg1, "--help") or std.mem.eql(u8, arg1, "-h")) {
-        printHelp();
+        // Check if there's a specific help topic
+        if (final_args.len > 2 and std.mem.eql(u8, final_args[2], "setup")) {
+            printSetupHelp();
+        } else {
+            printHelp();
+        }
         return;
     }
 
@@ -147,6 +152,7 @@ fn printUsage() void {
     print("  -v, --version          Show version\n", .{});
     print("  --alias <name>         Generate shell function for directory navigation\n", .{});
     print("\nUse 'git-wt --help' for more information\n", .{});
+    print("Use 'git-wt --help setup' for shell integration setup\n", .{});
 }
 
 fn printHelp() void {
@@ -158,6 +164,32 @@ fn printHelp() void {
     print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
     print("  git-wt go main              Navigate to the main repository\n", .{});
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
+    print("\nFor shell integration setup, use: git-wt --help setup\n", .{});
+}
+
+fn printSetupHelp() void {
+    print("git-wt - Shell Integration Setup\n\n", .{});
+    print("Since CLI tools cannot change the parent shell's directory, you need to set up\n", .{});
+    print("a shell function wrapper to enable proper directory navigation.\n\n", .{});
+    print("SETUP INSTRUCTIONS:\n", .{});
+    print("\n1. Generate the shell function:\n", .{});
+    print("   git-wt --alias gwt\n", .{});
+    print("\n2. Add to your shell configuration:\n", .{});
+    print("   For zsh (.zshrc):\n", .{});
+    print("     echo 'eval \"$(git-wt --alias gwt)\"' >> ~/.zshrc\n", .{});
+    print("     source ~/.zshrc\n", .{});
+    print("\n   For bash (.bashrc):\n", .{});
+    print("     echo 'eval \"$(git-wt --alias gwt)\"' >> ~/.bashrc\n", .{});
+    print("     source ~/.bashrc\n", .{});
+    print("\n3. Use the alias for directory navigation:\n", .{});
+    print("   gwt new feature-branch    # Creates worktree AND navigates to it\n", .{});
+    print("   gwt go main              # Actually changes to main repository\n", .{});
+    print("   gwt go feature-branch    # Actually changes to worktree\n", .{});
+    print("   gwt rm                   # Works the same as git-wt rm\n", .{});
+    print("\nNOTE: You can use any alias name instead of 'gwt':\n", .{});
+    print("  git-wt --alias wt        # Creates 'wt' alias\n", .{});
+    print("  git-wt --alias gw        # Creates 'gw' alias\n", .{});
+    print("\nWithout this setup, git-wt commands will work but won't change directories.\n", .{});
 }
 
 fn printAliasUsage() void {

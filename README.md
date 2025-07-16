@@ -76,11 +76,18 @@ gh release create v0.1.0 \
 
 ## Setup Shell Integration
 
-Since CLI tools can't change the parent shell's directory, you'll need to set up a shell function wrapper. Add this to your `.zshrc` or `.bashrc`:
+Since CLI tools can't change the parent shell's directory, you'll need to set up a shell function wrapper. For detailed setup instructions, run:
 
 ```bash
-# Generate and evaluate the shell function
-eval "$(git-wt --alias gwt)"
+git-wt --help setup
+```
+
+Quick setup:
+```bash
+# Add to your shell configuration
+echo 'eval "$(git-wt --alias gwt)"' >> ~/.zshrc  # for zsh
+echo 'eval "$(git-wt --alias gwt)"' >> ~/.bashrc # for bash
+source ~/.zshrc  # or ~/.bashrc
 ```
 
 Then use `gwt` instead of `git-wt` for commands that change directories:
