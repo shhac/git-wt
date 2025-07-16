@@ -15,12 +15,13 @@ const Command = struct {
     min_args: usize,
     usage: []const u8,
     execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) anyerror!void,
+    help: *const fn () anyerror!void,
 };
 
 const commands = [_]Command{
-    .{ .name = "new", .min_args = 1, .usage = "git-wt new <branch-name>", .execute = executeNew },
-    .{ .name = "rm", .min_args = 0, .usage = "git-wt rm", .execute = executeRemove },
-    .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo },
+    .{ .name = "new", .min_args = 1, .usage = "git-wt new <branch-name>", .execute = executeNew, .help = cmd_new.printHelp },
+    .{ .name = "rm", .min_args = 0, .usage = "git-wt rm", .execute = executeRemove, .help = cmd_remove.printHelp },
+    .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
 };
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
@@ -82,6 +83,12 @@ pub fn main() !void {
     // Find and execute command
     for (commands) |cmd| {
         if (std.mem.eql(u8, arg1, cmd.name)) {
+            // Check for help flag on the command
+            if (command_args.len > 0 and (std.mem.eql(u8, command_args[0], "--help") or std.mem.eql(u8, command_args[0], "-h"))) {
+                try cmd.help();
+                return;
+            }
+            
             if (command_args.len < cmd.min_args) {
                 const stderr = std.io.getStdErr().writer();
                 try colors.printError(stderr, "Missing required arguments", .{});

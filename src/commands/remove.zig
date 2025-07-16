@@ -5,6 +5,24 @@ const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 
+pub fn printHelp() !void {
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("Usage: git-wt rm\n\n", .{});
+    try stdout.print("Remove the current git worktree.\n\n", .{});
+    try stdout.print("Options:\n", .{});
+    try stdout.print("  -h, --help       Show this help message\n", .{});
+    try stdout.print("  -n, --non-interactive  Run without prompts\n\n", .{});
+    try stdout.print("Examples:\n", .{});
+    try stdout.print("  git-wt rm                      # Remove current worktree (interactive)\n", .{});
+    try stdout.print("  git-wt rm --non-interactive    # Remove without prompts\n\n", .{});
+    try stdout.print("This command will:\n", .{});
+    try stdout.print("  1. Verify you're in a worktree (not main repository)\n", .{});
+    try stdout.print("  2. Navigate back to the main repository\n", .{});
+    try stdout.print("  3. Remove the worktree\n", .{});
+    try stdout.print("  4. Optionally delete the associated branch\n\n", .{});
+    try stdout.print("Note: This command must be run from within a git worktree.\n", .{});
+}
+
 pub fn execute(allocator: std.mem.Allocator, non_interactive: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();

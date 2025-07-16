@@ -14,6 +14,28 @@ const WorktreeInfo = struct {
     is_main: bool,
 };
 
+pub fn printHelp() !void {
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("Usage: git-wt go [branch-name]\n\n", .{});
+    try stdout.print("Navigate to a git worktree or the main repository.\n\n", .{});
+    try stdout.print("Arguments:\n", .{});
+    try stdout.print("  [branch-name]    Name of the branch/worktree to navigate to (optional)\n\n", .{});
+    try stdout.print("Options:\n", .{});
+    try stdout.print("  -h, --help       Show this help message\n", .{});
+    try stdout.print("  -n, --non-interactive  List worktrees without interaction\n\n", .{});
+    try stdout.print("Examples:\n", .{});
+    try stdout.print("  git-wt go                      # Interactive selection of worktrees\n", .{});
+    try stdout.print("  git-wt go main                 # Navigate to main repository\n", .{});
+    try stdout.print("  git-wt go feature-branch       # Navigate to feature-branch worktree\n", .{});
+    try stdout.print("  git-wt go --non-interactive    # List all worktrees only\n\n", .{});
+    try stdout.print("This command will:\n", .{});
+    try stdout.print("  1. List all available worktrees (sorted by modification time)\n", .{});
+    try stdout.print("  2. Allow interactive selection if no branch specified\n", .{});
+    try stdout.print("  3. Navigate to the selected worktree\n", .{});
+    try stdout.print("  4. Change the current working directory\n\n", .{});
+    try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
+}
+
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();

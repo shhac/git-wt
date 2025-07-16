@@ -102,6 +102,13 @@ fn fileExists(base_path: []const u8, file_name: []const u8) !bool {
     return stat.kind == .file;
 }
 
+/// Check if a file or directory exists at the given path (simple version)
+pub fn pathExists(path: []const u8) bool {
+    const stat = fs.cwd().statFile(path) catch return false;
+    _ = stat;
+    return true;
+}
+
 /// Check if we have node.js project files
 pub fn hasNodeProject(path: []const u8) !bool {
     return try fileExists(path, "package.json");
