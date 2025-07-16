@@ -213,6 +213,27 @@ cd ../repo-trees/test-branch
 ./zig-out/bin/git-wt go
 ```
 
+### Test Directory for Development
+The `.e2e-test` directory is gitignored and reserved for:
+- Creating test repositories during development
+- Testing edge cases and experimental features
+- Any temporary test data that might be in a broken state
+
+This directory should NEVER be tracked in git as it may contain:
+- Incomplete git repositories
+- Broken worktrees
+- Test data in various states of completion
+
+Use this directory freely for manual testing during development:
+```bash
+# Example: Testing branch with slashes
+cd .e2e-test
+git init test-repo
+cd test-repo
+git add . && git commit -m "initial"
+../../zig-out/bin/git-wt new feature/auth
+```
+
 ## TODO Management
 
 There is a `TODO.md` file that tracks planned features and improvements. When implementing items from the TODO:
