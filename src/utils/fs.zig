@@ -75,6 +75,7 @@ pub const CONFIG_FILES = [_][]const u8{
     ".env.production",
     "CLAUDE.local.md",
     ".ai-cache",
+    "node_modules",
 };
 
 /// Construct worktree path based on repository structure
