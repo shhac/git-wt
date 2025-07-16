@@ -83,12 +83,12 @@ pub fn printHelp() !void {
     try stdout.print("  [branch-name]    Name of the branch/worktree to navigate to (optional)\n\n", .{});
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
-    try stdout.print("  -n, --non-interactive  List worktrees without interaction\n\n", .{});
+    try stdout.print("  -n, --non-interactive  List worktrees with navigation commands\n\n", .{});
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt go                      # Interactive selection of worktrees\n", .{});
     try stdout.print("  git-wt go main                 # Navigate to main repository\n", .{});
     try stdout.print("  git-wt go feature-branch       # Navigate to feature-branch worktree\n", .{});
-    try stdout.print("  git-wt go --non-interactive    # List all worktrees only\n\n", .{});
+    try stdout.print("  git-wt go --non-interactive    # List worktrees with commands\n\n", .{});
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. List all available worktrees (sorted by modification time)\n", .{});
     try stdout.print("  2. Allow interactive selection if no branch specified\n", .{});
@@ -198,7 +198,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }.lessThan);
         
         // Display worktrees
-        try colors.printInfo(stdout, "Available worktrees:\n", .{});
+        if (non_interactive) {
+            try stdout.print("Available worktrees:\n", .{});
+        } else {
+            try colors.printInfo(stdout, "Available worktrees:\n", .{});
+        }
         
         for (worktrees.items, 1..) |wt, idx| {
             const display_name = if (wt.is_main) "[main repository]" else blk: {
@@ -213,24 +217,34 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             };
             const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
             
-            try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
-                colors.green,
-                idx,
-                colors.reset,
-                colors.path_color,
-                display_name,
-                colors.reset,
-                colors.magenta,
-                wt.branch,
-                colors.reset,
-            });
-            
-            // Format timestamp (simplified)
-            try stdout.print("     {s}Last modified:{s} {d} seconds ago\n", .{
-                colors.yellow,
-                colors.reset,
-                std.time.timestamp() - timestamp,
-            });
+            if (non_interactive) {
+                // In non-interactive mode, show the command to navigate
+                const go_target = if (wt.is_main) "main" else wt.branch;
+                try stdout.print("  {s} @ {s} - git-wt go {s}\n", .{
+                    display_name,
+                    wt.branch,
+                    go_target,
+                });
+            } else {
+                try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
+                    colors.green,
+                    idx,
+                    colors.reset,
+                    colors.path_color,
+                    display_name,
+                    colors.reset,
+                    colors.magenta,
+                    wt.branch,
+                    colors.reset,
+                });
+                
+                // Format timestamp (simplified)
+                try stdout.print("     {s}Last modified:{s} {d} seconds ago\n", .{
+                    colors.yellow,
+                    colors.reset,
+                    std.time.timestamp() - timestamp,
+                });
+            }
         }
         
         // In non-interactive mode, just list and exit
