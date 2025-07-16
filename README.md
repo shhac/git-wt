@@ -136,6 +136,48 @@ The following files are automatically copied when creating new worktrees:
 
 3. **Smart Navigation**: The `go` command sorts worktrees by modification time, making it easy to jump to recently used branches.
 
+## Testing
+
+### Unit Tests
+
+```bash
+# Run all unit tests
+zig build test
+```
+
+### Non-Interactive Mode
+
+The tool supports a `--non-interactive` (or `-n`) flag for testing and automation:
+
+```bash
+# Create worktree without prompts
+git-wt --non-interactive new feature-branch
+
+# Remove worktree without confirmation
+git-wt --non-interactive rm
+
+# List worktrees without interactive selection
+git-wt --non-interactive go
+
+# Navigate directly to a worktree (outputs cd command)
+git-wt --non-interactive go feature-branch
+```
+
+### End-to-End Testing
+
+A simple test script is provided:
+
+```bash
+# Run non-interactive tests
+./test-non-interactive.sh
+```
+
+The test script will:
+- Build the binary
+- Create a temporary git repository
+- Test all commands in non-interactive mode
+- Clean up after itself
+
 ## Development
 
 ```bash

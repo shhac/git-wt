@@ -83,6 +83,8 @@ Originally planned to use external libraries but simplified:
 - Handle const-correctness carefully (e.g., `openDir` returns const Dir)
 - Arena allocators work well for CLI tools
 - Error unions and explicit error handling make code robust
+- Always free memory from exec() calls in git.zig
+- Watch for memory leaks with GeneralPurposeAllocator in debug mode
 
 ### Testing
 - Run `zig build test` to execute unit tests
@@ -117,11 +119,45 @@ When creating a new worktree, automatically copies:
 
 ## Testing Approach
 
+### Unit Tests
+All utility modules have comprehensive unit tests:
 ```bash
-# Run unit tests
+# Run all unit tests
 zig build test
+```
 
-# Manual testing in a git repository
+### Non-Interactive Mode
+Added `--non-interactive` (or `-n`) flag for automated testing:
+- Skips all prompts and confirmations
+- Disables interactive selection in `go` command
+- Returns machine-readable output where appropriate
+- Essential for CI/CD and scripting
+
+```bash
+# Examples
+git-wt -n new feature-branch      # Create without prompts
+git-wt -n rm                      # Remove without confirmation
+git-wt -n go                      # List worktrees only
+git-wt -n go feature-branch       # Output: cd /path/to/worktree
+```
+
+### End-to-End Testing
+Created `test-non-interactive.sh` for automated testing:
+```bash
+./test-non-interactive.sh
+```
+
+The test script:
+- Builds the binary
+- Creates a temporary git repository
+- Tests all commands in non-interactive mode
+- Validates worktree creation/removal
+- Cleans up automatically
+
+### Manual Testing
+```bash
+# Build and test manually
+zig build
 ./zig-out/bin/git-wt new test-branch
 cd ../repo-trees/test-branch
 ./zig-out/bin/git-wt rm
