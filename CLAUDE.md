@@ -213,11 +213,21 @@ cd ../repo-trees/test-branch
 ./zig-out/bin/git-wt go
 ```
 
+## TODO Management
+
+There is a `TODO.md` file that tracks planned features and improvements. When implementing items from the TODO:
+
+1. **Before starting**: Review the TODO.md to understand the full scope
+2. **During implementation**: Update the TODO item with progress notes if needed
+3. **After completion**: Remove the completed item from TODO.md
+4. **Important**: Always commit the TODO.md update as part of the feature implementation
+
+This ensures the TODO list stays current and reflects actual work remaining.
+
 ## Future Improvements
-- Add shell completion scripts
-- Consider configuration file support  
-- Add dry-run mode for commands
-- Improve error messages with more context
-- Add `--force` flag for rm command
-- Support for custom worktree locations
-- Integration with git aliases
+
+See `TODO.md` for the current list of planned features and enhancements. Major items include:
+- Support for branch names with slashes (creating subdirectory structures)
+- Custom worktree parent directory via command line flag
+- Additional commands (list, clean)
+- Force flags and configuration file support
