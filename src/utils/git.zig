@@ -141,12 +141,14 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
 
 /// Create a new worktree
 pub fn createWorktree(allocator: std.mem.Allocator, path: []const u8, branch: []const u8) !void {
-    _ = try exec(allocator, &.{ "worktree", "add", path, "-b", branch });
+    const result = try exec(allocator, &.{ "worktree", "add", path, "-b", branch });
+    defer allocator.free(result);
 }
 
 /// Remove a worktree
 pub fn removeWorktree(allocator: std.mem.Allocator, path: []const u8) !void {
-    _ = try exec(allocator, &.{ "worktree", "remove", path });
+    const result = try exec(allocator, &.{ "worktree", "remove", path });
+    defer allocator.free(result);
 }
 
 /// Get current branch name
@@ -157,7 +159,8 @@ pub fn getCurrentBranch(allocator: std.mem.Allocator) ![]u8 {
 /// Delete a branch
 pub fn deleteBranch(allocator: std.mem.Allocator, branch: []const u8, force: bool) !void {
     const flag = if (force) "-D" else "-d";
-    _ = try exec(allocator, &.{ "branch", flag, branch });
+    const result = try exec(allocator, &.{ "branch", flag, branch });
+    defer allocator.free(result);
 }
 
 test "git exec" {

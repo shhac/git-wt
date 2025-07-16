@@ -5,7 +5,7 @@ const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 
-pub fn execute(allocator: std.mem.Allocator) !void {
+pub fn execute(allocator: std.mem.Allocator, non_interactive: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     // Get repository info
@@ -32,9 +32,11 @@ pub fn execute(allocator: std.mem.Allocator) !void {
     try stdout.print("   {s}Path:{s} {s}\n", .{ colors.path_color, colors.reset, repo_info.root });
     try stdout.print("   {s}Currently on branch:{s} {s}\n", .{ colors.path_color, colors.reset, current_branch });
     
-    if (!try input.confirm("\nAre you sure you want to continue?", false)) {
-        try colors.printInfo(stdout, "Cancelled", .{});
-        return;
+    if (!non_interactive) {
+        if (!try input.confirm("\nAre you sure you want to continue?", false)) {
+            try colors.printInfo(stdout, "Cancelled", .{});
+            return;
+        }
     }
     
     // Get the main repository path
@@ -58,7 +60,8 @@ pub fn execute(allocator: std.mem.Allocator) !void {
     const prompt = try std.fmt.allocPrint(allocator, "\nWould you also like to delete the branch '{s}'?", .{current_branch});
     defer allocator.free(prompt);
     
-    if (try input.confirm(prompt, false)) {
+    const delete_branch = if (non_interactive) false else try input.confirm(prompt, false);
+    if (delete_branch) {
         try colors.printInfo(stdout, "Deleting branch...", .{});
         
         git.deleteBranch(allocator, current_branch, true) catch {

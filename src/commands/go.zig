@@ -14,7 +14,7 @@ const WorktreeInfo = struct {
     is_main: bool,
 };
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -51,10 +51,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8) !void {
             return error.WorktreeNotFound;
         };
         
-        try colors.printPath(stdout, "📁 Navigating to worktree:", worktree_path);
-        try process.changeCurDir(worktree_path);
+        if (non_interactive) {
+            try stdout.print("cd {s}\n", .{worktree_path});
+        } else {
+            try colors.printPath(stdout, "📁 Navigating to worktree:", worktree_path);
+            try process.changeCurDir(worktree_path);
+        }
     } else {
-        // Interactive selection
+        // Interactive selection (or just list if non-interactive)
         var worktrees = std.ArrayList(WorktreeInfo).init(allocator);
         defer {
             for (worktrees.items) |wt| {
@@ -164,6 +168,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8) !void {
                 colors.reset,
                 std.time.timestamp() - timestamp,
             });
+        }
+        
+        // In non-interactive mode, just list and exit
+        if (non_interactive) {
+            return;
         }
         
         const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });

@@ -8,7 +8,7 @@ const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 const proc = @import("../utils/process.zig");
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -57,14 +57,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8) !void {
     try colors.printInfo(stdout, "📋 Copying local configuration files...", .{});
     try fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path);
     
-    // Ask if user wants to run claude
-    if (try input.confirm("\nWould you like to start claude?", true)) {
-        try colors.printSuccess(stdout, "🚀 Starting claude...", .{});
-        
-        // Start claude
-        var claude_process = std.process.Child.init(&.{"claude"}, allocator);
-        try claude_process.spawn();
-    } else {
-        try colors.printInfo(stdout, "Skipped starting claude", .{});
+    // Ask if user wants to run claude (skip in non-interactive mode)
+    if (!non_interactive) {
+        if (try input.confirm("\nWould you like to start claude?", true)) {
+            try colors.printSuccess(stdout, "🚀 Starting claude...", .{});
+            
+            // Start claude
+            var claude_process = std.process.Child.init(&.{"claude"}, allocator);
+            try claude_process.spawn();
+        } else {
+            try colors.printInfo(stdout, "Skipped starting claude", .{});
+        }
     }
 }
