@@ -36,6 +36,7 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
     var no_color = false;
     var plain = false;
+    var show_command = false;
     var branch: ?[]const u8 = null;
     
     // Parse go-specific flags
@@ -44,6 +45,8 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
             no_color = true;
         } else if (std.mem.eql(u8, arg, "--plain")) {
             plain = true;
+        } else if (std.mem.eql(u8, arg, "--show-command")) {
+            show_command = true;
         } else if (arg.len > 0 and arg[0] != '-') {
             // First non-flag argument is the branch
             if (branch == null) {
@@ -52,7 +55,7 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
         }
     }
     
-    try cmd_go.execute(allocator, branch, non_interactive, no_color, plain);
+    try cmd_go.execute(allocator, branch, non_interactive, no_color, plain, show_command);
 }
 
 pub fn main() !void {
@@ -225,8 +228,8 @@ fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     print("            # No branch name - just run normally\n", .{});
     print("            \"$git_wt_bin\" go \"$@\"\n", .{});
     print("        else\n", .{});
-    print("            # We have a branch name - ensure non-interactive mode to get cd command\n", .{});
-    print("            local cd_cmd=$(\"$git_wt_bin\" go --non-interactive \"$@\")\n", .{});
+    print("            # We have a branch name - use show-command to get cd command\n", .{});
+    print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$@\")\n", .{});
     print("            # Check if output is a cd command\n", .{});
     print("            if echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{});
     print("                eval \"$cd_cmd\"\n", .{});
@@ -242,7 +245,7 @@ fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     print("        \"$git_wt_bin\" new \"$@\"\n", .{});
     print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{});
     print("            # Try to navigate to the new worktree\n", .{});
-    print("            local cd_cmd=$(\"$git_wt_bin\" go --non-interactive \"$branch\")\n", .{});
+    print("            local cd_cmd=$(\"$git_wt_bin\" go --show-command \"$branch\")\n", .{});
     print("            if [ -n \"$cd_cmd\" ]; then\n", .{});
     print("                eval \"$cd_cmd\"\n", .{});
     print("            fi\n", .{});

@@ -92,7 +92,7 @@ git show-ref --verify --quiet refs/heads/feature-branch && pass "Branch was crea
 
 # Test go command
 cd "$REPO_ROOT"
-GO_OUTPUT=$($BIN --non-interactive go feature-branch 2>&1)
+GO_OUTPUT=$($BIN --show-command go feature-branch 2>&1)
 # The go command should output a cd command with the worktree path
 if echo "$GO_OUTPUT" | grep -q "cd.*feature-branch"; then
     pass "Go command works"
@@ -124,7 +124,7 @@ GO_SLASH_OUTPUT=$($BIN --non-interactive go 2>&1)
 echo "$GO_SLASH_OUTPUT" | grep -q "feature/test-ui" && pass "Go command lists nested worktree" || fail "Go command doesn't list nested worktree"
 
 # Test direct navigation to nested worktree
-GO_NAV_OUTPUT=$($BIN --non-interactive go feature/test-ui 2>&1)
+GO_NAV_OUTPUT=$($BIN --show-command go feature/test-ui 2>&1)
 echo "$GO_NAV_OUTPUT" | grep -q "cd.*feature/test-ui" && pass "Can navigate to nested worktree" || fail "Cannot navigate to nested worktree"
 
 # Test removal from nested worktree
@@ -139,7 +139,7 @@ $BIN --non-interactive new feature/ui/dark-mode && pass "Created deeply nested w
 
 # Test navigation from nested worktree to main
 cd "$TREES_DIR/feature/ui/dark-mode"
-MAIN_NAV_OUTPUT=$($BIN --non-interactive go main 2>&1)
+MAIN_NAV_OUTPUT=$($BIN --show-command go main 2>&1)
 if echo "$MAIN_NAV_OUTPUT" | grep -q "cd $REPO_ROOT"; then
     pass "Can navigate from nested worktree to main"
 else

@@ -126,6 +126,7 @@ pub fn printHelp() !void {
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
     try stdout.print("  -n, --non-interactive  List worktrees without interaction\n", .{});
+    try stdout.print("  --show-command   Output shell cd commands instead of navigating\n", .{});
     try stdout.print("  --no-color       Disable colored output\n", .{});
     try stdout.print("  --plain          Output plain paths only (one per line)\n\n", .{});
     try stdout.print("Examples:\n", .{});
@@ -143,7 +144,7 @@ pub fn printHelp() !void {
     try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_color: bool, plain: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_color: bool, plain: bool, show_command: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -164,7 +165,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     if (branch_name) |branch| {
         // Direct navigation
         if (std.mem.eql(u8, branch, "main")) {
-            if (non_interactive) {
+            if (show_command) {
                 try stdout.print("cd {s}\n", .{main_repo});
             } else {
                 try colors.printPath(stdout, "📁 Navigating to main repository:", main_repo);
@@ -184,7 +185,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             return error.WorktreeNotFound;
         };
         
-        if (non_interactive) {
+        if (show_command) {
             try stdout.print("cd {s}\n", .{worktree_path});
         } else {
             try colors.printPath(stdout, "📁 Navigating to worktree:", worktree_path);
@@ -248,7 +249,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }.lessThan);
         
         // Display worktrees
-        if (!plain) {
+        if (!plain and !show_command) {
             if (non_interactive and no_color) {
                 try stdout.print("Available worktrees:\n", .{});
             } else {
@@ -272,57 +273,53 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             const duration_str = try formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
             
-            if (non_interactive) {
+            if (show_command) {
                 if (plain) {
                     // Plain mode - just paths
                     try stdout.print("{s}\n", .{wt.path});
                 } else {
-                    // Non-interactive mode with formatting
-                    
-                    if (no_color) {
-                        try stdout.print("  {s} @ {s} - {s} ago\n", .{
-                            display_name,
-                            wt.branch,
-                            duration_str,
-                        });
-                    } else {
-                        try stdout.print("  {s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}\n", .{
-                            colors.path_color,
-                            display_name,
-                            colors.reset,
-                            colors.magenta,
-                            wt.branch,
-                            colors.reset,
-                            colors.yellow,
-                            duration_str,
-                            colors.reset,
-                        });
-                    }
+                    // Show command mode - output cd commands
+                    try stdout.print("cd {s}  # {s} @ {s} - {s} ago\n", .{
+                        wt.path,
+                        display_name,
+                        wt.branch,
+                        duration_str,
+                    });
                 }
             } else {
-                try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
-                    colors.green,
-                    idx,
-                    colors.reset,
-                    colors.path_color,
-                    display_name,
-                    colors.reset,
-                    colors.magenta,
-                    wt.branch,
-                    colors.reset,
-                });
-                
-                // Format timestamp
-                try stdout.print("     {s}Last modified:{s} {s} ago\n", .{
-                    colors.yellow,
-                    colors.reset,
-                    duration_str,
-                });
+                // Both interactive and non-interactive show the same list
+                if (non_interactive and no_color) {
+                    try stdout.print("  {d}) {s} @ {s} - {s} ago\n", .{
+                        idx,
+                        display_name,
+                        wt.branch,
+                        duration_str,
+                    });
+                } else {
+                    try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
+                        colors.green,
+                        idx,
+                        colors.reset,
+                        colors.path_color,
+                        display_name,
+                        colors.reset,
+                        colors.magenta,
+                        wt.branch,
+                        colors.reset,
+                    });
+                    
+                    // Format timestamp
+                    try stdout.print("     {s}Last modified:{s} {s} ago\n", .{
+                        colors.yellow,
+                        colors.reset,
+                        duration_str,
+                    });
+                }
             }
         }
         
-        // In non-interactive mode, just list and exit
-        if (non_interactive) {
+        // In non-interactive mode without a specific selection, just list and exit
+        if (non_interactive or show_command) {
             return;
         }
         
