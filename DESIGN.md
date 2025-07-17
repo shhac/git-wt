@@ -30,10 +30,14 @@ This project follows clear design principles to ensure maintainability, reliabil
 - Non-interactive mode for automation
 - Comprehensive unit and e2e tests
 
-### 6. Zero Dependencies
-- Uses only Zig standard library
-- Single self-contained binary
-- No external runtime requirements
+### 6. Zero Runtime Dependencies
+- Single self-contained binary with no external runtime requirements
+- Uses Zig standard library as the foundation
+- Build-time code inclusion is acceptable if:
+  - The license permits it (MIT, BSD, Apache, etc.)
+  - The code is compiled into the final binary
+  - No dynamic linking or external files are required
+- The goal is a portable executable that "just works" anywhere
 
 ## Code Patterns
 
