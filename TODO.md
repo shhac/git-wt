@@ -3,10 +3,8 @@
 ## Features
 
 ### Improve `go` command behavior
-- Current location/worktree should not be shown in the list
 - Default behavior if no index is provided should be to go to the most recent worktree (index 1)
 - Worktrees should be ordered by most recently modified first (currently implemented but verify)
-- Show the root repo as [main] (not [main repository]) unless we're already there
 
 ### Add branch argument to rm command
 - Allow `git-wt rm <branch-name>` to remove a specific worktree
@@ -27,7 +25,6 @@
 ## Future Enhancements
 
 ### Additional ideas for consideration
-- Add `list` command to show all worktrees with their status
 - Support for `--force` flag on removal to skip confirmation prompts
 - Add `clean` command to remove all worktrees for deleted branches
 - Support for custom worktree naming patterns via config file
