@@ -10,6 +10,7 @@ const debug = @import("utils/debug.zig");
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
 const cmd_go = @import("commands/go.zig");
+const cmd_list = @import("commands/list.zig");
 
 const Command = struct {
     name: []const u8,
@@ -23,6 +24,7 @@ const commands = [_]Command{
     .{ .name = "new", .min_args = 1, .usage = "git-wt new <branch-name>", .execute = executeNew, .help = cmd_new.printHelp },
     .{ .name = "rm", .min_args = 0, .usage = "git-wt rm", .execute = executeRemove, .help = cmd_remove.printHelp },
     .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
+    .{ .name = "list", .min_args = 0, .usage = "git-wt list", .execute = executeList, .help = cmd_list.printHelp },
 };
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
@@ -57,6 +59,23 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
     }
     
     try cmd_go.execute(allocator, branch, non_interactive, no_color, plain, show_command);
+}
+
+fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
+    _ = non_interactive; // List doesn't use this flag
+    var no_color = false;
+    var plain = false;
+    
+    // Parse list-specific flags
+    for (args) |arg| {
+        if (std.mem.eql(u8, arg, "--no-color")) {
+            no_color = true;
+        } else if (std.mem.eql(u8, arg, "--plain")) {
+            plain = true;
+        }
+    }
+    
+    try cmd_list.execute(allocator, no_color, plain);
 }
 
 pub fn main() !void {
@@ -210,6 +229,7 @@ fn printUsage() void {
     print("  new <branch>  Create a new worktree\n", .{});
     print("  rm            Remove current worktree\n", .{});
     print("  go [branch]   Navigate to worktree\n", .{});
+    print("  list          List all worktrees\n", .{});
     print("\nGlobal flags:\n", .{});
     print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
     print("  -h, --help             Show help\n", .{});
@@ -229,6 +249,8 @@ fn printHelp() void {
     print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
     print("  git-wt go main              Navigate to the main repository\n", .{});
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
+    print("  git-wt list                 List all worktrees with details\n", .{});
+    print("  git-wt list --plain         List worktrees in machine-readable format\n", .{});
     print("\nFor shell integration setup, use: git-wt --help setup\n", .{});
 }
 
