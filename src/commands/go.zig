@@ -64,6 +64,7 @@ fn findWorktreesRecursively(
     base_path: []const u8,
     relative_path: []const u8,
     depth: usize,
+    current_worktree: ?[]const u8,
 ) !void {
     if (depth > MAX_RECURSION_DEPTH) return;
     
@@ -79,6 +80,14 @@ fn findWorktreesRecursively(
     
     if (fs.cwd().statFile(git_file_path)) |_| {
         // This is a worktree
+        
+        // Skip if this is the current worktree
+        if (current_worktree) |cwt| {
+            if (std.mem.eql(u8, current_path, cwt)) {
+                return;
+            }
+        }
+        
         const stat = try fs.cwd().statFile(current_path);
         
         // Get current branch
@@ -113,7 +122,7 @@ fn findWorktreesRecursively(
             try allocator.dupe(u8, entry.name);
         defer allocator.free(new_relative);
         
-        try findWorktreesRecursively(allocator, worktrees, base_path, new_relative, depth + 1);
+        try findWorktreesRecursively(allocator, worktrees, base_path, new_relative, depth + 1, current_worktree);
     }
 }
 
@@ -155,6 +164,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     };
     defer allocator.free(repo_info.root);
     defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    
+    // Get current worktree path (null means we're in main)
+    const current_worktree = try git.getCurrentWorktree(allocator);
+    defer if (current_worktree) |wt| allocator.free(wt);
     
     const main_repo = if (repo_info.is_worktree) repo_info.main_repo_root.? else repo_info.root;
     const repo_name = fs.path.basename(main_repo);
@@ -202,8 +215,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             worktrees.deinit();
         }
         
-        // Add main repository if we're not already in it
-        if (!std.mem.eql(u8, repo_info.root, main_repo)) {
+        // Add main repository only if we're not currently in it
+        const in_main = current_worktree == null;
+        if (!in_main) {
             const stat = try fs.cwd().statFile(main_repo);
             const main_branch = blk: {
                 var saved_cwd = try fs.cwd().openDir(".", .{});
@@ -227,7 +241,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             var trees_dir_handle = dir;
             defer trees_dir_handle.close();
             
-            try findWorktreesRecursively(allocator, &worktrees, trees_dir, "", 0);
+            try findWorktreesRecursively(allocator, &worktrees, trees_dir, "", 0, current_worktree);
         } else |_| {}
         
         if (worktrees.items.len == 0) {
@@ -259,7 +273,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         for (worktrees.items, 1..) |wt, idx| {
-            const display_name = if (wt.is_main) "[main repository]" else blk: {
+            const display_name = if (wt.is_main) "[main]" else blk: {
                 // Show relative path from trees directory for nested worktrees
                 if (std.mem.indexOf(u8, wt.path, trees_dir)) |trees_idx| {
                     const relative_start = trees_idx + trees_dir.len + 1; // +1 for the slash

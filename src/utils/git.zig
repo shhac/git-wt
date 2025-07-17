@@ -69,7 +69,11 @@ pub fn getRepoInfo(allocator: std.mem.Allocator) !RepoInfo {
     const git_dir = try execTrimmed(allocator, &.{ "rev-parse", "--git-dir" });
     defer allocator.free(git_dir);
     
-    const is_worktree = !std.mem.endsWith(u8, git_dir, "/.git");
+    // A worktree has a .git file, while main repo has .git directory
+    // git rev-parse --git-dir returns:
+    // - ".git" for main repository (relative path)
+    // - absolute path like "/path/to/main/.git/worktrees/name" for worktrees
+    const is_worktree = !std.mem.eql(u8, git_dir, ".git") and !std.mem.endsWith(u8, git_dir, "/.git");
     
     var main_repo_root: ?[]const u8 = null;
     if (is_worktree) {
@@ -209,6 +213,22 @@ pub fn branchExists(allocator: std.mem.Allocator, branch: []const u8) !bool {
     defer allocator.free(result);
     
     return true;
+}
+
+/// Get the current worktree path (handles being in subdirectories)
+pub fn getCurrentWorktree(allocator: std.mem.Allocator) !?[]const u8 {
+    // Get the repository info to find out if we're in a worktree
+    const repo_info = getRepoInfo(allocator) catch return null;
+    defer allocator.free(repo_info.root);
+    defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    
+    // If we're in a worktree, return its root path
+    if (repo_info.is_worktree) {
+        return try allocator.dupe(u8, repo_info.root);
+    }
+    
+    // If we're in the main repository, return null to indicate main
+    return null;
 }
 
 test "git exec" {
