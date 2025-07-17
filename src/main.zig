@@ -5,6 +5,7 @@ const print = std.debug.print;
 const git = @import("utils/git.zig");
 const fs_utils = @import("utils/fs.zig");
 const colors = @import("utils/colors.zig");
+const debug = @import("utils/debug.zig");
 
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
@@ -68,18 +69,75 @@ pub fn main() !void {
 
     // Parse global flags
     var non_interactive = false;
+    var debug_mode = false;
     var filtered_args = std.ArrayList([]const u8).init(allocator);
     defer filtered_args.deinit();
     
     for (args) |arg| {
         if (std.mem.eql(u8, arg, "--non-interactive") or std.mem.eql(u8, arg, "-n")) {
             non_interactive = true;
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            debug_mode = true;
+            debug.setEnabled(true);
         } else {
             try filtered_args.append(arg);
         }
     }
     
     const final_args = filtered_args.items;
+    
+    // Print debug information if enabled
+    if (debug_mode) {
+        debug.printSection("Environment");
+        
+        // Current working directory
+        const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+        defer allocator.free(cwd);
+        debug.print("Current directory: {s}", .{cwd});
+        
+        // Command line arguments
+        debug.print("Arguments: {s}", .{args});
+        debug.print("Filtered args: {s}", .{final_args});
+        
+        // Environment variables
+        if (std.process.getEnvVarOwned(allocator, "NON_INTERACTIVE")) |v| {
+            defer allocator.free(v);
+            debug.print("NON_INTERACTIVE: {s}", .{v});
+        } else |_| {
+            debug.print("NON_INTERACTIVE: not set", .{});
+        }
+        
+        if (std.process.getEnvVarOwned(allocator, "NO_COLOR")) |v| {
+            defer allocator.free(v);
+            debug.print("NO_COLOR: {s}", .{v});
+        } else |_| {
+            debug.print("NO_COLOR: not set", .{});
+        }
+        
+        // Git version
+        if (git.execTrimmed(allocator, &.{"--version"})) |version| {
+            defer allocator.free(version);
+            debug.print("Git version: {s}", .{version});
+        } else |_| {
+            debug.print("Git version: unable to determine", .{});
+        }
+        
+        // Git repository info
+        if (git.getRepoInfo(allocator)) |repo_info| {
+            defer allocator.free(repo_info.root);
+            defer if (repo_info.main_repo_root) |root| allocator.free(root);
+            
+            debug.printSection("Repository Info");
+            debug.print("Repository root: {s}", .{repo_info.root});
+            debug.print("Repository name: {s}", .{repo_info.name});
+            debug.print("Is worktree: {}", .{repo_info.is_worktree});
+            if (repo_info.main_repo_root) |main_root| {
+                debug.print("Main repo root: {s}", .{main_root});
+            }
+        } else |_| {
+            debug.print("Not in a git repository", .{});
+        }
+    }
 
     if (final_args.len < 2) {
         printUsage();
@@ -119,6 +177,9 @@ pub fn main() !void {
     // Find and execute command
     for (commands) |cmd| {
         if (std.mem.eql(u8, arg1, cmd.name)) {
+            debug.printSection("Command Execution");
+            debug.print("Command: {s}", .{cmd.name});
+            debug.print("Arguments: {s}", .{command_args});
             // Check for help flag on the command
             if (command_args.len > 0 and (std.mem.eql(u8, command_args[0], "--help") or std.mem.eql(u8, command_args[0], "-h"))) {
                 try cmd.help();
@@ -154,6 +215,7 @@ fn printUsage() void {
     print("  -h, --help             Show help\n", .{});
     print("  -v, --version          Show version\n", .{});
     print("  --alias <name>         Generate shell function for directory navigation\n", .{});
+    print("  --debug                Show diagnostic information\n", .{});
     print("\nUse 'git-wt --help' for more information\n", .{});
     print("Use 'git-wt --help setup' for shell integration setup\n", .{});
 }
