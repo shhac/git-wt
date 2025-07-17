@@ -36,3 +36,6 @@ coverage/
 
 # E2E test directory
 .e2e-test/
+
+# Claude's test script
+test-claude-script.sh
