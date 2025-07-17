@@ -253,3 +253,18 @@ test "execTrimmed" {
     try std.testing.expect(std.mem.startsWith(u8, version, "git version"));
     try std.testing.expect(!std.mem.endsWith(u8, version, "\n"));
 }
+
+test "RepoInfo struct" {
+    // Test that RepoInfo can be created and used
+    const info = RepoInfo{
+        .root = "/path/to/repo",
+        .name = "repo",
+        .is_worktree = true,
+        .main_repo_root = "/path/to/main",
+    };
+    
+    try std.testing.expectEqualStrings("/path/to/repo", info.root);
+    try std.testing.expectEqualStrings("repo", info.name);
+    try std.testing.expect(info.is_worktree);
+    try std.testing.expectEqualStrings("/path/to/main", info.main_repo_root.?);
+}

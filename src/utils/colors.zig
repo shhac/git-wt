@@ -39,3 +39,41 @@ pub fn printInfo(writer: anytype, comptime fmt: []const u8, args: anytype) !void
 pub fn printPath(writer: anytype, prefix: []const u8, path: []const u8) !void {
     try writer.print("{s} {s}{s}{s}\n", .{ prefix, path_color, path, reset });
 }
+
+test "color constants" {
+    // Just verify the constants are defined correctly
+    try std.testing.expect(reset.len > 0);
+    try std.testing.expect(red.len > 0);
+    try std.testing.expect(green.len > 0);
+    try std.testing.expectEqualStrings("\x1b[0m", reset);
+    try std.testing.expectEqualStrings("\x1b[31m", red);
+}
+
+test "color print functions" {
+    // Test that the print functions work with a buffer
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+    const writer = buffer.writer();
+    
+    // Test printError
+    try printError(writer, "test error", .{});
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "Error:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "test error") != null);
+    
+    // Test printSuccess
+    buffer.clearRetainingCapacity();
+    try printSuccess(writer, "test success", .{});
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "✓") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "test success") != null);
+    
+    // Test printInfo
+    buffer.clearRetainingCapacity();
+    try printInfo(writer, "test info", .{});
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "test info") != null);
+    
+    // Test printPath
+    buffer.clearRetainingCapacity();
+    try printPath(writer, "Path:", "/test/path");
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "Path:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "/test/path") != null);
+}

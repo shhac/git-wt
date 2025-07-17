@@ -34,3 +34,23 @@ pub fn runWithOutput(allocator: std.mem.Allocator, argv: []const []const u8) !bo
     }
     return false;
 }
+
+test "run command" {
+    const allocator = std.testing.allocator;
+    
+    // Test running a simple command that should succeed
+    const term = try run(allocator, &.{ "true" });
+    try std.testing.expectEqual(@as(u8, 0), term.Exited);
+}
+
+test "runSilent" {
+    const allocator = std.testing.allocator;
+    
+    // Test command that succeeds
+    const success = try runSilent(allocator, &.{ "true" });
+    try std.testing.expect(success);
+    
+    // Test command that fails
+    const failure = try runSilent(allocator, &.{ "false" });
+    try std.testing.expect(!failure);
+}

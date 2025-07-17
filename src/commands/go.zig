@@ -384,3 +384,55 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
     }
 }
+
+test "formatDuration" {
+    const allocator = std.testing.allocator;
+    
+    // Test seconds
+    const s = try formatDuration(allocator, 45);
+    defer allocator.free(s);
+    try std.testing.expectEqualStrings("45s", s);
+    
+    // Test minutes
+    const m = try formatDuration(allocator, 150);
+    defer allocator.free(m);
+    try std.testing.expectEqualStrings("2m 30s", m);
+    
+    // Test hours
+    const h = try formatDuration(allocator, 3900);
+    defer allocator.free(h);
+    try std.testing.expectEqualStrings("1h 5m", h);
+    
+    // Test days
+    const d = try formatDuration(allocator, 90000);
+    defer allocator.free(d);
+    try std.testing.expectEqualStrings("1d 1h", d);
+    
+    // Test years
+    const y = try formatDuration(allocator, 31536000 + 2592000);
+    defer allocator.free(y);
+    try std.testing.expectEqualStrings("1y 1mo", y);
+    
+    // Test zero
+    const zero = try formatDuration(allocator, 0);
+    defer allocator.free(zero);
+    try std.testing.expectEqualStrings("0s", zero);
+}
+
+test "WorktreeInfo sorting" {
+    var worktrees = [_]WorktreeInfo{
+        .{ .path = "/path/a", .branch = "a", .mod_time = 1000, .is_main = false },
+        .{ .path = "/path/b", .branch = "b", .mod_time = 3000, .is_main = false },
+        .{ .path = "/path/c", .branch = "c", .mod_time = 2000, .is_main = false },
+    };
+    
+    std.mem.sort(WorktreeInfo, &worktrees, {}, struct {
+        fn lessThan(_: void, a: WorktreeInfo, b: WorktreeInfo) bool {
+            return a.mod_time > b.mod_time;
+        }
+    }.lessThan);
+    
+    try std.testing.expectEqual(@as(i128, 3000), worktrees[0].mod_time);
+    try std.testing.expectEqual(@as(i128, 2000), worktrees[1].mod_time);
+    try std.testing.expectEqual(@as(i128, 1000), worktrees[2].mod_time);
+}

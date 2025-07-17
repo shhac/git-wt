@@ -5,5 +5,10 @@ test {
     _ = @import("fs.zig");
     _ = @import("colors.zig");
     _ = @import("env.zig");
-    // Note: input.zig and process.zig are harder to unit test due to I/O
+    _ = @import("validation.zig");
+    _ = @import("process.zig");
+    // Note: input.zig is harder to unit test due to I/O
+    
+    // Commands
+    _ = @import("../commands/go.zig");
 }
