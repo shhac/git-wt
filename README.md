@@ -213,6 +213,8 @@ The test script will:
 
 ## Development
 
+See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
+
 ```bash
 # Run tests
 zig build test
@@ -223,8 +225,8 @@ zig build
 # Run directly without installing
 zig build run -- new test-branch
 
-# Enable verbose output (if implemented)
-DEBUG=1 git-wt new test-branch
+# Enable debug output
+git-wt --debug new test-branch
 ```
 
 ### Project Structure

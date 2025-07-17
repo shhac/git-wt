@@ -9,6 +9,8 @@ This is a Zig implementation of the git-wt shell script, providing:
 - `git-wt rm` - Remove current worktree with safety checks
 - `git-wt go [branch]` - Navigate between worktrees
 
+See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
+
 ## Development Guidelines
 
 ### Git Workflow
