@@ -249,11 +249,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }.lessThan);
         
         // Display worktrees
-        if (!plain and !show_command) {
+        if (!plain) {
+            const header_writer = if (show_command) stderr else stdout;
             if (non_interactive and no_color) {
-                try stdout.print("Available worktrees:\n", .{});
+                try header_writer.print("Available worktrees:\n", .{});
             } else {
-                try colors.printInfo(stdout, "Available worktrees:\n", .{});
+                try colors.printInfo(header_writer, "Available worktrees:\n", .{});
             }
         }
         
@@ -273,7 +274,27 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             const duration_str = try formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
             
-            if (show_command) {
+            if (show_command and !non_interactive) {
+                // In interactive show_command mode, show the numbered list to stderr
+                try stderr.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
+                    colors.green,
+                    idx,
+                    colors.reset,
+                    colors.path_color,
+                    display_name,
+                    colors.reset,
+                    colors.magenta,
+                    wt.branch,
+                    colors.reset,
+                });
+                
+                // Format timestamp
+                try stderr.print("     {s}Last modified:{s} {s} ago\n", .{
+                    colors.yellow,
+                    colors.reset,
+                    duration_str,
+                });
+            } else if (show_command) {
                 if (plain) {
                     // Plain mode - just paths
                     try stdout.print("{s}\n", .{wt.path});
@@ -326,20 +347,24 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
         defer allocator.free(prompt);
         
-        // In show_command mode, send prompt to stderr instead of stdout
-        if (show_command) {
+        // Handle reading input differently in show_command mode
+        const response = if (show_command) blk: {
+            // In show_command mode, handle prompt and input manually to avoid stdout pollution
             try stderr.print("{s} ", .{prompt});
-        }
+            const stdin = std.io.getStdIn().reader();
+            break :blk try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
+        } else try input.readLine(allocator, prompt);
         
-        if (try input.readLine(allocator, if (show_command) "" else prompt)) |response| {
-            defer allocator.free(response);
+        if (response) |resp| {
+            defer allocator.free(resp);
+            const trimmed = std.mem.trim(u8, resp, " \t\r\n");
             
-            if (response.len > 0 and (response[0] == 'q' or response[0] == 'Q')) {
+            if (trimmed.len > 0 and (trimmed[0] == 'q' or trimmed[0] == 'Q')) {
                 try colors.printInfo(stdout, "Cancelled", .{});
                 return;
             }
             
-            const selection = if (response.len == 0) 1 else std.fmt.parseInt(usize, response, 10) catch {
+            const selection = if (trimmed.len == 0) 1 else std.fmt.parseInt(usize, trimmed, 10) catch {
                 try colors.printError(stderr, "Invalid selection", .{});
                 return error.InvalidSelection;
             };
