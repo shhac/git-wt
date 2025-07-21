@@ -20,6 +20,8 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #15: Case-Insensitive Filesystems (conflict detection on macOS/Windows)
 - ✅ Bug #16: Argument parsing inconsistency (shared args.zig parser)
 - ✅ Bug #17: Resource leak in copyDir (proper allocator usage)
+- ✅ Bug #19: Integration Tests (comprehensive inter-module testing with build system integration)
+- ✅ Bug #20: Edge Case Testing (extensive boundary value and error condition tests)
 - ✅ Bug #21: Path traversal vulnerability (robust validation)
 - ✅ Bug #22: Duplicate Code in Interactive Selection (shared utility functions)
 - ✅ Bug #23: No cleanup on worktree creation failure (errdefer cleanup)
@@ -30,9 +32,6 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #29: Path Display Inconsistency (standardized to display names for consistency)
 - ✅ Bug #30: Missing --version Flag Validation (version generated from build system)
 
-## Integration and Edge Case Tests Added
-- ✅ Bug #19: Integration Tests (comprehensive inter-module testing with build system integration)
-- ✅ Bug #20: Edge Case Testing (extensive boundary value and error condition tests)
 
 ## Edge Cases
 
