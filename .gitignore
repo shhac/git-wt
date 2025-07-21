@@ -4,6 +4,7 @@ zig-cache/
 zig-out/
 build/
 *.exe
+*.o
 
 # Editor and IDE files
 .vscode/
