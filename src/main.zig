@@ -368,9 +368,9 @@ fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
     stdout.print("        shift\n", .{}) catch return;
     stdout.print("        local branch=\"$1\"\n", .{}) catch return;
     stdout.print("        \"$git_wt_bin\" new \"$@\"\n", .{}) catch return;
-    stdout.print("        if [ $? -eq 0 ] && [ -n \"$branch\" ]; then\n", .{}) catch return;
+    stdout.print("        if [ $? -eq 0 ] && [ -n \"$branch\" ] && [[ \"$branch\" != -* ]]; then\n", .{}) catch return;
     stdout.print("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --show-command \"$branch\" 3>&1 1>&2)\n", .{}) catch return;
-    stdout.print("            if [ -n \"$cd_cmd\" ]; then\n", .{}) catch return;
+    stdout.print("            if [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;
     stdout.print("                eval \"$cd_cmd\"\n", .{}) catch return;
     stdout.print("            fi\n", .{}) catch return;
     stdout.print("        fi\n", .{}) catch return;
