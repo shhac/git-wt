@@ -82,6 +82,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     
     try colors.printSuccess(stdout, "Worktree created successfully", .{});
     
+    // Copy configuration files BEFORE changing directory
+    try colors.printInfo(stdout, "📋 Copying local configuration files...", .{});
+    try fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path);
+    
     // Change to the new worktree directory
     try process.changeCurDir(worktree_path);
     try colors.printPath(stdout, "📁 Changed directory to:", worktree_path);
@@ -100,10 +104,6 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
             try colors.printSuccess(stdout, "Dependencies installed", .{});
         }
     }
-    
-    // Copy configuration files
-    try colors.printInfo(stdout, "📋 Copying local configuration files...", .{});
-    try fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path);
     
     // Ask if user wants to run claude (skip in non-interactive mode)
     if (!non_interactive) {
