@@ -279,7 +279,7 @@ pub fn selectFromList(
     try hideCursor();
     defer showCursor() catch {};
     
-    // Initial render
+    // Initial render with newline for spacing
     try stdout.print("\n", .{});
     for (items, 0..) |item, i| {
         try renderItem(stdout, item, i == selected, options.use_colors);
@@ -316,40 +316,49 @@ pub fn selectFromList(
                 }
             },
             .enter, .space => {
-                // Clear the selection display
+                // Clear the selection display including initial newline
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines);
+                // Move up one extra line to account for initial newline
+                try moveCursorUp(total_lines + 1);
+                try clearLine(); // Clear the initial empty line
+                try stdout.print("\n", .{});
                 for (0..total_lines) |_| {
                     try clearLine();
                     try stdout.print("\n", .{});
                 }
-                try moveCursorUp(total_lines);
+                try moveCursorUp(total_lines + 1);
                 
                 return selected;
             },
             .escape => {
-                // Clear the selection display  
+                // Clear the selection display including initial newline
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines);
+                // Move up one extra line to account for initial newline
+                try moveCursorUp(total_lines + 1);
+                try clearLine(); // Clear the initial empty line
+                try stdout.print("\n", .{});
                 for (0..total_lines) |_| {
                     try clearLine();
                     try stdout.print("\n", .{});
                 }
-                try moveCursorUp(total_lines);
+                try moveCursorUp(total_lines + 1);
                 
                 return null;
             },
             .char => {
                 // Handle 'q' for quit
                 if (key_info.char == 'q' or key_info.char == 'Q') {
-                    // Clear the selection display
+                    // Clear the selection display including initial newline
                     const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                    try moveCursorUp(total_lines);
+                    // Move up one extra line to account for initial newline
+                    try moveCursorUp(total_lines + 1);
+                    try clearLine(); // Clear the initial empty line
+                    try stdout.print("\n", .{});
                     for (0..total_lines) |_| {
                         try clearLine();
                         try stdout.print("\n", .{});
                     }
-                    try moveCursorUp(total_lines);
+                    try moveCursorUp(total_lines + 1);
                     
                     return null;
                 }

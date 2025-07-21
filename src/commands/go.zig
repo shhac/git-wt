@@ -246,7 +246,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     try process.changeCurDir(selected.path);
                 }
             } else {
-                try colors.printInfo(stdout, "Cancelled", .{});
+                // Selection was cancelled - no need for extra output since
+                // the interactive UI already cleaned up its display
+                try stdout.print("Cancelled\n", .{});
             }
         } else {
             // Fall back to number-based selection
