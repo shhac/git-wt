@@ -6,6 +6,8 @@ const input = @import("../utils/input.zig");
 const interactive = @import("../utils/interactive.zig");
 const time = @import("../utils/time.zig");
 const lock = @import("../utils/lock.zig");
+const validation = @import("../utils/validation.zig");
+const fs_utils = @import("../utils/fs.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -36,6 +38,12 @@ pub fn printHelp() !void {
 pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, force: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
+    
+    // Validate branch name
+    validation.validateBranchName(branch_name) catch |err| {
+        try colors.printError(stderr, "Invalid branch name: {s}", .{validation.getValidationErrorMessage(err)});
+        return err;
+    };
     
     // Get repository info for lock path
     const repo_info = git.getRepoInfo(allocator) catch |err| {
@@ -77,9 +85,29 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     defer git.freeWorktrees(allocator, worktrees);
     
     // Find the worktree for the specified branch
+    // Try both the original branch name and sanitized version for special characters
     var worktree_path: ?[]const u8 = null;
+    const sanitized_branch = try fs_utils.sanitizeBranchPath(allocator, branch_name);
+    defer allocator.free(sanitized_branch);
+    
     for (worktrees) |wt| {
+        // Try direct match first (most common case)
         if (std.mem.eql(u8, wt.branch, branch_name)) {
+            worktree_path = wt.path;
+            break;
+        }
+        
+        // Try match with sanitized branch name (for branches with special characters)
+        if (std.mem.eql(u8, wt.branch, sanitized_branch)) {
+            worktree_path = wt.path;
+            break;
+        }
+        
+        // Try reverse: unsanitize the stored branch name and compare
+        // This handles cases where the stored name is sanitized
+        const unsanitized_stored = fs_utils.unsanitizeBranchPath(allocator, wt.branch) catch continue;
+        defer allocator.free(unsanitized_stored);
+        if (std.mem.eql(u8, unsanitized_stored, branch_name)) {
             worktree_path = wt.path;
             break;
         }
@@ -91,12 +119,21 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
             colors.info_prefix, colors.reset
         });
         
-        // Try to find similar branch names
+        // Try to find similar branch names (including unsanitized versions)
         var similar_branches = std.ArrayList([]const u8).init(allocator);
         defer similar_branches.deinit();
         
         for (worktrees) |wt| {
+            // Check direct branch name match
             if (std.ascii.indexOfIgnoreCase(wt.branch, branch_name) != null) {
+                try similar_branches.append(wt.branch);
+                continue;
+            }
+            
+            // Check unsanitized branch name match (for display purposes)
+            const unsanitized_stored = fs_utils.unsanitizeBranchPath(allocator, wt.branch) catch continue;
+            defer allocator.free(unsanitized_stored);
+            if (std.ascii.indexOfIgnoreCase(unsanitized_stored, branch_name) != null) {
                 try similar_branches.append(wt.branch);
             }
         }
@@ -114,7 +151,6 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     // Show what we're about to remove
     try stdout.print("{s}⚠️  About to remove worktree:{s}\n", .{ colors.warning_prefix, colors.reset });
     
-    const fs_utils = @import("../utils/fs.zig");
     const display_path = try fs_utils.extractDisplayPath(allocator, worktree_path.?);
     defer allocator.free(display_path);
     
