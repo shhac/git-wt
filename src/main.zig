@@ -290,7 +290,7 @@ fn printSetupHelp() void {
     print("   gwt new feature-branch    # Creates worktree AND navigates to it\n", .{});
     print("   gwt go main              # Actually changes to main repository\n", .{});
     print("   gwt go feature-branch    # Actually changes to worktree\n", .{});
-    print("   gwt rm                   # Works the same as git-wt rm\n", .{});
+    print("   gwt rm feature-branch    # Removes the feature-branch worktree\n", .{});
     print("\nNOTE: You can use any alias name instead of 'gwt':\n", .{});
     print("  git-wt --alias wt        # Creates 'wt' alias\n", .{});
     print("  git-wt --alias gw        # Creates 'gw' alias\n", .{});
