@@ -1,4 +1,5 @@
 const std = @import("std");
+const git = @import("git.zig");
 
 pub const ValidationError = error{
     EmptyBranchName,
@@ -107,4 +108,111 @@ test "validateBranchName - invalid names" {
 test "getValidationErrorMessage" {
     const msg = getValidationErrorMessage(ValidationError.EmptyBranchName);
     try std.testing.expect(std.mem.eql(u8, msg, "Branch name cannot be empty"));
+}
+
+pub const ParentDirError = error{
+    ParentDirNotFound,
+    ParentDirNotDirectory,
+    ParentDirNotWritable,
+    ParentDirInsideRepo,
+    PathTraversalAttempt,
+    InvalidPath,
+};
+
+/// Validate parent directory for worktree creation
+pub fn validateParentDir(allocator: std.mem.Allocator, path: []const u8, repo_info: git.RepoInfo) ![]u8 {
+    // Basic path validation
+    if (path.len == 0) {
+        return ParentDirError.InvalidPath;
+    }
+    
+    // Check for obvious path traversal
+    if (std.mem.indexOf(u8, path, "..") != null) {
+        return ParentDirError.PathTraversalAttempt;
+    }
+    
+    // Resolve to absolute path (handles symlinks)
+    const abs_path = std.fs.realpathAlloc(allocator, path) catch |err| {
+        switch (err) {
+            error.FileNotFound => return ParentDirError.ParentDirNotFound,
+            error.AccessDenied => return ParentDirError.ParentDirNotWritable,
+            else => return err,
+        }
+    };
+    errdefer allocator.free(abs_path);
+    
+    // Ensure it's not inside the current repository
+    if (std.mem.startsWith(u8, abs_path, repo_info.root)) {
+        return ParentDirError.ParentDirInsideRepo;
+    }
+    
+    // Open directory to verify it exists and is a directory
+    var dir = std.fs.openDirAbsolute(abs_path, .{}) catch |err| {
+        switch (err) {
+            error.NotDir => return ParentDirError.ParentDirNotDirectory,
+            error.AccessDenied => return ParentDirError.ParentDirNotWritable,
+            else => return err,
+        }
+    };
+    defer dir.close();
+    
+    // Test write permissions
+    const test_name = try std.fmt.allocPrint(allocator, ".git-wt-test-{d}", .{std.time.milliTimestamp()});
+    defer allocator.free(test_name);
+    
+    const test_file = dir.createFile(test_name, .{}) catch |err| {
+        switch (err) {
+            error.AccessDenied => return ParentDirError.ParentDirNotWritable,
+            else => return err,
+        }
+    };
+    test_file.close();
+    dir.deleteFile(test_name) catch {}; // Best effort cleanup
+    
+    return abs_path; // Caller owns this memory
+}
+
+/// Get a human-readable error message for parent directory errors
+pub fn getParentDirErrorMessage(err: ParentDirError) []const u8 {
+    return switch (err) {
+        ParentDirError.ParentDirNotFound => "Parent directory does not exist",
+        ParentDirError.ParentDirNotDirectory => "Parent path is not a directory",
+        ParentDirError.ParentDirNotWritable => "Parent directory is not writable",
+        ParentDirError.ParentDirInsideRepo => "Parent directory cannot be inside the repository",
+        ParentDirError.PathTraversalAttempt => "Path traversal attempts are not allowed",
+        ParentDirError.InvalidPath => "Invalid parent directory path",
+    };
+}
+
+test "validateParentDir" {
+    const testing_allocator = std.testing.allocator;
+    
+    // Create a test directory
+    var temp_dir = try std.fs.cwd().makeOpenPath("test-parent-dir", .{});
+    defer temp_dir.close();
+    defer std.fs.cwd().deleteDir("test-parent-dir") catch {};
+    
+    const repo_info = git.RepoInfo{
+        .root = "/fake/repo",
+        .name = "repo",
+        .is_worktree = false,
+        .main_repo_root = null,
+    };
+    
+    // Test 1: Valid directory
+    const result = try validateParentDir(testing_allocator, "test-parent-dir", repo_info);
+    defer testing_allocator.free(result);
+    try std.testing.expect(std.fs.path.isAbsolute(result));
+    
+    // Test 2: Non-existent directory
+    const err = validateParentDir(testing_allocator, "non-existent-dir", repo_info);
+    try std.testing.expectError(ParentDirError.ParentDirNotFound, err);
+    
+    // Test 3: Path traversal attempt
+    const err2 = validateParentDir(testing_allocator, "../../../etc", repo_info);
+    try std.testing.expectError(ParentDirError.PathTraversalAttempt, err2);
+    
+    // Test 4: Empty path
+    const err3 = validateParentDir(testing_allocator, "", repo_info);
+    try std.testing.expectError(ParentDirError.InvalidPath, err3);
 }

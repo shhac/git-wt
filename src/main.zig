@@ -28,7 +28,34 @@ const commands = [_]Command{
 };
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
-    try cmd_new.execute(allocator, args[0], non_interactive);
+    var parent_dir: ?[]const u8 = null;
+    var branch_name: ?[]const u8 = null;
+    
+    // Parse new-specific flags
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--parent-dir") or std.mem.eql(u8, arg, "-p")) {
+            if (i + 1 >= args.len) {
+                const stderr = std.io.getStdErr().writer();
+                try colors.printError(stderr, "--parent-dir requires a directory path", .{});
+                std.process.exit(1);
+            }
+            i += 1;
+            parent_dir = args[i];
+        } else if (branch_name == null and arg.len > 0 and arg[0] != '-') {
+            branch_name = arg;
+        }
+    }
+    
+    if (branch_name) |branch| {
+        try cmd_new.execute(allocator, branch, non_interactive, parent_dir);
+    } else {
+        const stderr = std.io.getStdErr().writer();
+        try colors.printError(stderr, "Missing required arguments", .{});
+        print("Usage: {s}\n", .{commands[0].usage});
+        process.exit(1);
+    }
 }
 
 fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {

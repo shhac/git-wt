@@ -17,11 +17,15 @@ pub fn printHelp() !void {
     try stdout.print("  <branch-name>    Name of the new branch (required)\n\n", .{});
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
-    try stdout.print("  -n, --non-interactive  Run without prompts\n\n", .{});
+    try stdout.print("  -n, --non-interactive  Run without prompts\n", .{});
+    try stdout.print("  -p, --parent-dir <path>  Use custom parent directory for worktree\n", .{});
+    try stdout.print("                           (default: ../repo-trees/)\n\n", .{});
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt new feature-auth\n", .{});
     try stdout.print("  git-wt new bugfix-123\n", .{});
     try stdout.print("  git-wt new feature/ui-update    # Creates subdirectory structure\n", .{});
+    try stdout.print("  git-wt new feature --parent-dir ~/worktrees\n", .{});
+    try stdout.print("  git-wt new hotfix -p /tmp/quick-fix\n", .{});
     try stdout.print("  git-wt new --non-interactive hotfix-security\n\n", .{});
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. Create a new worktree in ../repo-trees/branch-name\n", .{});
@@ -29,10 +33,12 @@ pub fn printHelp() !void {
     try stdout.print("  3. Copy configuration files (.env, .claude, node_modules, etc.)\n", .{});
     try stdout.print("  4. Run nvm use if .nvmrc exists\n", .{});
     try stdout.print("  5. Install dependencies if yarn project detected\n", .{});
-    try stdout.print("  6. Optionally start claude (interactive mode only)\n", .{});
+    try stdout.print("  6. Optionally start claude (interactive mode only)\n\n", .{});
+    try stdout.print("Note: Parent directory must exist, be writable, and not be inside\n", .{});
+    try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, parent_dir: ?[]const u8) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -62,8 +68,41 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         return error.RepositoryNotClean;
     }
     
+    // Validate parent directory if provided
+    const validated_parent = if (parent_dir) |dir| blk: {
+        const abs_parent = validation.validateParentDir(allocator, dir, repo_info) catch |err| {
+            switch (err) {
+                validation.ParentDirError.ParentDirNotFound => {
+                    try colors.printError(stderr, "Parent directory does not exist", .{});
+                    try stderr.print("{s}Tip:{s} Create the directory first: mkdir -p {s}\n", .{
+                        colors.info_prefix, colors.reset, dir
+                    });
+                },
+                validation.ParentDirError.ParentDirNotDirectory => {
+                    try colors.printError(stderr, "Parent path is not a directory", .{});
+                },
+                validation.ParentDirError.ParentDirNotWritable => {
+                    try colors.printError(stderr, "Parent directory is not writable", .{});
+                },
+                validation.ParentDirError.ParentDirInsideRepo => {
+                    try colors.printError(stderr, "Parent directory cannot be inside the repository", .{});
+                },
+                validation.ParentDirError.PathTraversalAttempt => {
+                    try colors.printError(stderr, "Path traversal attempts are not allowed", .{});
+                },
+                validation.ParentDirError.InvalidPath => {
+                    try colors.printError(stderr, "Invalid parent directory path", .{});
+                },
+                else => try colors.printError(stderr, "Error: {s}", .{@errorName(err)}),
+            }
+            return err;
+        };
+        break :blk abs_parent;
+    } else null;
+    defer if (validated_parent) |p| allocator.free(p);
+    
     // Construct worktree path
-    const worktree_path = try fs_utils.constructWorktreePath(allocator, repo_info.root, branch_name);
+    const worktree_path = try fs_utils.constructWorktreePath(allocator, repo_info.root, repo_info.name, branch_name, validated_parent);
     defer allocator.free(worktree_path);
     
     // Check if worktree path already exists

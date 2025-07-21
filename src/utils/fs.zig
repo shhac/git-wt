@@ -79,19 +79,28 @@ pub const CONFIG_FILES = [_][]const u8{
 };
 
 /// Construct worktree path based on repository structure
-pub fn constructWorktreePath(allocator: std.mem.Allocator, repo_root: []const u8, branch_name: []const u8) ![]u8 {
-    const repo_name = fs.path.basename(repo_root);
-    const parent_dir = fs.path.dirname(repo_root) orelse ".";
-    
+pub fn constructWorktreePath(
+    allocator: std.mem.Allocator, 
+    repo_root: []const u8,
+    repo_name: []const u8,
+    branch_name: []const u8,
+    parent_dir: ?[]const u8
+) ![]u8 {
     // Sanitize the branch name for filesystem usage
     const sanitized_branch = try sanitizeBranchPath(allocator, branch_name);
     defer allocator.free(sanitized_branch);
     
-    const worktree_path = try std.fmt.allocPrint(allocator, "{s}/{s}-trees/{s}", .{
-        parent_dir,
-        repo_name,
-        sanitized_branch,
-    });
+    const worktree_path = if (parent_dir) |custom_parent| blk: {
+        // Use custom parent directory (already validated and absolute)
+        break :blk try fs.path.join(allocator, &.{ custom_parent, sanitized_branch });
+    } else blk: {
+        // Default behavior: ../repo-trees/branch-name
+        const repo_parent = fs.path.dirname(repo_root) orelse ".";
+        const trees_dir = try std.fmt.allocPrint(allocator, "{s}-trees", .{repo_name});
+        defer allocator.free(trees_dir);
+        
+        break :blk try fs.path.join(allocator, &.{ repo_parent, trees_dir, sanitized_branch });
+    };
     
     // Ensure parent directories exist if branch contains slashes
     if (std.mem.indexOf(u8, sanitized_branch, "/") != null) {
@@ -221,15 +230,25 @@ pub fn usesYarn(allocator: std.mem.Allocator, path: []const u8) !bool {
 test "constructWorktreePath" {
     const allocator = std.testing.allocator;
     
-    const path = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "feature-branch");
-    defer allocator.free(path);
+    // Test with default parent
+    const path1 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature-branch", null);
+    defer allocator.free(path1);
+    try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature-branch", path1);
     
-    try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature-branch", path);
-    
-    // Test with root directory
-    const path2 = try constructWorktreePath(allocator, "/myrepo", "test");
+    // Test with custom parent
+    const path2 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature-branch", "/custom/parent");
     defer allocator.free(path2);
-    try std.testing.expectEqualStrings("//myrepo-trees/test", path2);
+    try std.testing.expectEqualStrings("/custom/parent/feature-branch", path2);
+    
+    // Test with branch containing slashes (default parent)
+    const path3 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature/new-ui", null);
+    defer allocator.free(path3);
+    try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature/new-ui", path3);
+    
+    // Test with branch containing slashes (custom parent)
+    const path4 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature/new-ui", "/tmp");
+    defer allocator.free(path4);
+    try std.testing.expectEqualStrings("/tmp/feature/new-ui", path4);
 }
 
 test "config files list" {
