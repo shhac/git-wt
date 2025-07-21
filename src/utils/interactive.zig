@@ -49,7 +49,7 @@ pub const RawMode = struct {
         // Disable canonical mode and echo
         raw.lflag.ICANON = false;
         raw.lflag.ECHO = false;
-        raw.lflag.ISIG = false;  // Don't generate signals
+        raw.lflag.ISIG = true;   // Keep signals enabled for Ctrl+C
         raw.lflag.IEXTEN = false;
         
         // Disable input processing
@@ -196,16 +196,16 @@ fn renderItem(
 ) !void {
     if (use_colors) {
         if (is_selected) {
-            // Selected item: bright green [*] with bold text
-            try writer.print("  {s}[{s}*{s}]{s} {s}", .{
-                colors.green,
-                "\x1b[1m\x1b[92m", // bright green + bold
-                colors.green,
-                colors.reset,
-                "\x1b[1m", // bold
+            // Selected item: green brackets with bright green asterisk and bold text
+            try writer.print("  {s}[{s}*{s}]{s} {s}{s}{s}\n", .{
+                colors.green,          // green [
+                "\x1b[1m\x1b[92m",    // bright green + bold for *
+                colors.green,          // back to green for ]
+                colors.reset,          // reset before text
+                "\x1b[1m",            // bold for text
+                item_text,
+                colors.reset,          // final reset
             });
-            try writer.print("{s}", .{item_text});
-            try writer.print("{s}\n", .{colors.reset});
         } else {
             // Unselected item: dim [ ] with normal text
             try writer.print("  {s}[ ]{s} {s}\n", .{
