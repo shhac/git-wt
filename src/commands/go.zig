@@ -224,9 +224,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 try options_list.append(option_text);
             }
             
-            // Show header
-            try colors.printInfo(stdout, "Available worktrees:", .{});
-            
+            // Don't show header - the interactive UI will handle display
             const selection = try interactive.selectFromList(
                 allocator,
                 options_list.items,
