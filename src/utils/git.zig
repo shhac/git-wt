@@ -457,16 +457,13 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
     const worktrees = try listWorktrees(allocator);
     defer freeWorktrees(allocator, worktrees);
     
+    // Use arena allocator for easier cleanup
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    
     var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
-    errdefer {
-        for (worktrees_list.items) |wt| {
-            allocator.free(wt.display_name);
-            allocator.free(wt.worktree.path);
-            allocator.free(wt.worktree.branch);
-            allocator.free(wt.worktree.commit);
-        }
-        worktrees_list.deinit();
-    }
+    defer worktrees_list.deinit();
     
     // Get modification times for each worktree
     for (worktrees) |wt| {
@@ -475,32 +472,59 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
         
         const stat = std.fs.cwd().statFile(wt.path) catch continue;
         
-        // Determine display name
-        const display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
-            try allocator.dupe(u8, "[main]")
+        // Build worktree item using arena for temporary allocations
+        var wt_item: WorktreeWithTime = undefined;
+        
+        // Determine display name (allocated from arena temporarily)
+        const temp_display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
+            try arena_allocator.dupe(u8, "[main]")
         else blk: {
             const basename = std.fs.path.basename(wt.path);
-            break :blk try allocator.dupe(u8, basename);
+            break :blk try arena_allocator.dupe(u8, basename);
         };
         
-        // Duplicate worktree data since original will be freed
-        const wt_copy = Worktree{
-            .path = try allocator.dupe(u8, wt.path),
-            .branch = try allocator.dupe(u8, wt.branch),
-            .commit = try allocator.dupe(u8, wt.commit),
-            .is_bare = wt.is_bare,
-            .is_detached = wt.is_detached,
-            .is_current = wt.is_current,
-        };
+        // Now allocate everything from the main allocator in a safe order
+        const display_name = try allocator.dupe(u8, temp_display_name);
+        errdefer allocator.free(display_name);
         
-        try worktrees_list.append(.{
-            .worktree = wt_copy,
+        const path = try allocator.dupe(u8, wt.path);
+        errdefer allocator.free(path);
+        
+        const branch = try allocator.dupe(u8, wt.branch);
+        errdefer allocator.free(branch);
+        
+        const commit = try allocator.dupe(u8, wt.commit);
+        errdefer allocator.free(commit);
+        
+        // Create the worktree copy
+        wt_item = .{
+            .worktree = Worktree{
+                .path = path,
+                .branch = branch,
+                .commit = commit,
+                .is_bare = wt.is_bare,
+                .is_detached = wt.is_detached,
+                .is_current = wt.is_current,
+            },
             .mod_time = stat.mtime,
             .display_name = display_name,
-        });
+        };
+        
+        // Add to list - if this fails, the errdefers above will clean up
+        try worktrees_list.append(wt_item);
     }
     
     const result = try worktrees_list.toOwnedSlice();
+    errdefer {
+        // If toOwnedSlice succeeds but something after fails, clean up
+        for (result) |wt| {
+            allocator.free(wt.display_name);
+            allocator.free(wt.worktree.path);
+            allocator.free(wt.worktree.branch);
+            allocator.free(wt.worktree.commit);
+        }
+        allocator.free(result);
+    }
     
     // Sort by modification time (newest first)
     std.mem.sort(WorktreeWithTime, result, {}, struct {

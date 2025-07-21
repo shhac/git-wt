@@ -111,6 +111,39 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         return error.WorktreePathExists;
     }
     
+    // Track whether we need to clean up on failure
+    var worktree_created = false;
+    var parent_dir_created = false;
+    
+    // Check if parent directory needs to be created (for branches with slashes)
+    const worktree_parent = fs.path.dirname(worktree_path);
+    if (worktree_parent) |parent| {
+        if (!fs_utils.pathExists(parent)) {
+            parent_dir_created = true;
+        }
+    }
+    
+    // Set up cleanup on failure
+    errdefer {
+        if (worktree_created) {
+            // Try to remove the worktree using git
+            git.removeWorktree(allocator, worktree_path) catch |err| {
+                // If git removal fails, try manual cleanup
+                std.log.warn("Failed to remove worktree via git: {}", .{err});
+                fs.cwd().deleteTree(worktree_path) catch |del_err| {
+                    std.log.warn("Failed to manually delete worktree: {}", .{del_err});
+                };
+            };
+        } else if (parent_dir_created) {
+            // Only clean up parent directory if we created it and worktree wasn't created
+            if (worktree_parent) |parent| {
+                fs.cwd().deleteDir(parent) catch |err| {
+                    std.log.warn("Failed to clean up parent directory: {}", .{err});
+                };
+            }
+        }
+    }
+    
     // Create the worktree
     try colors.printPath(stdout, "Creating worktree at:", worktree_path);
     
@@ -118,12 +151,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         try colors.printError(stderr, "Failed to create worktree", .{});
         return err;
     };
+    worktree_created = true;
     
     try colors.printSuccess(stdout, "Worktree created successfully", .{});
     
     // Copy configuration files BEFORE changing directory
     try colors.printInfo(stdout, "📋 Copying local configuration files...", .{});
-    try fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path);
+    fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path) catch |err| {
+        try colors.printError(stderr, "Failed to copy configuration files: {}", .{err});
+        // Continue anyway - this is not fatal
+    };
     
     // Change to the new worktree directory
     try process.changeCurDir(worktree_path);
@@ -132,7 +169,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     // Check for .nvmrc and run nvm use if it exists
     if (try fs_utils.hasNvmrc(worktree_path)) {
         try colors.printInfo(stdout, "📋 Found .nvmrc, running nvm use...", .{});
-        _ = try proc.runWithOutput(allocator, &.{ "nvm", "use" });
+        _ = proc.runWithOutput(allocator, &.{ "nvm", "use" }) catch |err| {
+            try colors.printError(stderr, "Failed to run nvm use: {}", .{err});
+            // Continue anyway - this is not fatal
+        };
     }
     
     // Check for package.json with yarn

@@ -30,7 +30,8 @@ pub fn validateBranchName(branch_name: []const u8) ValidationError!void {
     }
     
     // Check for invalid characters (as per git check-ref-format)
-    const invalid_chars = "~^:?*[\\";
+    // Also include shell metacharacters for additional safety
+    const invalid_chars = "~^:?*[\\`;$&|()<>{}'\"";
     for (invalid_chars) |char| {
         if (std.mem.indexOf(u8, branch_name, &[_]u8{char}) != null) {
             return ValidationError.BranchNameHasInvalidChars;
@@ -81,7 +82,7 @@ pub fn getValidationErrorMessage(err: ValidationError) []const u8 {
         ValidationError.EmptyBranchName => "Branch name cannot be empty",
         ValidationError.BranchNameStartsWithDash => "Branch name cannot start with '-'",
         ValidationError.BranchNameHasSpaces => "Branch name cannot contain spaces",
-        ValidationError.BranchNameHasInvalidChars => "Branch name contains invalid characters (~^:?*[\\..)",
+        ValidationError.BranchNameHasInvalidChars => "Branch name contains invalid characters (~^:?*[\\`;$&|()<>{}'\"..)",
         ValidationError.BranchNameTooLong => "Branch name is too long (max 250 characters)",
         ValidationError.BranchNameReserved => "Branch name is reserved (HEAD, ORIG_HEAD, etc.)",
     };
@@ -103,6 +104,12 @@ test "validateBranchName - invalid names" {
     try std.testing.expectError(ValidationError.BranchNameReserved, validateBranchName("HEAD"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature/"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("/feature"));
+    // Test shell metacharacters
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature;rm -rf"));
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature$USER"));
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature`date`"));
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature|cmd"));
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature&&cmd"));
 }
 
 test "getValidationErrorMessage" {
@@ -126,12 +133,29 @@ pub fn validateParentDir(allocator: std.mem.Allocator, path: []const u8, repo_in
         return ParentDirError.InvalidPath;
     }
     
-    // Check for obvious path traversal
+    // Enhanced path traversal checks
+    // Check for .. sequences
     if (std.mem.indexOf(u8, path, "..") != null) {
         return ParentDirError.PathTraversalAttempt;
     }
     
-    // Resolve to absolute path (handles symlinks)
+    // Check for URL-encoded traversal attempts
+    const encoded_traversals = [_][]const u8{
+        "%2e%2e", "%2e%2e/", "%2e%2e\\",
+        "..%2f", "..%5c", "%252e%252e",
+    };
+    for (encoded_traversals) |pattern| {
+        if (std.ascii.indexOfIgnoreCase(path, pattern) != null) {
+            return ParentDirError.PathTraversalAttempt;
+        }
+    }
+    
+    // Check for null bytes which could truncate paths
+    if (std.mem.indexOf(u8, path, "\x00") != null) {
+        return ParentDirError.InvalidPath;
+    }
+    
+    // Resolve to absolute path (handles symlinks and normalizes path)
     const abs_path = std.fs.realpathAlloc(allocator, path) catch |err| {
         switch (err) {
             error.FileNotFound => return ParentDirError.ParentDirNotFound,
@@ -141,17 +165,41 @@ pub fn validateParentDir(allocator: std.mem.Allocator, path: []const u8, repo_in
     };
     errdefer allocator.free(abs_path);
     
+    // Additional check: ensure resolved path doesn't contain ..
+    if (std.mem.indexOf(u8, abs_path, "..") != null) {
+        allocator.free(abs_path);
+        return ParentDirError.PathTraversalAttempt;
+    }
+    
     // Ensure it's not inside the current repository
     if (std.mem.startsWith(u8, abs_path, repo_info.root)) {
+        allocator.free(abs_path);
         return ParentDirError.ParentDirInsideRepo;
+    }
+    
+    // Ensure it's not inside the main repository (if in worktree)
+    if (repo_info.main_repo_root) |main_root| {
+        if (std.mem.startsWith(u8, abs_path, main_root)) {
+            allocator.free(abs_path);
+            return ParentDirError.ParentDirInsideRepo;
+        }
     }
     
     // Open directory to verify it exists and is a directory
     var dir = std.fs.openDirAbsolute(abs_path, .{}) catch |err| {
         switch (err) {
-            error.NotDir => return ParentDirError.ParentDirNotDirectory,
-            error.AccessDenied => return ParentDirError.ParentDirNotWritable,
-            else => return err,
+            error.NotDir => {
+                allocator.free(abs_path);
+                return ParentDirError.ParentDirNotDirectory;
+            },
+            error.AccessDenied => {
+                allocator.free(abs_path);
+                return ParentDirError.ParentDirNotWritable;
+            },
+            else => {
+                allocator.free(abs_path);
+                return err;
+            },
         }
     };
     defer dir.close();
@@ -162,8 +210,14 @@ pub fn validateParentDir(allocator: std.mem.Allocator, path: []const u8, repo_in
     
     const test_file = dir.createFile(test_name, .{}) catch |err| {
         switch (err) {
-            error.AccessDenied => return ParentDirError.ParentDirNotWritable,
-            else => return err,
+            error.AccessDenied => {
+                allocator.free(abs_path);
+                return ParentDirError.ParentDirNotWritable;
+            },
+            else => {
+                allocator.free(abs_path);
+                return err;
+            },
         }
     };
     test_file.close();
@@ -215,4 +269,16 @@ test "validateParentDir" {
     // Test 4: Empty path
     const err3 = validateParentDir(testing_allocator, "", repo_info);
     try std.testing.expectError(ParentDirError.InvalidPath, err3);
+    
+    // Test 5: URL-encoded path traversal
+    const err4 = validateParentDir(testing_allocator, "%2e%2e/etc", repo_info);
+    try std.testing.expectError(ParentDirError.PathTraversalAttempt, err4);
+    
+    // Test 6: Mixed case URL encoding
+    const err5 = validateParentDir(testing_allocator, "%2E%2e/etc", repo_info);
+    try std.testing.expectError(ParentDirError.PathTraversalAttempt, err5);
+    
+    // Test 7: Null byte injection
+    const err6 = validateParentDir(testing_allocator, "/tmp\x00/etc", repo_info);
+    try std.testing.expectError(ParentDirError.InvalidPath, err6);
 }

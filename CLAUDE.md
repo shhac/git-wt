@@ -257,6 +257,33 @@ git add . && git commit -m "initial"
 ../../zig-out/bin/git-wt new feature/auth
 ```
 
+## Bug Tracking
+
+We maintain a `BUGS.md` file that tracks known bugs, edge cases, and potential issues in the codebase. When reviewing code or encountering issues:
+
+1. **Check BUGS.md first** - The issue might already be documented
+2. **Add new bugs** - Document any new issues you find with:
+   - Clear description of the problem
+   - Impact on users or system
+   - Example scenarios that trigger the bug
+   - Suggested fix approach
+3. **Categorize appropriately** - Use categories like Critical Issues, Edge Cases, Usability Issues, etc.
+4. **Reference DESIGN.md** - When fixing bugs, ensure solutions conform to our design principles:
+   - Zero runtime dependencies
+   - Clear, maintainable code
+   - Proper error handling
+   - Cross-platform compatibility
+
+To create or update BUGS.md:
+```bash
+# Review code systematically
+grep -r "TODO\|FIXME\|XXX" src/
+# Look for error handling patterns
+grep -r "catch\|error\|panic" src/
+# Check for memory management
+grep -r "allocator\|free\|defer" src/
+```
+
 ## TODO Management
 
 There is a `TODO.md` file that tracks planned features and improvements. When implementing items from the TODO:

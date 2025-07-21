@@ -8,19 +8,23 @@ var g_signal_mutex = std.Thread.Mutex{};
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.C) void {
-    // Get the raw mode pointer atomically
-    var raw_mode_ptr: ?*RawMode = null;
+    // Get the raw mode pointer and state atomically
+    var should_restore = false;
+    var termios_copy: posix.termios = undefined;
     {
         g_signal_mutex.lock();
         defer g_signal_mutex.unlock();
-        raw_mode_ptr = g_raw_mode;
+        if (g_raw_mode) |raw_mode| {
+            if (raw_mode.is_raw.load(.acquire)) {
+                should_restore = true;
+                termios_copy = raw_mode.original_termios;
+            }
+        }
     }
     
     // Restore terminal state outside of mutex lock
-    if (raw_mode_ptr) |raw_mode| {
-        if (raw_mode.is_raw) {
-            posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, raw_mode.original_termios) catch {};
-        }
+    if (should_restore) {
+        posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, termios_copy) catch {};
         showCursor() catch {};
     }
     
@@ -41,11 +45,11 @@ pub fn isStdoutTty() bool {
 /// Terminal control for raw mode
 pub const RawMode = struct {
     original_termios: posix.termios,
-    is_raw: bool = false,
+    is_raw: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     
     /// Enter raw mode for single character input
     pub fn enter(self: *RawMode) !void {
-        if (self.is_raw) return;
+        if (self.is_raw.load(.acquire)) return;
         
         // Get current terminal settings
         self.original_termios = try posix.tcgetattr(std.io.getStdIn().handle);
@@ -71,7 +75,7 @@ pub const RawMode = struct {
         raw.cc[@intFromEnum(posix.V.MIN)] = 0;   // Don't block
         
         try posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, raw);
-        self.is_raw = true;
+        self.is_raw.store(true, .release);
         
         // Register for signal handling
         g_signal_mutex.lock();
@@ -81,7 +85,7 @@ pub const RawMode = struct {
     
     /// Exit raw mode and restore original settings
     pub fn exit(self: *RawMode) void {
-        if (!self.is_raw) return;
+        if (!self.is_raw.load(.acquire)) return;
         
         // Unregister from signal handling atomically
         {
@@ -94,7 +98,7 @@ pub const RawMode = struct {
         
         // Restore terminal settings outside of mutex lock
         posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
-        self.is_raw = false;
+        self.is_raw.store(false, .release);
     }
 };
 
