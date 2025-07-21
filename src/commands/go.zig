@@ -7,6 +7,7 @@ const fs_utils = @import("../utils/fs.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 const fd = @import("../utils/fd.zig");
+const interactive = @import("../utils/interactive.zig");
 
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
@@ -263,43 +264,97 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             return;
         }
         
-        const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
-        defer allocator.free(prompt);
+        // Try interactive selection first
+        const use_interactive = interactive.isStdinTty() and interactive.isStdoutTty() and !show_command;
         
-        // Handle reading input differently in show_command mode
-        const response = if (show_command) blk: {
-            // In show_command mode, handle prompt and input manually to avoid stdout pollution
-            try stderr.print("{s} ", .{prompt});
-            const stdin = std.io.getStdIn().reader();
-            break :blk try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
-        } else try input.readLine(allocator, prompt);
-        
-        if (response) |resp| {
-            defer allocator.free(resp);
-            const trimmed = std.mem.trim(u8, resp, " \t\r\n");
+        if (use_interactive) {
+            // Build list of options for interactive selection
+            var options_list = std.ArrayList([]u8).init(allocator);
+            defer options_list.deinit();
+            defer for (options_list.items) |item| allocator.free(item);
             
-            if (trimmed.len > 0 and (trimmed[0] == 'q' or trimmed[0] == 'Q')) {
-                try colors.printInfo(stdout, "Cancelled", .{});
-                return;
+            for (worktrees_with_time) |wt_info| {
+                const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
+                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                const duration_str = try formatDuration(allocator, time_ago_seconds);
+                defer allocator.free(duration_str);
+                
+                const option_text = try std.fmt.allocPrint(allocator, "{s} @ {s} - {s} ago", .{
+                    wt_info.display_name,
+                    wt_info.worktree.branch,
+                    duration_str,
+                });
+                try options_list.append(option_text);
             }
             
-            const selection = if (trimmed.len == 0) 1 else std.fmt.parseInt(usize, trimmed, 10) catch {
-                try colors.printError(stderr, "Invalid selection", .{});
-                return error.InvalidSelection;
-            };
-            
-            if (selection < 1 or selection > worktrees_with_time.len) {
-                try colors.printError(stderr, "Invalid selection", .{});
-                return error.InvalidSelection;
+            // Hide the numbered list we showed above
+            const lines_to_clear = worktrees_with_time.len * 2 + 1; // Each worktree takes 2 lines plus header
+            try interactive.moveCursorUp(lines_to_clear);
+            for (0..lines_to_clear) |_| {
+                try interactive.clearLine();
+                try stdout.print("\n", .{});
             }
+            try interactive.moveCursorUp(lines_to_clear);
             
-            const selected = worktrees_with_time[selection - 1].worktree;
-            if (show_command) {
-                const cmd_writer = fd.CommandWriter.init();
-                try cmd_writer.print("cd {s}\n", .{selected.path});
-            } else {
+            // Show header again
+            try colors.printInfo(stdout, "Available worktrees:", .{});
+            
+            const selection = try interactive.selectFromList(
+                allocator,
+                options_list.items,
+                .{
+                    .show_instructions = true,
+                    .use_colors = !no_color,
+                },
+            );
+            
+            if (selection) |idx| {
+                const selected = worktrees_with_time[idx].worktree;
                 try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
                 try process.changeCurDir(selected.path);
+            } else {
+                try colors.printInfo(stdout, "Cancelled", .{});
+            }
+        } else {
+            // Fall back to number-based selection
+            const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
+            defer allocator.free(prompt);
+            
+            // Handle reading input differently in show_command mode
+            const response = if (show_command) blk: {
+                // In show_command mode, handle prompt and input manually to avoid stdout pollution
+                try stderr.print("{s} ", .{prompt});
+                const stdin = std.io.getStdIn().reader();
+                break :blk try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
+            } else try input.readLine(allocator, prompt);
+            
+            if (response) |resp| {
+                defer allocator.free(resp);
+                const trimmed = std.mem.trim(u8, resp, " \t\r\n");
+                
+                if (trimmed.len > 0 and (trimmed[0] == 'q' or trimmed[0] == 'Q')) {
+                    try colors.printInfo(stdout, "Cancelled", .{});
+                    return;
+                }
+                
+                const selection = if (trimmed.len == 0) 1 else std.fmt.parseInt(usize, trimmed, 10) catch {
+                    try colors.printError(stderr, "Invalid selection", .{});
+                    return error.InvalidSelection;
+                };
+                
+                if (selection < 1 or selection > worktrees_with_time.len) {
+                    try colors.printError(stderr, "Invalid selection", .{});
+                    return error.InvalidSelection;
+                }
+                
+                const selected = worktrees_with_time[selection - 1].worktree;
+                if (show_command) {
+                    const cmd_writer = fd.CommandWriter.init();
+                    try cmd_writer.print("cd {s}\n", .{selected.path});
+                } else {
+                    try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
+                    try process.changeCurDir(selected.path);
+                }
             }
         }
     }

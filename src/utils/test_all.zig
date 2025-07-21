@@ -9,7 +9,7 @@ test {
     _ = @import("process.zig");
     _ = @import("debug.zig");
     _ = @import("fd.zig");
-    // Note: input.zig is harder to unit test due to I/O
+    // Note: input.zig and interactive.zig are harder to unit test due to I/O
     
     // Commands
     _ = @import("../commands/go.zig");
