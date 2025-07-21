@@ -455,6 +455,9 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
     errdefer {
         for (worktrees_list.items) |wt| {
             allocator.free(wt.display_name);
+            allocator.free(wt.worktree.path);
+            allocator.free(wt.worktree.branch);
+            allocator.free(wt.worktree.commit);
         }
         worktrees_list.deinit();
     }
@@ -474,8 +477,18 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
             break :blk try allocator.dupe(u8, basename);
         };
         
+        // Duplicate worktree data since original will be freed
+        const wt_copy = Worktree{
+            .path = try allocator.dupe(u8, wt.path),
+            .branch = try allocator.dupe(u8, wt.branch),
+            .commit = try allocator.dupe(u8, wt.commit),
+            .is_bare = wt.is_bare,
+            .is_detached = wt.is_detached,
+            .is_current = wt.is_current,
+        };
+        
         try worktrees_list.append(.{
-            .worktree = wt,
+            .worktree = wt_copy,
             .mod_time = stat.mtime,
             .display_name = display_name,
         });
@@ -497,6 +510,9 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
 pub fn freeWorktreesWithTime(allocator: std.mem.Allocator, worktrees: []WorktreeWithTime) void {
     for (worktrees) |wt| {
         allocator.free(wt.display_name);
+        allocator.free(wt.worktree.path);
+        allocator.free(wt.worktree.branch);
+        allocator.free(wt.worktree.commit);
     }
     allocator.free(worktrees);
 }
