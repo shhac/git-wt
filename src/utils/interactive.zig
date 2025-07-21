@@ -197,9 +197,11 @@ fn renderItem(
     if (use_colors) {
         if (is_selected) {
             // Selected item: green brackets with bright green asterisk and bold text
-            try writer.print("  {s}[{s}*{s}]{s} {s}{s}{s}\n", .{
+            try writer.print("  {s}[{s}{s}*{s}{s}]{s} {s}{s}{s}\n", .{
                 colors.green,          // green [
+                colors.reset,          // reset to remove any inherited formatting
                 "\x1b[1m\x1b[92m",    // bright green + bold for *
+                colors.reset,          // reset to clear bold
                 colors.green,          // back to green for ]
                 colors.reset,          // reset before text
                 "\x1b[1m",            // bold for text
