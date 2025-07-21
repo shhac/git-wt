@@ -6,6 +6,7 @@ const git = @import("utils/git.zig");
 const fs_utils = @import("utils/fs.zig");
 const colors = @import("utils/colors.zig");
 const debug = @import("utils/debug.zig");
+const args_parser = @import("utils/args.zig");
 
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
@@ -29,25 +30,13 @@ const commands = [_]Command{
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     _ = no_tty; // Not used in new command yet
-    var parent_dir: ?[]const u8 = null;
-    var branch_name: ?[]const u8 = null;
     
-    // Parse new-specific flags
-    var i: usize = 0;
-    while (i < args.len) : (i += 1) {
-        const arg = args[i];
-        if (std.mem.eql(u8, arg, "--parent-dir") or std.mem.eql(u8, arg, "-p")) {
-            if (i + 1 >= args.len) {
-                const stderr = std.io.getStdErr().writer();
-                try colors.printError(stderr, "--parent-dir requires a directory path", .{});
-                std.process.exit(1);
-            }
-            i += 1;
-            parent_dir = args[i];
-        } else if (branch_name == null and arg.len > 0 and arg[0] != '-') {
-            branch_name = arg;
-        }
-    }
+    // Parse arguments using the new parser
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit();
+    
+    const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" });
+    const branch_name = parsed.getPositional(0);
     
     if (branch_name) |branch| {
         try cmd_new.execute(allocator, branch, non_interactive, parent_dir);
@@ -60,17 +49,12 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
 }
 
 fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
-    var force = false;
-    var branch_name: ?[]const u8 = null;
+    // Parse arguments using the new parser
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit();
     
-    // Parse rm-specific flags
-    for (args) |arg| {
-        if (std.mem.eql(u8, arg, "--force") or std.mem.eql(u8, arg, "-f")) {
-            force = true;
-        } else if (branch_name == null) {
-            branch_name = arg;
-        }
-    }
+    const force = parsed.hasFlag(&.{ "--force", "-f" });
+    const branch_name = parsed.getPositional(0);
     
     if (branch_name) |branch| {
         try cmd_remove.execute(allocator, branch, non_interactive, force);
@@ -81,26 +65,14 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
 }
 
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
-    var no_color = false;
-    var plain = false;
-    var show_command = false;
-    var branch: ?[]const u8 = null;
+    // Parse arguments using the new parser
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit();
     
-    // Parse go-specific flags
-    for (args) |arg| {
-        if (std.mem.eql(u8, arg, "--no-color")) {
-            no_color = true;
-        } else if (std.mem.eql(u8, arg, "--plain")) {
-            plain = true;
-        } else if (std.mem.eql(u8, arg, "--show-command")) {
-            show_command = true;
-        } else if (arg.len > 0 and arg[0] != '-') {
-            // First non-flag argument is the branch
-            if (branch == null) {
-                branch = arg;
-            }
-        }
-    }
+    const no_color = parsed.hasFlag(&.{"--no-color"});
+    const plain = parsed.hasFlag(&.{"--plain"});
+    const show_command = parsed.hasFlag(&.{"--show-command"});
+    const branch = parsed.getPositional(0);
     
     try cmd_go.execute(allocator, branch, non_interactive or no_tty, no_color, plain, show_command);
 }
@@ -108,17 +80,13 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
 fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     _ = non_interactive; // List doesn't use this flag
     _ = no_tty; // List doesn't use this flag
-    var no_color = false;
-    var plain = false;
     
-    // Parse list-specific flags
-    for (args) |arg| {
-        if (std.mem.eql(u8, arg, "--no-color")) {
-            no_color = true;
-        } else if (std.mem.eql(u8, arg, "--plain")) {
-            plain = true;
-        }
-    }
+    // Parse arguments using the new parser
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit();
+    
+    const no_color = parsed.hasFlag(&.{"--no-color"});
+    const plain = parsed.hasFlag(&.{"--plain"});
     
     try cmd_list.execute(allocator, no_color, plain);
 }

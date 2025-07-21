@@ -154,15 +154,20 @@ fn copyDir(src: []const u8, dst: []const u8) !void {
     var src_dir = try fs.cwd().openDir(src, .{ .iterate = true });
     defer src_dir.close();
     
-    var walker = try src_dir.walk(std.heap.page_allocator);
+    // Use a general purpose allocator for the walker
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    var walker = try src_dir.walk(allocator);
     defer walker.deinit();
     
     while (try walker.next()) |entry| {
-        const src_path = try fs.path.join(std.heap.page_allocator, &.{ src, entry.path });
-        defer std.heap.page_allocator.free(src_path);
+        const src_path = try fs.path.join(allocator, &.{ src, entry.path });
+        defer allocator.free(src_path);
         
-        const dst_path = try fs.path.join(std.heap.page_allocator, &.{ dst, entry.path });
-        defer std.heap.page_allocator.free(dst_path);
+        const dst_path = try fs.path.join(allocator, &.{ dst, entry.path });
+        defer allocator.free(dst_path);
         
         switch (entry.kind) {
             .directory => try ensureDir(dst_path),
