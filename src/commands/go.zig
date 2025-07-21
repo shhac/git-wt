@@ -176,8 +176,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             }
         }.lessThan);
         
-        // Display worktrees
-        if (!plain) {
+        // Check if we'll use interactive mode
+        const will_use_interactive = !non_interactive and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
+        
+        // Display worktrees (skip if we're going to show interactive UI)
+        if (!plain and !will_use_interactive) {
             const header_writer = if (show_command) stderr else stdout;
             if (non_interactive and no_color) {
                 try header_writer.print("Available worktrees:\n", .{});
@@ -186,14 +189,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             }
         }
         
-        for (worktrees_with_time, 1..) |wt_info, idx| {
-            const wt = wt_info.worktree;
-            const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
-            const duration_str = try formatDuration(allocator, time_ago_seconds);
-            defer allocator.free(duration_str);
-            
-            if (show_command and !non_interactive) {
+        // Only display the list if we're not going to show interactive UI
+        if (!will_use_interactive) {
+            for (worktrees_with_time, 1..) |wt_info, idx| {
+                const wt = wt_info.worktree;
+                const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
+                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                const duration_str = try formatDuration(allocator, time_ago_seconds);
+                defer allocator.free(duration_str);
+                
+                if (show_command and !non_interactive) {
                 // In interactive show_command mode, show the numbered list to stderr
                 try stderr.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
                     colors.green,
@@ -258,6 +263,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 }
             }
         }
+        }
         
         // In non-interactive mode without a specific selection, just list and exit
         if (non_interactive) {
@@ -290,16 +296,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 try options_list.append(option_text);
             }
             
-            // Hide the numbered list we showed above
-            const lines_to_clear = worktrees_with_time.len * 2 + 1; // Each worktree takes 2 lines plus header
-            try interactive.moveCursorUp(lines_to_clear);
-            for (0..lines_to_clear) |_| {
-                try interactive.clearLine();
-                try stdout.print("\n", .{});
-            }
-            try interactive.moveCursorUp(lines_to_clear);
-            
-            // Show header again
+            // Show header
             try colors.printInfo(stdout, "Available worktrees:", .{});
             
             const selection = try interactive.selectFromList(
