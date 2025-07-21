@@ -9,7 +9,7 @@ const input = @import("../utils/input.zig");
 const fd = @import("../utils/fd.zig");
 const interactive = @import("../utils/interactive.zig");
 
-fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
+pub fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
     const day = hour * 24;
@@ -61,6 +61,7 @@ pub fn printHelp() !void {
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
     try stdout.print("  -n, --non-interactive  List worktrees without interaction\n", .{});
+    try stdout.print("  --no-tty         Force number-based selection (disable arrow keys)\n", .{});
     try stdout.print("  --show-command   Output shell cd commands instead of navigating\n", .{});
     try stdout.print("  --no-color       Disable colored output\n", .{});
     try stdout.print("  --plain          Output plain paths only (one per line)\n\n", .{});
@@ -122,44 +123,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     } else {
         // Interactive selection (or just list if non-interactive)
         
-        // Get modification times and sort
-        const WorktreeWithTime = struct {
-            worktree: git.Worktree,
-            mod_time: i128,
-            display_name: []const u8,
-        };
-        
-        var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
-        defer {
-            for (worktrees_list.items) |wt| {
-                allocator.free(wt.display_name);
-            }
-            worktrees_list.deinit();
-        }
-        
-        // Filter out current worktree and get modification times
-        for (worktrees) |wt| {
-            // Skip current worktree
-            if (wt.is_current) continue;
-            
-            const stat = try fs.cwd().statFile(wt.path);
-            
-            // Determine display name
-            const display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
-                try allocator.dupe(u8, "[main]")
-            else blk: {
-                const basename = fs.path.basename(wt.path);
-                break :blk try allocator.dupe(u8, basename);
-            };
-            
-            try worktrees_list.append(.{
-                .worktree = wt,
-                .mod_time = stat.mtime,
-                .display_name = display_name,
-            });
-        }
-        
-        const worktrees_with_time = worktrees_list.items;
+        // Get worktrees with modification times, sorted by newest first
+        const worktrees_with_time = try git.listWorktreesWithTime(allocator, true);
+        defer git.freeWorktreesWithTime(allocator, worktrees_with_time);
         
         if (worktrees_with_time.len == 0) {
             try stdout.print("{s}No other worktrees found{s}\n", .{
@@ -168,13 +134,6 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             });
             return;
         }
-        
-        // Sort by modification time (newest first)
-        std.mem.sort(WorktreeWithTime, worktrees_with_time, {}, struct {
-            fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
-                return a.mod_time > b.mod_time;
-            }
-        }.lessThan);
         
         // Check if we'll use interactive mode
         const will_use_interactive = !non_interactive and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());

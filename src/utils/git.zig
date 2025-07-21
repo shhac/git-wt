@@ -438,6 +438,69 @@ test "Worktree struct" {
     try std.testing.expect(wt.is_current);
 }
 
+/// Worktree with modification time and display name
+pub const WorktreeWithTime = struct {
+    worktree: Worktree,
+    mod_time: i128,
+    display_name: []const u8,
+};
+
+/// List worktrees with modification times, sorted by newest first
+/// Caller owns returned memory and must call freeWorktreesWithTime
+pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool) ![]WorktreeWithTime {
+    const worktrees = try listWorktrees(allocator);
+    defer freeWorktrees(allocator, worktrees);
+    
+    var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
+    errdefer {
+        for (worktrees_list.items) |wt| {
+            allocator.free(wt.display_name);
+        }
+        worktrees_list.deinit();
+    }
+    
+    // Get modification times for each worktree
+    for (worktrees) |wt| {
+        // Skip current worktree if requested
+        if (exclude_current and wt.is_current) continue;
+        
+        const stat = std.fs.cwd().statFile(wt.path) catch continue;
+        
+        // Determine display name
+        const display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
+            try allocator.dupe(u8, "[main]")
+        else blk: {
+            const basename = std.fs.path.basename(wt.path);
+            break :blk try allocator.dupe(u8, basename);
+        };
+        
+        try worktrees_list.append(.{
+            .worktree = wt,
+            .mod_time = stat.mtime,
+            .display_name = display_name,
+        });
+    }
+    
+    const result = try worktrees_list.toOwnedSlice();
+    
+    // Sort by modification time (newest first)
+    std.mem.sort(WorktreeWithTime, result, {}, struct {
+        fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
+            return a.mod_time > b.mod_time;
+        }
+    }.lessThan);
+    
+    return result;
+}
+
+/// Free memory allocated by listWorktreesWithTime
+pub fn freeWorktreesWithTime(allocator: std.mem.Allocator, worktrees: []WorktreeWithTime) void {
+    for (worktrees) |wt| {
+        allocator.free(wt.display_name);
+    }
+    allocator.free(worktrees);
+}
+
 test "parseWorktreeList porcelain output" {
     // Test parsing of git worktree list --porcelain output
     const allocator = std.testing.allocator;

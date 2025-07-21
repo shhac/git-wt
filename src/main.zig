@@ -16,18 +16,19 @@ const Command = struct {
     name: []const u8,
     min_args: usize,
     usage: []const u8,
-    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) anyerror!void,
+    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) anyerror!void,
     help: *const fn () anyerror!void,
 };
 
 const commands = [_]Command{
     .{ .name = "new", .min_args = 1, .usage = "git-wt new <branch-name>", .execute = executeNew, .help = cmd_new.printHelp },
-    .{ .name = "rm", .min_args = 1, .usage = "git-wt rm <branch-name>", .execute = executeRemove, .help = cmd_remove.printHelp },
+    .{ .name = "rm", .min_args = 0, .usage = "git-wt rm [branch-name]", .execute = executeRemove, .help = cmd_remove.printHelp },
     .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
     .{ .name = "list", .min_args = 0, .usage = "git-wt list", .execute = executeList, .help = cmd_list.printHelp },
 };
 
-fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
+fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+    _ = no_tty; // Not used in new command yet
     var parent_dir: ?[]const u8 = null;
     var branch_name: ?[]const u8 = null;
     
@@ -58,7 +59,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
     }
 }
 
-fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
+fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     var force = false;
     var branch_name: ?[]const u8 = null;
     
@@ -74,14 +75,12 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
     if (branch_name) |branch| {
         try cmd_remove.execute(allocator, branch, non_interactive, force);
     } else {
-        // This should not happen due to min_args check, but just in case
-        const stderr = std.io.getStdErr().writer();
-        try stderr.print("Error: Branch name is required\n", .{});
-        std.process.exit(1);
+        // Interactive mode - let the remove command handle it
+        try cmd_remove.executeInteractive(allocator, non_interactive or no_tty, force);
     }
 }
 
-fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
+fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     var no_color = false;
     var plain = false;
     var show_command = false;
@@ -103,11 +102,12 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
         }
     }
     
-    try cmd_go.execute(allocator, branch, non_interactive, no_color, plain, show_command);
+    try cmd_go.execute(allocator, branch, non_interactive or no_tty, no_color, plain, show_command);
 }
 
-fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
+fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     _ = non_interactive; // List doesn't use this flag
+    _ = no_tty; // List doesn't use this flag
     var no_color = false;
     var plain = false;
     
@@ -133,6 +133,7 @@ pub fn main() !void {
 
     // Parse global flags
     var non_interactive = false;
+    var no_tty = false;
     var debug_mode = false;
     var filtered_args = std.ArrayList([]const u8).init(allocator);
     defer filtered_args.deinit();
@@ -140,6 +141,8 @@ pub fn main() !void {
     for (args) |arg| {
         if (std.mem.eql(u8, arg, "--non-interactive") or std.mem.eql(u8, arg, "-n")) {
             non_interactive = true;
+        } else if (std.mem.eql(u8, arg, "--no-tty")) {
+            no_tty = true;
         } else if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
             debug.setEnabled(true);
@@ -256,7 +259,7 @@ pub fn main() !void {
                 print("Usage: {s}\n", .{cmd.usage});
                 process.exit(1);
             }
-            try cmd.execute(allocator, command_args, non_interactive);
+            try cmd.execute(allocator, command_args, non_interactive, no_tty);
             return;
         }
     }
@@ -269,14 +272,15 @@ pub fn main() !void {
 }
 
 fn printUsage() void {
-    print("Usage: git-wt [--non-interactive] <command> [options]\n", .{});
+    print("Usage: git-wt [--non-interactive] [--no-tty] <command> [options]\n", .{});
     print("\nCommands:\n", .{});
     print("  new <branch>  Create a new worktree\n", .{});
-    print("  rm <branch>   Remove worktree by branch name\n", .{});
+    print("  rm [branch]   Remove worktree (interactive if no branch)\n", .{});
     print("  go [branch]   Navigate to worktree\n", .{});
     print("  list          List all worktrees\n", .{});
     print("\nGlobal flags:\n", .{});
     print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
+    print("  --no-tty               Force number-based selection (disable arrow keys)\n", .{});
     print("  -h, --help             Show help\n", .{});
     print("  -v, --version          Show version\n", .{});
     print("  --alias <name>         Generate shell function for directory navigation\n", .{});
