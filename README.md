@@ -95,7 +95,7 @@ Then use `gwt` instead of `git-wt` for commands that change directories:
 ```bash
 gwt new feature-branch    # Creates worktree AND navigates to it
 gwt go main              # Actually changes to the main repository
-gwt rm                   # Works the same as git-wt rm
+gwt rm feature-branch    # Removes the feature-branch worktree
 ```
 
 ## Usage
@@ -118,17 +118,25 @@ This will:
 5. Run `yarn install` if package.json with yarn is detected
 6. Optionally start Claude
 
-### Remove current worktree
+### Remove a worktree
 
 ```bash
-git-wt rm
+# Remove a specific worktree by branch name
+git-wt rm feature-branch
+
+# Force removal (skip uncommitted changes check)
+git-wt rm feature-branch --force
+git-wt rm feature-branch -f
+
+# Non-interactive mode (skip confirmation prompts)
+git-wt rm feature-branch --non-interactive
+git-wt rm feature-branch -n
 ```
 
 This will:
-1. Confirm you're in a worktree (not main repository)
-2. Navigate back to the main repository
-3. Remove the worktree
-4. Optionally delete the associated branch
+1. Find the worktree for the specified branch
+2. Remove the worktree directory
+3. Optionally delete the associated branch (interactive mode only)
 
 ### Navigate to a worktree
 
@@ -187,7 +195,7 @@ The tool supports a `--non-interactive` (or `-n`) flag for testing and automatio
 git-wt --non-interactive new feature-branch
 
 # Remove worktree without confirmation
-git-wt --non-interactive rm
+git-wt --non-interactive rm feature-branch
 
 # List worktrees without interactive selection
 git-wt --non-interactive go

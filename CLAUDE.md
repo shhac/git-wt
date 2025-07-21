@@ -6,8 +6,9 @@ A Zig CLI tool for managing git worktrees with enhanced features like automatic 
 
 This is a Zig implementation of the git-wt shell script, providing:
 - `git-wt new <branch>` - Create a new worktree with automated setup
-- `git-wt rm` - Remove current worktree with safety checks
+- `git-wt rm <branch>` - Remove worktree by branch name with safety checks
 - `git-wt go [branch]` - Navigate between worktrees
+- `git-wt list` - List all worktrees with current indicator
 
 See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
 
@@ -217,8 +218,8 @@ The test script:
 zig build
 ./zig-out/bin/git-wt new test-branch
 cd ../repo-trees/test-branch
-./zig-out/bin/git-wt rm
 ./zig-out/bin/git-wt go
+./zig-out/bin/git-wt rm test-branch
 ```
 
 ### Testing Shell Alias Function
@@ -270,7 +271,12 @@ This ensures the TODO list stays current and reflects actual work remaining.
 ## Future Improvements
 
 See `TODO.md` for the current list of planned features and enhancements. Major items include:
-- Support for branch names with slashes (creating subdirectory structures)
 - Custom worktree parent directory via command line flag
-- Additional commands (list, clean)
-- Force flags and configuration file support
+- Additional commands (clean)
+- Configuration file support
+
+Recently completed features:
+- ✅ Support for branch names with slashes (creating subdirectory structures)
+- ✅ List command to show all worktrees with current indicator
+- ✅ Force flag for rm command (skip uncommitted changes check)
+- ✅ Rm command now requires branch name argument
