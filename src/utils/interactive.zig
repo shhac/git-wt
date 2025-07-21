@@ -2,6 +2,25 @@ const std = @import("std");
 const posix = std.posix;
 const colors = @import("colors.zig");
 
+/// Global state for signal handling
+var g_raw_mode: ?*RawMode = null;
+var g_signal_mutex = std.Thread.Mutex{};
+
+/// Signal handler for SIGINT
+fn handleSignal(_: i32) callconv(.C) void {
+    // Restore terminal state
+    g_signal_mutex.lock();
+    defer g_signal_mutex.unlock();
+    
+    if (g_raw_mode) |raw_mode| {
+        raw_mode.exit();
+        showCursor() catch {};
+    }
+    
+    // Exit the program
+    std.process.exit(130); // 128 + SIGINT(2)
+}
+
 /// Check if stdin is a TTY (terminal)
 pub fn isStdinTty() bool {
     return posix.isatty(std.io.getStdIn().handle);
@@ -46,11 +65,24 @@ pub const RawMode = struct {
         
         try posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, raw);
         self.is_raw = true;
+        
+        // Register for signal handling
+        g_signal_mutex.lock();
+        defer g_signal_mutex.unlock();
+        g_raw_mode = self;
     }
     
     /// Exit raw mode and restore original settings
     pub fn exit(self: *RawMode) void {
         if (!self.is_raw) return;
+        
+        // Unregister from signal handling
+        g_signal_mutex.lock();
+        defer g_signal_mutex.unlock();
+        if (g_raw_mode == self) {
+            g_raw_mode = null;
+        }
+        
         posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
         self.is_raw = false;
     }
@@ -197,8 +229,7 @@ pub fn selectFromList(
     items: []const []const u8,
     options: SelectOptions,
 ) !?usize {
-    _ = allocator; // May be used in future for dynamic content
-    
+    _ = allocator; // Reserved for future use
     if (items.len == 0) return null;
     
     // Check if we're in a TTY
@@ -209,6 +240,19 @@ pub fn selectFromList(
     
     const stdout = std.io.getStdOut().writer();
     var selected: usize = 0;
+    
+    // Install signal handler for SIGINT
+    var sigaction = posix.Sigaction{
+        .handler = .{ .handler = handleSignal },
+        .mask = posix.empty_sigset,
+        .flags = 0,
+    };
+    var old_sigaction: posix.Sigaction = undefined;
+    posix.sigaction(posix.SIG.INT, &sigaction, &old_sigaction);
+    defer {
+        // Restore original signal handler
+        posix.sigaction(posix.SIG.INT, &old_sigaction, null);
+    }
     
     // Set up raw mode
     var raw_mode = RawMode{ .original_termios = undefined };
