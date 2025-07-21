@@ -243,8 +243,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         if (try input.confirm("\nWould you like to start claude?", true)) {
             try colors.printSuccess(stdout, "🚀 Starting claude...", .{});
             
-            // Start claude in a detached process
-            var claude_process = std.process.Child.init(&.{"claude"}, allocator);
+            // Start claude using the shell to properly detach it
+            // Using 'exec' to replace the shell process with claude
+            // and '&' to run in background
+            const shell_cmd = try std.fmt.allocPrint(allocator, "exec claude &", .{});
+            defer allocator.free(shell_cmd);
+            
+            var claude_process = std.process.Child.init(&.{ "sh", "-c", shell_cmd }, allocator);
             claude_process.stdin_behavior = .Ignore;
             claude_process.stdout_behavior = .Ignore;
             claude_process.stderr_behavior = .Ignore;

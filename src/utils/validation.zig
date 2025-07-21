@@ -208,20 +208,26 @@ pub fn validateParentDir(allocator: std.mem.Allocator, path: []const u8, repo_in
     const test_name = try std.fmt.allocPrint(allocator, ".git-wt-test-{d}", .{std.time.milliTimestamp()});
     defer allocator.free(test_name);
     
-    const test_file = dir.createFile(test_name, .{}) catch |err| {
-        switch (err) {
-            error.AccessDenied => {
-                allocator.free(abs_path);
-                return ParentDirError.ParentDirNotWritable;
-            },
-            else => {
-                allocator.free(abs_path);
-                return err;
-            },
-        }
+    // Use a block to ensure proper cleanup
+    const can_write = blk: {
+        const test_file = dir.createFile(test_name, .{}) catch |err| {
+            switch (err) {
+                error.AccessDenied => break :blk false,
+                else => {
+                    allocator.free(abs_path);
+                    return err;
+                },
+            }
+        };
+        test_file.close();
+        dir.deleteFile(test_name) catch {}; // Best effort cleanup
+        break :blk true;
     };
-    test_file.close();
-    dir.deleteFile(test_name) catch {}; // Best effort cleanup
+    
+    if (!can_write) {
+        allocator.free(abs_path);
+        return ParentDirError.ParentDirNotWritable;
+    }
     
     return abs_path; // Caller owns this memory
 }

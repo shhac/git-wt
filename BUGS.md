@@ -16,22 +16,18 @@ The following issues have been resolved:
 - ✅ Bug #28: Time Formatting Edge Cases (handles "just now" and decades)
 - ✅ Bug #4: Concurrent Worktree Operations (file-based locking implemented)
 - ✅ Bug #14: Windows Compatibility (WSL2 support - no changes needed)
+- ✅ Bug #3: Path Handling (already handled with sanitization and validation)
+- ✅ Bug #7: Interactive Mode Edge Cases (SIGWINCH handling added)
+- ✅ Bug #10: Missing Input Validation (already comprehensive)
+- ✅ Bug #24: Claude Process Not Detached Properly (fixed with shell exec)
+- ✅ Bug #11: Resource Cleanup (improved error handling and cleanup)
 
 ## Edge Cases
 
-### 3. Path Handling
-- **Issue**: Branch names with special characters (spaces, quotes, etc.) may not be handled correctly
-- **Impact**: Could create worktrees with unexpected names or fail
-- **Example**: `git-wt new "branch with spaces"`
-- **Fix**: Need proper escaping/validation
 
 
 ## Usability Issues
 
-### 7. Interactive Mode Edge Cases
-- **Issue**: Terminal size changes during interactive selection not handled
-- **Impact**: Display corruption if terminal is resized
-- **Fix**: Handle SIGWINCH signal
 
 ### 8. Shell Integration
 - **Issue**: The fd3 mechanism for shell integration is fragile and undocumented
@@ -45,18 +41,6 @@ The following issues have been resolved:
 - **Impact**: Makes code harder to maintain and reason about
 - **Fix**: Establish consistent error handling patterns
 
-### 10. Missing Input Validation
-- **Issue**: Several commands don't validate input thoroughly
-- **Impact**: Cryptic errors or unexpected behavior
-- **Examples**:
-  - No validation for --parent-dir paths
-  - No validation for branch name length limits
-  - No handling of relative paths in some cases
-
-### 11. Resource Cleanup
-- **Issue**: Some file handles and processes may not be cleaned up on early returns
-- **Impact**: Resource leaks
-- **Fix**: Audit all resource allocations for proper cleanup
 
 ## Performance Issues
 
@@ -104,10 +88,6 @@ The following issues have been resolved:
 - **Impact**: Code duplication, harder to maintain
 - **Fix**: Extract shared interactive selection functionality
 
-### 24. Claude Process Not Detached Properly
-- **Issue**: In new.zig, claude process is spawned but not properly detached
-- **Impact**: May become zombie process or interfere with terminal
-- **Fix**: Properly detach process or use system shell to launch
 
 ### 25. Missing Validation in executeRemove
 - **Issue**: No validation for branch names with special characters in remove command

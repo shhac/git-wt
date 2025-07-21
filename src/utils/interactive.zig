@@ -5,6 +5,7 @@ const colors = @import("colors.zig");
 /// Global state for signal handling
 var g_raw_mode: ?*RawMode = null;
 var g_signal_mutex = std.Thread.Mutex{};
+var g_needs_redraw = std.atomic.Value(bool).init(false);
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.C) void {
@@ -30,6 +31,12 @@ fn handleSignal(_: i32) callconv(.C) void {
     
     // Exit the program
     std.process.exit(130); // 128 + SIGINT(2)
+}
+
+/// Signal handler for SIGWINCH (window size change)
+fn handleWinch(_: i32) callconv(.C) void {
+    // Set flag to trigger redraw on next iteration
+    g_needs_redraw.store(true, .release);
 }
 
 /// Check if stdin is a TTY (terminal)
@@ -270,6 +277,19 @@ pub fn selectFromList(
         posix.sigaction(posix.SIG.INT, &old_sigaction, null);
     }
     
+    // Install signal handler for SIGWINCH
+    var winch_action = posix.Sigaction{
+        .handler = .{ .handler = handleWinch },
+        .mask = posix.empty_sigset,
+        .flags = 0,
+    };
+    var old_winch_action: posix.Sigaction = undefined;
+    posix.sigaction(posix.SIG.WINCH, &winch_action, &old_winch_action);
+    defer {
+        // Restore original signal handler
+        posix.sigaction(posix.SIG.WINCH, &old_winch_action, null);
+    }
+    
     // Set up raw mode
     var raw_mode = RawMode{ .original_termios = undefined };
     try raw_mode.enter();
@@ -298,6 +318,29 @@ pub fn selectFromList(
     
     // Input loop
     while (true) {
+        // Check if terminal was resized
+        if (g_needs_redraw.swap(false, .acq_rel)) {
+            // Clear entire screen and redraw from scratch
+            try stdout.print("\x1b[2J\x1b[H", .{}); // Clear screen and move to home
+            
+            // Redraw everything
+            try stdout.print("\n", .{});
+            for (items, 0..) |item, i| {
+                try renderItem(stdout, item, i == selected, options.use_colors);
+            }
+            
+            if (options.show_instructions) {
+                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter/Space{s} Select  {s}ESC{s} Cancel\n", .{
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                });
+            }
+        }
+        
         const key_info = try readKey();
         
         var needs_redraw = false;

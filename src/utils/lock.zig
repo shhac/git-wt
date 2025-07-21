@@ -62,7 +62,7 @@ pub const Lock = struct {
         
         // Write PID and timestamp to lock file
         const writer = self.file.?.writer();
-        const pid = std.posix.getpid();
+        const pid = std.c.getpid();
         try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
         return true;
     }

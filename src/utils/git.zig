@@ -32,6 +32,7 @@ fn trimNewline(str: []const u8) []const u8 {
 
 // Thread-local storage for last git error
 threadlocal var last_git_error: ?[]u8 = null;
+threadlocal var last_git_error_allocator: ?std.mem.Allocator = null;
 
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
@@ -49,9 +50,12 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     if (result.term.Exited != 0) {
         // Store the error output for later retrieval
         if (last_git_error) |err| {
-            allocator.free(err);
+            if (last_git_error_allocator) |alloc| {
+                alloc.free(err);
+            }
         }
         last_git_error = result.stderr;
+        last_git_error_allocator = allocator;
         
         allocator.free(result.stdout);
         return GitError.CommandFailed;
@@ -68,6 +72,17 @@ pub fn getLastErrorOutput(allocator: std.mem.Allocator) !?[]u8 {
         return try allocator.dupe(u8, trimmed);
     }
     return null;
+}
+
+/// Clean up thread-local error storage (call at program exit if needed)
+pub fn cleanupErrorStorage() void {
+    if (last_git_error) |err| {
+        if (last_git_error_allocator) |alloc| {
+            alloc.free(err);
+        }
+    }
+    last_git_error = null;
+    last_git_error_allocator = null;
 }
 
 /// Execute a git command and return trimmed output
