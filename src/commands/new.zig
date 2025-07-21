@@ -8,6 +8,7 @@ const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 const proc = @import("../utils/process.zig");
 const validation = @import("../utils/validation.zig");
+const lock = @import("../utils/lock.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -56,15 +57,58 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     defer allocator.free(repo_info.root);
     defer if (repo_info.main_repo_root) |root| allocator.free(root);
     
+    // Acquire lock to prevent concurrent worktree operations
+    const lock_path = try std.fmt.allocPrint(allocator, "{s}/.git/git-wt.lock", .{repo_info.root});
+    defer allocator.free(lock_path);
+    
+    var worktree_lock = lock.Lock.init(allocator, lock_path);
+    defer worktree_lock.deinit();
+    
+    // Clean up any stale locks first
+    try worktree_lock.cleanStale();
+    
+    // Try to acquire lock with 30 second timeout
+    worktree_lock.acquire(30000) catch |err| {
+        if (err == lock.LockError.LockTimeout) {
+            try colors.printError(stderr, "Another git-wt operation is in progress", .{});
+            try stderr.print("{s}Tip:{s} Wait for the other operation to complete or check for stale locks\n", .{
+                colors.info_prefix, colors.reset
+            });
+        }
+        return err;
+    };
+    
     // Check if branch already exists
     if (try git.branchExists(allocator, branch_name)) {
         try colors.printError(stderr, "Branch '{s}' already exists", .{branch_name});
         return error.BranchAlreadyExists;
     }
     
+    // Check if we're in a bare repository
+    if (try git.isBareRepository(allocator)) {
+        try colors.printError(stderr, "Cannot create worktrees in a bare repository", .{});
+        return error.BareRepository;
+    }
+    
+    // Check if we're actually inside a work tree
+    if (!try git.isInsideWorkTree(allocator)) {
+        try colors.printError(stderr, "Not inside a git work tree", .{});
+        return error.NotInWorkTree;
+    }
+    
     // Check if repository is in a clean state
     if (!try git.isRepositoryClean(allocator)) {
-        try colors.printError(stderr, "Repository is not in a clean state (ongoing merge, rebase, etc.)", .{});
+        const operation = try git.getCurrentOperation(allocator);
+        defer if (operation) |op| allocator.free(op);
+        
+        if (operation) |op| {
+            try colors.printError(stderr, "Cannot create worktree: {s} in progress", .{op});
+            try stderr.print("{s}Tip:{s} Complete or abort the current {s} first\n", .{
+                colors.info_prefix, colors.reset, op
+            });
+        } else {
+            try colors.printError(stderr, "Repository is not in a clean state", .{});
+        }
         return error.RepositoryNotClean;
     }
     
@@ -148,7 +192,17 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     try colors.printPath(stdout, "Creating worktree at:", worktree_path);
     
     git.createWorktree(allocator, worktree_path, branch_name) catch |err| {
+        const err_output = git.getLastErrorOutput(allocator) catch null;
+        defer if (err_output) |output| allocator.free(output);
+        
         try colors.printError(stderr, "Failed to create worktree", .{});
+        if (err_output) |output| {
+            try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
+        }
+        try stderr.print("{s}Possible causes:{s}\n", .{ colors.info_prefix, colors.reset });
+        try stderr.print("  - The branch name may contain invalid characters\n", .{});
+        try stderr.print("  - The worktree path may not be accessible\n", .{});
+        try stderr.print("  - You may not have write permissions\n", .{});
         return err;
     };
     worktree_created = true;

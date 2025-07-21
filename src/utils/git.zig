@@ -30,6 +30,9 @@ fn trimNewline(str: []const u8) []const u8 {
     return std.mem.trimRight(u8, str, "\n");
 }
 
+// Thread-local storage for last git error
+threadlocal var last_git_error: ?[]u8 = null;
+
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
@@ -42,14 +45,29 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
         .allocator = allocator,
         .argv = argv.items,
     });
-    defer allocator.free(result.stderr);
     
     if (result.term.Exited != 0) {
+        // Store the error output for later retrieval
+        if (last_git_error) |err| {
+            allocator.free(err);
+        }
+        last_git_error = result.stderr;
+        
         allocator.free(result.stdout);
         return GitError.CommandFailed;
     }
     
+    allocator.free(result.stderr);
     return result.stdout;
+}
+
+/// Get the last git error output (if any)
+pub fn getLastErrorOutput(allocator: std.mem.Allocator) !?[]u8 {
+    if (last_git_error) |err| {
+        const trimmed = trimNewline(err);
+        return try allocator.dupe(u8, trimmed);
+    }
+    return null;
 }
 
 /// Execute a git command and return trimmed output
@@ -268,6 +286,69 @@ pub fn branchExists(allocator: std.mem.Allocator, branch: []const u8) !bool {
     defer allocator.free(result);
     
     return true;
+}
+
+/// Check if we're in a bare repository
+pub fn isBareRepository(allocator: std.mem.Allocator) !bool {
+    const result = try execTrimmed(allocator, &.{ "rev-parse", "--is-bare-repository" });
+    defer allocator.free(result);
+    return std.mem.eql(u8, result, "true");
+}
+
+/// Check if we're inside a git work tree
+pub fn isInsideWorkTree(allocator: std.mem.Allocator) !bool {
+    const result = try execTrimmed(allocator, &.{ "rev-parse", "--is-inside-work-tree" });
+    defer allocator.free(result);
+    return std.mem.eql(u8, result, "true");
+}
+
+/// Get what operation is currently in progress (if any)
+pub fn getCurrentOperation(allocator: std.mem.Allocator) !?[]const u8 {
+    const git_dir = try execTrimmed(allocator, &.{ "rev-parse", "--git-dir" });
+    defer allocator.free(git_dir);
+    
+    // Check for merge
+    const merge_path = try std.fmt.allocPrint(allocator, "{s}/MERGE_HEAD", .{git_dir});
+    defer allocator.free(merge_path);
+    if (fs.cwd().access(merge_path, .{})) |_| {
+        return try allocator.dupe(u8, "merge");
+    } else |_| {}
+    
+    // Check for cherry-pick
+    const cherry_path = try std.fmt.allocPrint(allocator, "{s}/CHERRY_PICK_HEAD", .{git_dir});
+    defer allocator.free(cherry_path);
+    if (fs.cwd().access(cherry_path, .{})) |_| {
+        return try allocator.dupe(u8, "cherry-pick");
+    } else |_| {}
+    
+    // Check for revert
+    const revert_path = try std.fmt.allocPrint(allocator, "{s}/REVERT_HEAD", .{git_dir});
+    defer allocator.free(revert_path);
+    if (fs.cwd().access(revert_path, .{})) |_| {
+        return try allocator.dupe(u8, "revert");
+    } else |_| {}
+    
+    // Check for rebase
+    const rebase_merge_path = try std.fmt.allocPrint(allocator, "{s}/rebase-merge", .{git_dir});
+    defer allocator.free(rebase_merge_path);
+    if (fs.cwd().access(rebase_merge_path, .{})) |_| {
+        return try allocator.dupe(u8, "rebase");
+    } else |_| {}
+    
+    const rebase_apply_path = try std.fmt.allocPrint(allocator, "{s}/rebase-apply", .{git_dir});
+    defer allocator.free(rebase_apply_path);
+    if (fs.cwd().access(rebase_apply_path, .{})) |_| {
+        return try allocator.dupe(u8, "rebase");
+    } else |_| {}
+    
+    // Check for bisect
+    const bisect_path = try std.fmt.allocPrint(allocator, "{s}/BISECT_LOG", .{git_dir});
+    defer allocator.free(bisect_path);
+    if (fs.cwd().access(bisect_path, .{})) |_| {
+        return try allocator.dupe(u8, "bisect");
+    } else |_| {}
+    
+    return null;
 }
 
 /// Get the current worktree path (handles being in subdirectories)

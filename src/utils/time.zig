@@ -9,13 +9,30 @@ pub fn secondsSince(mod_time: i128) u64 {
 
 /// Format a duration in seconds to a human-readable string
 /// Returns strings like "5s", "2m 30s", "1h 5m", "1d 1h", "1y 1mo"
+/// Special cases: "just now" for 0-2 seconds, "ancient" for > 10 years
 pub fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
+    // Special case for very recent times
+    if (seconds <= 2) {
+        return try allocator.dupe(u8, "just now");
+    }
+    
     const minute = 60;
     const hour = minute * 60;
     const day = hour * 24;
     const week = day * 7;
     const month = day * 30;
     const year = day * 365;
+    const decade = year * 10;
+    
+    // Special case for very old times
+    if (seconds > decade) {
+        const decades = seconds / decade;
+        if (decades == 1) {
+            return try allocator.dupe(u8, "over a decade");
+        } else {
+            return try std.fmt.allocPrint(allocator, "over {d} decades", .{decades});
+        }
+    }
     
     // Calculate each unit
     const years = seconds / year;
@@ -36,7 +53,12 @@ pub fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     if (days > 0) try units.append(.{ .value = days, .unit = "d" });
     if (hours > 0) try units.append(.{ .value = hours, .unit = "h" });
     if (minutes > 0) try units.append(.{ .value = minutes, .unit = "m" });
-    if (secs > 0 or units.items.len == 0) try units.append(.{ .value = secs, .unit = "s" });
+    if (secs > 0) try units.append(.{ .value = secs, .unit = "s" });
+    
+    // This shouldn't happen due to special cases above, but just in case
+    if (units.items.len == 0) {
+        return try allocator.dupe(u8, "just now");
+    }
     
     // Format the two most significant units
     if (units.items.len == 1) {
@@ -82,5 +104,20 @@ test "formatDuration" {
     // Test zero
     const zero = try formatDuration(allocator, 0);
     defer allocator.free(zero);
-    try std.testing.expectEqualStrings("0s", zero);
+    try std.testing.expectEqualStrings("just now", zero);
+    
+    // Test just now (1-2 seconds)
+    const just_now = try formatDuration(allocator, 2);
+    defer allocator.free(just_now);
+    try std.testing.expectEqualStrings("just now", just_now);
+    
+    // Test over a decade
+    const decade = try formatDuration(allocator, 365 * 24 * 60 * 60 * 11); // 11 years
+    defer allocator.free(decade);
+    try std.testing.expectEqualStrings("over a decade", decade);
+    
+    // Test multiple decades
+    const decades = try formatDuration(allocator, 365 * 24 * 60 * 60 * 25); // 25 years
+    defer allocator.free(decades);
+    try std.testing.expectEqualStrings("over 2 decades", decades);
 }

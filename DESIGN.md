@@ -30,14 +30,19 @@ This project follows clear design principles to ensure maintainability, reliabil
 - Non-interactive mode for automation
 - Comprehensive unit and e2e tests
 
-### 6. Zero Runtime Dependencies
-- Single self-contained binary with no external runtime requirements
+### 6. Zero Runtime Dependencies (except git)
+- Single self-contained binary with no external runtime requirements beyond git
+- **Git CLI is an intentional dependency**: This tool is specifically designed to enhance git workflows, so requiring git is both reasonable and beneficial:
+  - Avoids reimplementing complex git operations
+  - Ensures compatibility with user's git version and configuration
+  - Leverages git's battle-tested functionality
+  - Reduces maintenance burden significantly
 - Uses Zig standard library as the foundation
 - Build-time code inclusion is acceptable if:
   - The license permits it (MIT, BSD, Apache, etc.)
   - The code is compiled into the final binary
   - No dynamic linking or external files are required
-- The goal is a portable executable that "just works" anywhere
+- The goal is a portable executable that "just works" anywhere git is installed
 
 ## Code Patterns
 

@@ -5,6 +5,7 @@ const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 const interactive = @import("../utils/interactive.zig");
 const time = @import("../utils/time.zig");
+const lock = @import("../utils/lock.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -36,6 +37,35 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
+    // Get repository info for lock path
+    const repo_info = git.getRepoInfo(allocator) catch |err| {
+        try colors.printError(stderr, "Not in a git repository", .{});
+        return err;
+    };
+    defer allocator.free(repo_info.root);
+    defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    
+    // Acquire lock to prevent concurrent worktree operations
+    const lock_path = try std.fmt.allocPrint(allocator, "{s}/.git/git-wt.lock", .{repo_info.root});
+    defer allocator.free(lock_path);
+    
+    var worktree_lock = lock.Lock.init(allocator, lock_path);
+    defer worktree_lock.deinit();
+    
+    // Clean up any stale locks first
+    try worktree_lock.cleanStale();
+    
+    // Try to acquire lock with 30 second timeout
+    worktree_lock.acquire(30000) catch |err| {
+        if (err == lock.LockError.LockTimeout) {
+            try colors.printError(stderr, "Another git-wt operation is in progress", .{});
+            try stderr.print("{s}Tip:{s} Wait for the other operation to complete or check for stale locks\n", .{
+                colors.info_prefix, colors.reset
+            });
+        }
+        return err;
+    };
+    
     // Prevent removing main branch
     if (std.mem.eql(u8, branch_name, "main") or std.mem.eql(u8, branch_name, "master")) {
         try colors.printError(stderr, "Cannot remove the main branch worktree", .{});
@@ -56,9 +86,28 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     }
     
     if (worktree_path == null) {
-        try stderr.print("{s}Error:{s} No worktree found for branch '{s}'\n", .{ 
-            colors.error_prefix, colors.reset, branch_name 
+        try colors.printError(stderr, "No worktree found for branch '{s}'", .{branch_name});
+        try stderr.print("{s}Tip:{s} Use 'git-wt list' to see available worktrees\n", .{
+            colors.info_prefix, colors.reset
         });
+        
+        // Try to find similar branch names
+        var similar_branches = std.ArrayList([]const u8).init(allocator);
+        defer similar_branches.deinit();
+        
+        for (worktrees) |wt| {
+            if (std.ascii.indexOfIgnoreCase(wt.branch, branch_name) != null) {
+                try similar_branches.append(wt.branch);
+            }
+        }
+        
+        if (similar_branches.items.len > 0) {
+            try stderr.print("{s}Did you mean one of these?{s}\n", .{ colors.yellow, colors.reset });
+            for (similar_branches.items) |branch| {
+                try stderr.print("  - {s}\n", .{branch});
+            }
+        }
+        
         return error.WorktreeNotFound;
     }
     
@@ -81,17 +130,41 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     if (force) {
         _ = git.exec(allocator, &.{ "worktree", "remove", "--force", worktree_path.? }) catch |err| {
             if (err == git.GitError.CommandFailed) {
+                const err_output = git.getLastErrorOutput(allocator) catch null;
+                defer if (err_output) |output| allocator.free(output);
+                
                 try colors.printError(stderr, "Failed to remove worktree", .{});
+                if (err_output) |output| {
+                    try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
+                }
             }
             return err;
         };
     } else {
         _ = git.exec(allocator, &.{ "worktree", "remove", worktree_path.? }) catch |err| {
             if (err == git.GitError.CommandFailed) {
+                const err_output = git.getLastErrorOutput(allocator) catch null;
+                defer if (err_output) |output| allocator.free(output);
+                
                 try colors.printError(stderr, "Failed to remove worktree", .{});
-                try stderr.print("{s}Tip:{s} Use -f/--force to remove worktrees with uncommitted changes\n", .{
-                    colors.info_prefix, colors.reset
-                });
+                if (err_output) |output| {
+                    try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
+                    
+                    // Check for common error patterns
+                    if (std.mem.indexOf(u8, output, "contains modified or untracked files") != null) {
+                        try stderr.print("{s}Tip:{s} Use -f/--force to remove worktrees with uncommitted changes\n", .{
+                            colors.info_prefix, colors.reset
+                        });
+                        try stderr.print("{s}Warning:{s} This will discard all uncommitted changes!\n", .{
+                            colors.warning_prefix, colors.reset
+                        });
+                    } else if (std.mem.indexOf(u8, output, "is a current working directory") != null) {
+                        try stderr.print("{s}Tip:{s} You cannot remove the worktree you're currently in\n", .{
+                            colors.info_prefix, colors.reset
+                        });
+                        try stderr.print("      Navigate to a different worktree first with 'git-wt go'\n", .{});
+                    }
+                }
             }
             return err;
         };
