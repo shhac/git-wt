@@ -6,6 +6,7 @@ const git = @import("../utils/git.zig");
 const fs_utils = @import("../utils/fs.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
+const fd = @import("../utils/fd.zig");
 
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
@@ -101,7 +102,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 
             if (matches) {
                 if (show_command) {
-                    try stdout.print("cd {s}\n", .{wt.path});
+                    // Use fd 3 if available for cleaner shell integration
+                    const cmd_writer = fd.CommandWriter.init();
+                    try cmd_writer.print("cd {s}\n", .{wt.path});
                 } else {
                     try colors.printPath(stdout, "📁 Navigating to worktree:", wt.path);
                     try process.changeCurDir(wt.path);
@@ -215,7 +218,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     try stdout.print("{s}\n", .{wt.path});
                 } else {
                     // Show command mode - output cd commands
-                    try stdout.print("cd {s}  # {s} @ {s} - {s} ago\n", .{
+                    const cmd_writer = fd.CommandWriter.init();
+                    try cmd_writer.print("cd {s}  # {s} @ {s} - {s} ago\n", .{
                         wt.path,
                         wt_info.display_name,
                         wt.branch,
@@ -291,7 +295,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             
             const selected = worktrees_with_time[selection - 1].worktree;
             if (show_command) {
-                try stdout.print("cd {s}\n", .{selected.path});
+                const cmd_writer = fd.CommandWriter.init();
+                try cmd_writer.print("cd {s}\n", .{selected.path});
             } else {
                 try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
                 try process.changeCurDir(selected.path);
