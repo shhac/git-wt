@@ -343,3 +343,219 @@ test "RepoInfo struct" {
     try std.testing.expect(info.is_worktree);
     try std.testing.expectEqualStrings("/path/to/main", info.main_repo_root.?);
 }
+
+test "is_current detection logic" {
+    // Test the logic used in listWorktrees for is_current detection
+    const TestCase = struct {
+        cwd_path: []const u8,
+        worktree_path: []const u8,
+        expected: bool,
+        description: []const u8,
+    };
+    
+    const test_cases = [_]TestCase{
+        // Exact match cases
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo",
+            .worktree_path = "/Users/paul/projects/my-repo",
+            .expected = true,
+            .description = "exact match should be current",
+        },
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo-trees/feature",
+            .worktree_path = "/Users/paul/projects/my-repo-trees/feature",
+            .expected = true,
+            .description = "exact match in worktree should be current",
+        },
+        
+        // Subdirectory cases
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo/src/utils",
+            .worktree_path = "/Users/paul/projects/my-repo",
+            .expected = true,
+            .description = "subdirectory should be current",
+        },
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo-trees/feature/src",
+            .worktree_path = "/Users/paul/projects/my-repo-trees/feature",
+            .expected = true,
+            .description = "subdirectory in worktree should be current",
+        },
+        
+        // False positive cases that should NOT match
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo",
+            .worktree_path = "/Users/paul/projects/my-repo-trees/feature",
+            .expected = false,
+            .description = "main repo should not match worktree with similar prefix",
+        },
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo-trees/feature",
+            .worktree_path = "/Users/paul/projects/my-repo",
+            .expected = false,
+            .description = "worktree should not match main repo",
+        },
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo2",
+            .worktree_path = "/Users/paul/projects/my-repo",
+            .expected = false,
+            .description = "different repo with similar name should not match",
+        },
+        .{
+            .cwd_path = "/Users/paul/projects/my-repo-something",
+            .worktree_path = "/Users/paul/projects/my-repo",
+            .expected = false,
+            .description = "repo with longer similar name should not match",
+        },
+    };
+    
+    for (test_cases) |tc| {
+        const is_current = std.mem.eql(u8, tc.cwd_path, tc.worktree_path) or 
+            (std.mem.startsWith(u8, tc.cwd_path, tc.worktree_path) and 
+             tc.cwd_path.len > tc.worktree_path.len and 
+             tc.cwd_path[tc.worktree_path.len] == '/');
+             
+        try std.testing.expectEqual(tc.expected, is_current);
+    }
+}
+
+test "Worktree struct" {
+    // Test that Worktree can be created and used
+    const wt = Worktree{
+        .path = "/path/to/worktree",
+        .branch = "feature-branch",
+        .commit = "abc123",
+        .is_bare = false,
+        .is_detached = false,
+        .is_current = true,
+    };
+    
+    try std.testing.expectEqualStrings("/path/to/worktree", wt.path);
+    try std.testing.expectEqualStrings("feature-branch", wt.branch);
+    try std.testing.expectEqualStrings("abc123", wt.commit);
+    try std.testing.expect(!wt.is_bare);
+    try std.testing.expect(!wt.is_detached);
+    try std.testing.expect(wt.is_current);
+}
+
+test "parseWorktreeList porcelain output" {
+    // Test parsing of git worktree list --porcelain output
+    const allocator = std.testing.allocator;
+    
+    // Test helper function to parse porcelain output
+    const parseOutput = struct {
+        fn parse(alloc: std.mem.Allocator, output: []const u8, cwd: []const u8) ![]Worktree {
+            var worktrees = std.ArrayList(Worktree).init(alloc);
+            var lines = std.mem.tokenizeScalar(u8, output, '\n');
+            
+            var current_path: ?[]const u8 = null;
+            var current_commit: ?[]const u8 = null;
+            var current_branch: ?[]const u8 = null;
+            var is_bare = false;
+            var is_detached = false;
+            
+            while (lines.next()) |line| {
+                if (std.mem.startsWith(u8, line, "worktree ")) {
+                    if (current_path) |path| {
+                        const is_current = std.mem.eql(u8, cwd, path) or 
+                            (std.mem.startsWith(u8, cwd, path) and 
+                             cwd.len > path.len and 
+                             cwd[path.len] == '/');
+                        
+                        try worktrees.append(.{
+                            .path = try alloc.dupe(u8, path),
+                            .branch = if (current_branch) |b| blk: {
+                                if (std.mem.startsWith(u8, b, "refs/heads/")) {
+                                    break :blk try alloc.dupe(u8, b[11..]);
+                                }
+                                break :blk try alloc.dupe(u8, b);
+                            } else try alloc.dupe(u8, "HEAD"),
+                            .commit = try alloc.dupe(u8, current_commit orelse "unknown"),
+                            .is_bare = is_bare,
+                            .is_detached = is_detached,
+                            .is_current = is_current,
+                        });
+                    }
+                    current_path = line[9..];
+                    current_branch = null;
+                    current_commit = null;
+                    is_bare = false;
+                    is_detached = false;
+                } else if (std.mem.startsWith(u8, line, "HEAD ")) {
+                    current_commit = line[5..];
+                } else if (std.mem.startsWith(u8, line, "branch ")) {
+                    current_branch = line[7..];
+                } else if (std.mem.eql(u8, line, "bare")) {
+                    is_bare = true;
+                } else if (std.mem.eql(u8, line, "detached")) {
+                    is_detached = true;
+                }
+            }
+            
+            // Last worktree
+            if (current_path) |path| {
+                const is_current = std.mem.eql(u8, cwd, path) or 
+                    (std.mem.startsWith(u8, cwd, path) and 
+                     cwd.len > path.len and 
+                     cwd[path.len] == '/');
+                
+                try worktrees.append(.{
+                    .path = try alloc.dupe(u8, path),
+                    .branch = if (current_branch) |b| blk: {
+                        if (std.mem.startsWith(u8, b, "refs/heads/")) {
+                            break :blk try alloc.dupe(u8, b[11..]);
+                        }
+                        break :blk try alloc.dupe(u8, b);
+                    } else try alloc.dupe(u8, "HEAD"),
+                    .commit = try alloc.dupe(u8, current_commit orelse "unknown"),
+                    .is_bare = is_bare,
+                    .is_detached = is_detached,
+                    .is_current = is_current,
+                });
+            }
+            
+            return worktrees.toOwnedSlice();
+        }
+    }.parse;
+    
+    // Test case 1: Multiple worktrees with refs/heads prefix
+    const output1 =
+        \\worktree /home/user/project
+        \\HEAD abcd1234
+        \\branch refs/heads/main
+        \\
+        \\worktree /home/user/project-trees/feature
+        \\HEAD efgh5678
+        \\branch refs/heads/feature-branch
+    ;
+    
+    const worktrees1 = try parseOutput(allocator, output1, "/home/user/project");
+    defer freeWorktrees(allocator, worktrees1);
+    
+    try std.testing.expectEqual(@as(usize, 2), worktrees1.len);
+    try std.testing.expectEqualStrings("main", worktrees1[0].branch);
+    try std.testing.expectEqualStrings("feature-branch", worktrees1[1].branch);
+    try std.testing.expect(worktrees1[0].is_current);
+    try std.testing.expect(!worktrees1[1].is_current);
+    
+    // Test case 2: Detached HEAD
+    const output2 =
+        \\worktree /home/user/project
+        \\HEAD abcd1234
+        \\detached
+    ;
+    
+    const worktrees2 = try parseOutput(allocator, output2, "/home/user/project");
+    defer freeWorktrees(allocator, worktrees2);
+    
+    try std.testing.expectEqual(@as(usize, 1), worktrees2.len);
+    try std.testing.expectEqualStrings("HEAD", worktrees2[0].branch);
+    try std.testing.expect(worktrees2[0].is_detached);
+    
+    // Test case 3: Current detection from subdirectory
+    const worktrees3 = try parseOutput(allocator, output1, "/home/user/project/src/utils");
+    defer freeWorktrees(allocator, worktrees3);
+    
+    try std.testing.expect(worktrees3[0].is_current); // Should still detect main as current
+    try std.testing.expect(!worktrees3[1].is_current);
+}
