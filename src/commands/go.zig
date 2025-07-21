@@ -7,15 +7,6 @@ const fs_utils = @import("../utils/fs.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 
-const WorktreeInfo = struct {
-    path: []const u8,
-    branch: []const u8,
-    mod_time: i128,
-    is_main: bool,
-};
-
-const MAX_RECURSION_DEPTH = 5;
-
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
@@ -58,73 +49,6 @@ fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     }
 }
 
-fn findWorktreesRecursively(
-    allocator: std.mem.Allocator,
-    worktrees: *std.ArrayList(WorktreeInfo),
-    base_path: []const u8,
-    relative_path: []const u8,
-    depth: usize,
-    current_worktree: ?[]const u8,
-) !void {
-    if (depth > MAX_RECURSION_DEPTH) return;
-    
-    const current_path = if (relative_path.len > 0)
-        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ base_path, relative_path })
-    else
-        base_path;
-    defer if (relative_path.len > 0) allocator.free(current_path);
-    
-    // Check if this directory is a worktree (has .git file)
-    const git_file_path = try std.fmt.allocPrint(allocator, "{s}/.git", .{current_path});
-    defer allocator.free(git_file_path);
-    
-    if (fs.cwd().statFile(git_file_path)) |_| {
-        // This is a worktree
-        
-        // Skip if this is the current worktree
-        if (current_worktree) |cwt| {
-            if (std.mem.eql(u8, current_path, cwt)) {
-                return;
-            }
-        }
-        
-        const stat = try fs.cwd().statFile(current_path);
-        
-        // Get current branch
-        var saved_cwd = try fs.cwd().openDir(".", .{});
-        defer saved_cwd.close();
-        try process.changeCurDir(current_path);
-        const branch = try git.getCurrentBranch(allocator);
-        try saved_cwd.setAsCwd();
-        
-        try worktrees.append(.{
-            .path = try allocator.dupe(u8, current_path),
-            .branch = branch,
-            .mod_time = stat.mtime,
-            .is_main = false,
-        });
-        
-        // Don't recurse into worktrees
-        return;
-    } else |_| {}
-    
-    // Not a worktree, recurse into subdirectories
-    var dir = fs.cwd().openDir(current_path, .{ .iterate = true }) catch return;
-    defer dir.close();
-    
-    var iter = dir.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .directory) continue;
-        
-        const new_relative = if (relative_path.len > 0)
-            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ relative_path, entry.name })
-        else
-            try allocator.dupe(u8, entry.name);
-        defer allocator.free(new_relative);
-        
-        try findWorktreesRecursively(allocator, worktrees, base_path, new_relative, depth + 1, current_worktree);
-    }
-}
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -157,107 +81,93 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
-    // Get repository info
-    const repo_info = git.getRepoInfo(allocator) catch |err| {
-        try colors.printError(stderr, "Not in a git repository", .{});
-        return err;
-    };
-    defer allocator.free(repo_info.root);
-    defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    // Get all worktrees using git worktree list
+    const worktrees = try git.listWorktrees(allocator);
+    defer git.freeWorktrees(allocator, worktrees);
     
-    // Get current worktree path (null means we're in main)
-    const current_worktree = try git.getCurrentWorktree(allocator);
-    defer if (current_worktree) |wt| allocator.free(wt);
-    
-    const main_repo = if (repo_info.is_worktree) repo_info.main_repo_root.? else repo_info.root;
-    const repo_name = fs.path.basename(main_repo);
-    const parent_dir = fs.path.dirname(main_repo) orelse ".";
-    const trees_dir = try std.fmt.allocPrint(allocator, "{s}/{s}-trees", .{ parent_dir, repo_name });
-    defer allocator.free(trees_dir);
+    if (worktrees.len == 0) {
+        try stderr.print("{s}Error:{s} No worktrees found\n", .{ colors.error_prefix, colors.reset });
+        return error.NoWorktrees;
+    }
     
     if (branch_name) |branch| {
-        // Direct navigation
-        if (std.mem.eql(u8, branch, "main")) {
-            if (show_command) {
-                try stdout.print("cd {s}\n", .{main_repo});
-            } else {
-                try colors.printPath(stdout, "📁 Navigating to main repository:", main_repo);
-                try process.changeCurDir(main_repo);
+        // Direct navigation to specific branch
+        for (worktrees) |wt| {
+            // Check if branch matches (handle both "main" for the main worktree and regular branch names)
+            const matches = if (std.mem.eql(u8, branch, "main") and std.mem.indexOf(u8, wt.path, "-trees") == null) 
+                true
+            else 
+                std.mem.eql(u8, wt.branch, branch) or std.mem.endsWith(u8, wt.path, branch);
+                
+            if (matches) {
+                if (show_command) {
+                    try stdout.print("cd {s}\n", .{wt.path});
+                } else {
+                    try colors.printPath(stdout, "📁 Navigating to worktree:", wt.path);
+                    try process.changeCurDir(wt.path);
+                }
+                return;
             }
-            return;
         }
         
-        // Navigate to specific worktree
-        const worktree_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ trees_dir, branch });
-        defer allocator.free(worktree_path);
-        
-        // Check if directory exists
-        fs.cwd().access(worktree_path, .{}) catch {
-            try stderr.print("{s}Error:{s} Worktree for branch '{s}' not found at:\n", .{ colors.error_prefix, colors.reset, branch });
-            try stderr.print("       {s}{s}{s}\n", .{ colors.path_color, worktree_path, colors.reset });
-            return error.WorktreeNotFound;
-        };
-        
-        if (show_command) {
-            try stdout.print("cd {s}\n", .{worktree_path});
-        } else {
-            try colors.printPath(stdout, "📁 Navigating to worktree:", worktree_path);
-            try process.changeCurDir(worktree_path);
-        }
+        // Not found
+        try stderr.print("{s}Error:{s} Worktree for branch '{s}' not found\n", .{ 
+            colors.error_prefix, colors.reset, branch 
+        });
+        return error.WorktreeNotFound;
     } else {
         // Interactive selection (or just list if non-interactive)
-        var worktrees = std.ArrayList(WorktreeInfo).init(allocator);
+        
+        // Get modification times and sort
+        const WorktreeWithTime = struct {
+            worktree: git.Worktree,
+            mod_time: i128,
+            display_name: []const u8,
+        };
+        
+        var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
         defer {
-            for (worktrees.items) |wt| {
-                allocator.free(wt.path);
-                allocator.free(wt.branch);
+            for (worktrees_list.items) |wt| {
+                allocator.free(wt.display_name);
             }
-            worktrees.deinit();
+            worktrees_list.deinit();
         }
         
-        // Add main repository only if we're not currently in it
-        const in_main = current_worktree == null;
-        if (!in_main) {
-            const stat = try fs.cwd().statFile(main_repo);
-            const main_branch = blk: {
-                var saved_cwd = try fs.cwd().openDir(".", .{});
-                defer saved_cwd.close();
-                try process.changeCurDir(main_repo);
-                const branch = try git.getCurrentBranch(allocator);
-                try saved_cwd.setAsCwd();
-                break :blk branch;
+        // Filter out current worktree and get modification times
+        for (worktrees) |wt| {
+            // Skip current worktree
+            if (wt.is_current) continue;
+            
+            const stat = try fs.cwd().statFile(wt.path);
+            
+            // Determine display name
+            const display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
+                try allocator.dupe(u8, "[main]")
+            else blk: {
+                const basename = fs.path.basename(wt.path);
+                break :blk try allocator.dupe(u8, basename);
             };
             
-            try worktrees.append(.{
-                .path = try allocator.dupe(u8, main_repo),
-                .branch = main_branch,
+            try worktrees_list.append(.{
+                .worktree = wt,
                 .mod_time = stat.mtime,
-                .is_main = true,
+                .display_name = display_name,
             });
         }
         
-        // Find worktrees in trees directory (recursively)
-        if (fs.cwd().openDir(trees_dir, .{ .iterate = true })) |dir| {
-            var trees_dir_handle = dir;
-            defer trees_dir_handle.close();
-            
-            try findWorktreesRecursively(allocator, &worktrees, trees_dir, "", 0, current_worktree);
-        } else |_| {}
+        const worktrees_with_time = worktrees_list.items;
         
-        if (worktrees.items.len == 0) {
-            try stdout.print("{s}No worktrees found in:{s} {s}{s}{s}\n", .{
+        if (worktrees_with_time.len == 0) {
+            try stdout.print("{s}No other worktrees found{s}\n", .{
                 colors.warning_prefix,
-                colors.reset,
-                colors.path_color,
-                trees_dir,
                 colors.reset,
             });
             return;
         }
         
         // Sort by modification time (newest first)
-        std.mem.sort(WorktreeInfo, worktrees.items, {}, struct {
-            fn lessThan(_: void, a: WorktreeInfo, b: WorktreeInfo) bool {
+        std.mem.sort(WorktreeWithTime, worktrees_with_time, {}, struct {
+            fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
                 return a.mod_time > b.mod_time;
             }
         }.lessThan);
@@ -272,18 +182,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             }
         }
         
-        for (worktrees.items, 1..) |wt, idx| {
-            const display_name = if (wt.is_main) "[main]" else blk: {
-                // Show relative path from trees directory for nested worktrees
-                if (std.mem.indexOf(u8, wt.path, trees_dir)) |trees_idx| {
-                    const relative_start = trees_idx + trees_dir.len + 1; // +1 for the slash
-                    if (relative_start < wt.path.len) {
-                        break :blk wt.path[relative_start..];
-                    }
-                }
-                break :blk fs.path.basename(wt.path);
-            };
-            const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
+        for (worktrees_with_time, 1..) |wt_info, idx| {
+            const wt = wt_info.worktree;
+            const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
             const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
             const duration_str = try formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
@@ -295,7 +196,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     idx,
                     colors.reset,
                     colors.path_color,
-                    display_name,
+                    wt_info.display_name,
                     colors.reset,
                     colors.magenta,
                     wt.branch,
@@ -316,7 +217,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     // Show command mode - output cd commands
                     try stdout.print("cd {s}  # {s} @ {s} - {s} ago\n", .{
                         wt.path,
-                        display_name,
+                        wt_info.display_name,
                         wt.branch,
                         duration_str,
                     });
@@ -326,7 +227,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 if (non_interactive and no_color) {
                     try stdout.print("  {d}) {s} @ {s} - {s} ago\n", .{
                         idx,
-                        display_name,
+                        wt_info.display_name,
                         wt.branch,
                         duration_str,
                     });
@@ -336,7 +237,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                         idx,
                         colors.reset,
                         colors.path_color,
-                        display_name,
+                        wt_info.display_name,
                         colors.reset,
                         colors.magenta,
                         wt.branch,
@@ -383,12 +284,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 return error.InvalidSelection;
             };
             
-            if (selection < 1 or selection > worktrees.items.len) {
+            if (selection < 1 or selection > worktrees_with_time.len) {
                 try colors.printError(stderr, "Invalid selection", .{});
                 return error.InvalidSelection;
             }
             
-            const selected = worktrees.items[selection - 1];
+            const selected = worktrees_with_time[selection - 1].worktree;
             if (show_command) {
                 try stdout.print("cd {s}\n", .{selected.path});
             } else {
@@ -431,22 +332,4 @@ test "formatDuration" {
     const zero = try formatDuration(allocator, 0);
     defer allocator.free(zero);
     try std.testing.expectEqualStrings("0s", zero);
-}
-
-test "WorktreeInfo sorting" {
-    var worktrees = [_]WorktreeInfo{
-        .{ .path = "/path/a", .branch = "a", .mod_time = 1000, .is_main = false },
-        .{ .path = "/path/b", .branch = "b", .mod_time = 3000, .is_main = false },
-        .{ .path = "/path/c", .branch = "c", .mod_time = 2000, .is_main = false },
-    };
-    
-    std.mem.sort(WorktreeInfo, &worktrees, {}, struct {
-        fn lessThan(_: void, a: WorktreeInfo, b: WorktreeInfo) bool {
-            return a.mod_time > b.mod_time;
-        }
-    }.lessThan);
-    
-    try std.testing.expectEqual(@as(i128, 3000), worktrees[0].mod_time);
-    try std.testing.expectEqual(@as(i128, 2000), worktrees[1].mod_time);
-    try std.testing.expectEqual(@as(i128, 1000), worktrees[2].mod_time);
 }

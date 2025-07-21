@@ -5,16 +5,6 @@ const fs = std.fs;
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 
-const WorktreeInfo = struct {
-    path: []const u8,
-    branch: []const u8,
-    mod_time: i128,
-    is_main: bool,
-    is_current: bool,
-};
-
-const MAX_RECURSION_DEPTH = 5;
-
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
@@ -57,72 +47,6 @@ fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     }
 }
 
-fn findWorktreesRecursively(
-    allocator: std.mem.Allocator,
-    worktrees: *std.ArrayList(WorktreeInfo),
-    base_path: []const u8,
-    relative_path: []const u8,
-    depth: usize,
-    current_worktree: ?[]const u8,
-) !void {
-    if (depth > MAX_RECURSION_DEPTH) return;
-    
-    const current_path = if (relative_path.len > 0)
-        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ base_path, relative_path })
-    else
-        base_path;
-    defer if (relative_path.len > 0) allocator.free(current_path);
-    
-    // Check if this directory is a worktree (has .git file)
-    const git_file_path = try std.fmt.allocPrint(allocator, "{s}/.git", .{current_path});
-    defer allocator.free(git_file_path);
-    
-    if (fs.cwd().statFile(git_file_path)) |_| {
-        // This is a worktree
-        const stat = try fs.cwd().statFile(current_path);
-        
-        // Check if this is the current worktree
-        const is_current = if (current_worktree) |cwt| 
-            std.mem.eql(u8, current_path, cwt)
-        else 
-            false;
-        
-        // Get current branch
-        var saved_cwd = try fs.cwd().openDir(".", .{});
-        defer saved_cwd.close();
-        try process.changeCurDir(current_path);
-        const branch = try git.getCurrentBranch(allocator);
-        try saved_cwd.setAsCwd();
-        
-        try worktrees.append(.{
-            .path = try allocator.dupe(u8, current_path),
-            .branch = branch,
-            .mod_time = stat.mtime,
-            .is_main = false,
-            .is_current = is_current,
-        });
-        
-        // Don't recurse into worktrees
-        return;
-    } else |_| {}
-    
-    // Not a worktree, recurse into subdirectories
-    var dir = fs.cwd().openDir(current_path, .{ .iterate = true }) catch return;
-    defer dir.close();
-    
-    var iter = dir.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .directory) continue;
-        
-        const new_relative = if (relative_path.len > 0)
-            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ relative_path, entry.name })
-        else
-            try allocator.dupe(u8, entry.name);
-        defer allocator.free(new_relative);
-        
-        try findWorktreesRecursively(allocator, worktrees, base_path, new_relative, depth + 1, current_worktree);
-    }
-}
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -147,72 +71,53 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
-    // Get repository info
-    const repo_info = git.getRepoInfo(allocator) catch |err| {
-        try colors.printError(stderr, "Not in a git repository", .{});
-        return err;
-    };
-    defer allocator.free(repo_info.root);
-    defer if (repo_info.main_repo_root) |root| allocator.free(root);
+    // Get all worktrees using git worktree list
+    const worktrees = try git.listWorktrees(allocator);
+    defer git.freeWorktrees(allocator, worktrees);
     
-    // Get current worktree path (null means we're in main)
-    const current_worktree = try git.getCurrentWorktree(allocator);
-    defer if (current_worktree) |wt| allocator.free(wt);
-    
-    const main_repo = if (repo_info.is_worktree) repo_info.main_repo_root.? else repo_info.root;
-    const repo_name = fs.path.basename(main_repo);
-    const parent_dir = fs.path.dirname(main_repo) orelse ".";
-    const trees_dir = try std.fmt.allocPrint(allocator, "{s}/{s}-trees", .{ parent_dir, repo_name });
-    defer allocator.free(trees_dir);
-    
-    var worktrees = std.ArrayList(WorktreeInfo).init(allocator);
-    defer {
-        for (worktrees.items) |wt| {
-            allocator.free(wt.path);
-            allocator.free(wt.branch);
-        }
-        worktrees.deinit();
-    }
-    
-    // Add main repository
-    const in_main = current_worktree == null;
-    const main_stat = try fs.cwd().statFile(main_repo);
-    const main_branch = blk: {
-        var saved_cwd = try fs.cwd().openDir(".", .{});
-        defer saved_cwd.close();
-        try process.changeCurDir(main_repo);
-        const branch = try git.getCurrentBranch(allocator);
-        try saved_cwd.setAsCwd();
-        break :blk branch;
-    };
-    
-    try worktrees.append(.{
-        .path = try allocator.dupe(u8, main_repo),
-        .branch = main_branch,
-        .mod_time = main_stat.mtime,
-        .is_main = true,
-        .is_current = in_main,
-    });
-    
-    // Find worktrees in trees directory (recursively)
-    if (fs.cwd().openDir(trees_dir, .{ .iterate = true })) |dir| {
-        var trees_dir_handle = dir;
-        defer trees_dir_handle.close();
-        
-        try findWorktreesRecursively(allocator, &worktrees, trees_dir, "", 0, current_worktree);
-    } else |_| {}
-    
-    if (worktrees.items.len == 0) {
-        try stdout.print("{s}No worktrees found{s}\n", .{
-            colors.warning_prefix,
-            colors.reset,
-        });
+    if (worktrees.len == 0) {
+        try stderr.print("{s}Warning:{s} No worktrees found\n", .{ colors.warning_prefix, colors.reset });
         return;
     }
     
+    // Create a list with modification times for sorting
+    const WorktreeWithTime = struct {
+        worktree: git.Worktree,
+        mod_time: i128,
+        display_name: []const u8,
+    };
+    
+    var worktrees_with_time = try allocator.alloc(WorktreeWithTime, worktrees.len);
+    defer {
+        for (worktrees_with_time) |wt| {
+            allocator.free(wt.display_name);
+        }
+        allocator.free(worktrees_with_time);
+    }
+    
+    // Get modification times and prepare display names
+    for (worktrees, 0..) |wt, i| {
+        const stat = try fs.cwd().statFile(wt.path);
+        
+        // Determine display name
+        const display_name = if (i == 0) // First worktree is always main
+            try allocator.dupe(u8, "[main]")
+        else blk: {
+            // Extract relative path from worktree path
+            const basename = fs.path.basename(wt.path);
+            break :blk try allocator.dupe(u8, basename);
+        };
+        
+        worktrees_with_time[i] = .{
+            .worktree = wt,
+            .mod_time = stat.mtime,
+            .display_name = display_name,
+        };
+    }
+    
     // Sort by modification time (newest first)
-    std.mem.sort(WorktreeInfo, worktrees.items, {}, struct {
-        fn lessThan(_: void, a: WorktreeInfo, b: WorktreeInfo) bool {
+    std.mem.sort(WorktreeWithTime, worktrees_with_time, {}, struct {
+        fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
             return a.mod_time > b.mod_time;
         }
     }.lessThan);
@@ -227,67 +132,66 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     }
     
     // Display worktrees
-    for (worktrees.items) |wt| {
-        const display_name = if (wt.is_main) "[main]" else blk: {
-            // Show relative path from trees directory for nested worktrees
-            if (std.mem.indexOf(u8, wt.path, trees_dir)) |trees_idx| {
-                const relative_start = trees_idx + trees_dir.len + 1; // +1 for the slash
-                if (relative_start < wt.path.len) {
-                    break :blk wt.path[relative_start..];
-                }
-            }
-            break :blk fs.path.basename(wt.path);
-        };
-        
-        const timestamp = @divFloor(wt.mod_time, std.time.ns_per_s);
+    for (worktrees_with_time) |wt_info| {
+        const wt = wt_info.worktree;
+        const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
         const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
         const duration_str = try formatDuration(allocator, time_ago_seconds);
         defer allocator.free(duration_str);
         
         if (plain) {
             // Plain format: branch<tab>path<tab>time_ago
-            try stdout.print("{s}\t{s}\t{s} ago\n", .{
+            try stdout.print("{s}\t{s}\t{s}\n", .{
                 wt.branch,
                 wt.path,
                 duration_str,
             });
-        } else if (no_color) {
-            // No color format
-            const current_marker = if (wt.is_current) "* " else "  ";
-            try stdout.print("{s}{s} @ {s}\n", .{
-                current_marker,
-                display_name,
-                wt.branch,
-            });
-            try stdout.print("  Path: {s}\n", .{wt.path});
-            try stdout.print("  Last modified: {s} ago\n\n", .{duration_str});
         } else {
-            // Colored format
-            const current_marker = if (wt.is_current) 
-                try std.fmt.allocPrint(allocator, "{s}*{s} ", .{ colors.green, colors.reset })
-            else 
-                "  ";
-            defer if (wt.is_current) allocator.free(current_marker);
+            // Pretty format with colors
+            const current_marker = if (wt.is_current) " *" else "  ";
             
-            try stdout.print("{s}{s}{s}{s} @ {s}{s}{s}\n", .{
-                current_marker,
-                colors.path_color,
-                display_name,
-                colors.reset,
-                colors.magenta,
-                wt.branch,
-                colors.reset,
-            });
-            try stdout.print("  {s}Path:{s} {s}\n", .{
-                colors.yellow,
-                colors.reset,
-                wt.path,
-            });
-            try stdout.print("  {s}Last modified:{s} {s} ago\n\n", .{
-                colors.yellow,
-                colors.reset,
-                duration_str,
-            });
+            if (no_color) {
+                try stdout.print("{s} {s} @ {s}\n", .{
+                    current_marker,
+                    wt_info.display_name,
+                    wt.branch,
+                });
+                try stdout.print("    Path: {s}\n", .{wt.path});
+                try stdout.print("    Last modified: {s} ago\n", .{duration_str});
+            } else {
+                try stdout.print("{s} {s}{s}{s} @ {s}{s}{s}", .{
+                    current_marker,
+                    colors.path_color,
+                    wt_info.display_name,
+                    colors.reset,
+                    colors.magenta,
+                    wt.branch,
+                    colors.reset,
+                });
+                
+                if (wt.is_current) {
+                    try stdout.print(" {s}(current){s}", .{ colors.green, colors.reset });
+                }
+                try stdout.print("\n", .{});
+                
+                try stdout.print("    {s}Path:{s} {s}\n", .{
+                    colors.yellow,
+                    colors.reset,
+                    wt.path,
+                });
+                try stdout.print("    {s}Last modified:{s} {s} ago\n", .{
+                    colors.yellow,
+                    colors.reset,
+                    duration_str,
+                });
+            }
+            
+            if (wt.is_detached) {
+                try stdout.print("    {s}Status:{s} detached HEAD\n", .{
+                    colors.yellow,
+                    colors.reset,
+                });
+            }
         }
     }
 }

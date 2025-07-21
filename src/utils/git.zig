@@ -20,6 +20,9 @@ pub const Worktree = struct {
     path: []const u8,
     branch: []const u8,
     commit: []const u8,
+    is_bare: bool = false,
+    is_detached: bool = false,
+    is_current: bool = false,
 };
 
 /// Helper to trim trailing newlines
@@ -99,44 +102,89 @@ pub fn getRepoInfo(allocator: std.mem.Allocator) !RepoInfo {
     };
 }
 
+/// Free worktree list memory
+pub fn freeWorktrees(allocator: std.mem.Allocator, worktrees: []Worktree) void {
+    for (worktrees) |wt| {
+        allocator.free(wt.path);
+        allocator.free(wt.branch);
+        allocator.free(wt.commit);
+    }
+    allocator.free(worktrees);
+}
+
 /// Get list of worktrees
 pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     const output = try exec(allocator, &.{ "worktree", "list", "--porcelain" });
     defer allocator.free(output);
     
+    // Get current directory to mark current worktree
+    const cwd_path = try std.process.getCwdAlloc(allocator);
+    defer allocator.free(cwd_path);
+    
     var worktrees = std.ArrayList(Worktree).init(allocator);
-    var lines = std.mem.tokenize(u8, output, "\n");
+    var lines = std.mem.tokenizeScalar(u8, output, '\n');
     
     var current_path: ?[]const u8 = null;
     var current_commit: ?[]const u8 = null;
     var current_branch: ?[]const u8 = null;
+    var is_bare = false;
+    var is_detached = false;
     
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "worktree ")) {
             // Save previous worktree if exists
             if (current_path) |path| {
+                // Check if this is the current worktree
+                const is_current = std.mem.startsWith(u8, cwd_path, path);
+                
                 try worktrees.append(.{
                     .path = try allocator.dupe(u8, path),
-                    .branch = if (current_branch) |b| try allocator.dupe(u8, b) else try allocator.dupe(u8, "detached"),
+                    .branch = if (current_branch) |b| blk: {
+                        // Remove refs/heads/ prefix if present
+                        if (std.mem.startsWith(u8, b, "refs/heads/")) {
+                            break :blk try allocator.dupe(u8, b[11..]);
+                        }
+                        break :blk try allocator.dupe(u8, b);
+                    } else try allocator.dupe(u8, "HEAD"),
                     .commit = try allocator.dupe(u8, current_commit orelse "unknown"),
+                    .is_bare = is_bare,
+                    .is_detached = is_detached,
+                    .is_current = is_current,
                 });
             }
             current_path = line[9..]; // Skip "worktree "
             current_branch = null;
             current_commit = null;
+            is_bare = false;
+            is_detached = false;
         } else if (std.mem.startsWith(u8, line, "HEAD ")) {
             current_commit = line[5..]; // Skip "HEAD "
         } else if (std.mem.startsWith(u8, line, "branch ")) {
             current_branch = line[7..]; // Skip "branch "
+        } else if (std.mem.eql(u8, line, "bare")) {
+            is_bare = true;
+        } else if (std.mem.eql(u8, line, "detached")) {
+            is_detached = true;
         }
     }
     
     // Don't forget the last worktree
     if (current_path) |path| {
+        const is_current = std.mem.startsWith(u8, cwd_path, path);
+        
         try worktrees.append(.{
             .path = try allocator.dupe(u8, path),
-            .branch = if (current_branch) |b| try allocator.dupe(u8, b) else try allocator.dupe(u8, "detached"),
+            .branch = if (current_branch) |b| blk: {
+                // Remove refs/heads/ prefix if present
+                if (std.mem.startsWith(u8, b, "refs/heads/")) {
+                    break :blk try allocator.dupe(u8, b[11..]);
+                }
+                break :blk try allocator.dupe(u8, b);
+            } else try allocator.dupe(u8, "HEAD"),
             .commit = try allocator.dupe(u8, current_commit orelse "unknown"),
+            .is_bare = is_bare,
+            .is_detached = is_detached,
+            .is_current = is_current,
         });
     }
     
