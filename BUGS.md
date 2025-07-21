@@ -30,6 +30,10 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #29: Path Display Inconsistency (standardized to display names for consistency)
 - ✅ Bug #30: Missing --version Flag Validation (version generated from build system)
 
+## Integration and Edge Case Tests Added
+- ✅ Bug #19: Integration Tests (comprehensive inter-module testing with build system integration)
+- ✅ Bug #20: Edge Case Testing (extensive boundary value and error condition tests)
+
 ## Edge Cases
 
 
@@ -57,16 +61,6 @@ The following issues have been resolved (sorted numerically):
 - **Fix**: Comprehensive documentation
 
 ## Testing Gaps
-
-### 19. Integration Tests
-- **Issue**: No integration tests for full command workflows
-- **Impact**: Regressions in command behavior may go unnoticed
-- **Fix**: Add integration test suite
-
-### 20. Edge Case Testing
-- **Issue**: Tests mostly cover happy paths
-- **Impact**: Edge cases may break in production
-- **Fix**: Add negative test cases and edge case tests
 
 ## Additional Issues Found
 

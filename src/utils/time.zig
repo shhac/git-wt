@@ -121,3 +121,52 @@ test "formatDuration" {
     defer allocator.free(decades);
     try std.testing.expectEqualStrings("over 2 decades", decades);
 }
+
+// Edge Case Tests for Bug #20
+test "formatDuration edge cases" {
+    const allocator = std.testing.allocator;
+    
+    // Test maximum value edge case
+    const max_duration = try formatDuration(allocator, std.math.maxInt(u64) / 1000);
+    defer allocator.free(max_duration);
+    try std.testing.expect(max_duration.len > 0); // Should not crash
+    
+    // Test boundary values
+    const one_second = try formatDuration(allocator, 1);
+    defer allocator.free(one_second);
+    try std.testing.expectEqualStrings("just now", one_second); // 1 second is "just now" per Bug #28 fix
+    
+    const three_seconds = try formatDuration(allocator, 3);
+    defer allocator.free(three_seconds);
+    try std.testing.expectEqualStrings("3s", three_seconds);
+    
+    // Test exact minute boundary
+    const sixty_seconds = try formatDuration(allocator, 60);
+    defer allocator.free(sixty_seconds);
+    try std.testing.expectEqualStrings("1m", sixty_seconds);
+    
+    // Test exact hour boundary
+    const one_hour = try formatDuration(allocator, 3600);
+    defer allocator.free(one_hour);
+    try std.testing.expectEqualStrings("1h", one_hour);
+    
+    // Test exact day boundary
+    const one_day = try formatDuration(allocator, 86400);
+    defer allocator.free(one_day);
+    try std.testing.expectEqualStrings("1d", one_day);
+    
+    // Test leap year boundary (366 days)
+    const leap_year = try formatDuration(allocator, 366 * 24 * 60 * 60);
+    defer allocator.free(leap_year);
+    try std.testing.expect(std.mem.indexOf(u8, leap_year, "1y") != null);
+    
+    // Test exactly 10 years (decade boundary)
+    const exactly_decade = try formatDuration(allocator, 10 * 365 * 24 * 60 * 60);
+    defer allocator.free(exactly_decade);
+    try std.testing.expectEqualStrings("10y", exactly_decade);
+    
+    // Test 10 years + 1 second (just over decade)
+    const just_over_decade = try formatDuration(allocator, (10 * 365 * 24 * 60 * 60) + 1);
+    defer allocator.free(just_over_decade);
+    try std.testing.expectEqualStrings("over a decade", just_over_decade);
+}

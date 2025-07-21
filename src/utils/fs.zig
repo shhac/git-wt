@@ -367,3 +367,123 @@ test "fileExists and ensureDir" {
     var dir = try fs.cwd().openDir(test_dir, .{});
     dir.close();
 }
+
+// Edge Case Tests for Bug #20
+test "extractDisplayPath edge cases" {
+    const allocator = std.testing.allocator;
+    
+    // Test empty path
+    const empty_result = extractDisplayPath(allocator, "") catch |err| {
+        try std.testing.expect(err == error.OutOfMemory); // Should handle gracefully
+        return;
+    };
+    defer allocator.free(empty_result);
+    
+    // Test extremely long paths
+    const long_path = "/very/long/path/" ++ "a" ** 1000 ++ "-trees/branch-name";
+    const long_result = try extractDisplayPath(allocator, long_path);
+    defer allocator.free(long_result);
+    try std.testing.expectEqualStrings("branch-name", long_result);
+    
+    // Test path with only separators
+    const separator_result = try extractDisplayPath(allocator, "///");
+    defer allocator.free(separator_result);
+    try std.testing.expectEqualStrings("[main]", separator_result); // No -trees, so main
+    
+    // Test path ending with separator
+    const trailing_separator = try extractDisplayPath(allocator, "/path/to/repo-trees/branch/");
+    defer allocator.free(trailing_separator);
+    try std.testing.expectEqualStrings("branch", trailing_separator);
+    
+    // Test Windows-style paths (on non-Windows, this will be treated as a literal path)
+    const windows_path = "C:\\Users\\test\\repo-trees\\feature-branch";
+    const windows_result = try extractDisplayPath(allocator, windows_path);
+    defer allocator.free(windows_result);
+    // On non-Windows systems, basename of this path will be the whole string since \ isn't a separator
+    // On Windows, it would be "feature-branch". Let's just test it doesn't crash.
+    try testing.expect(windows_result.len > 0);
+    
+    // Test mixed separators
+    const mixed_path = "/path/to\\repo-trees/branch-name";
+    const mixed_result = try extractDisplayPath(allocator, mixed_path);
+    defer allocator.free(mixed_result);
+    try std.testing.expectEqualStrings("branch-name", mixed_result);
+}
+
+test "sanitizeBranchPath edge cases" {
+    const allocator = std.testing.allocator;
+    
+    // Test empty string
+    const empty_result = try sanitizeBranchPath(allocator, "");
+    defer allocator.free(empty_result);
+    try std.testing.expectEqualStrings("", empty_result);
+    
+    // Test string with only unsafe characters
+    const only_unsafe = try sanitizeBranchPath(allocator, ":?*|<>");
+    defer allocator.free(only_unsafe);
+    try std.testing.expectEqualStrings("%3A%3F%2A%7C%3C%3E", only_unsafe);
+    
+    // Test very long string with mixed characters
+    var long_branch = std.ArrayList(u8).init(allocator);
+    defer long_branch.deinit();
+    
+    for (0..500) |i| {
+        if (i % 10 == 0) {
+            try long_branch.append(':');
+        } else {
+            try long_branch.append('a');
+        }
+    }
+    
+    const long_result = try sanitizeBranchPath(allocator, long_branch.items);
+    defer allocator.free(long_result);
+    try std.testing.expect(long_result.len > long_branch.items.len); // Should be longer due to encoding
+    
+    // Test round-trip encoding/decoding
+    const original = "feature:test?branch*name";
+    const sanitized = try sanitizeBranchPath(allocator, original);
+    defer allocator.free(sanitized);
+    
+    const unsanitized = try unsanitizeBranchPath(allocator, sanitized);
+    defer allocator.free(unsanitized);
+    
+    try std.testing.expectEqualStrings(original, unsanitized);
+}
+
+test "constructWorktreePath edge cases" {
+    const allocator = std.testing.allocator;
+    
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+    
+    // Create test repo directory
+    const test_repo = try fs.path.join(allocator, &.{ tmp_path, "test-repo" });
+    defer allocator.free(test_repo);
+    try tmp_dir.dir.makeDir("test-repo");
+    
+    // Test with empty branch name
+    const empty_branch_result = constructWorktreePath(allocator, test_repo, "repo", "", null) catch |err| {
+        try std.testing.expect(err != error.OutOfMemory); // Should handle gracefully
+        return;
+    };
+    defer allocator.free(empty_branch_result);
+    
+    // Test with branch name that would create deeply nested structure
+    const deep_branch = "a/b/c/d/e/f/g/h/i/j/k";
+    const deep_result = try constructWorktreePath(allocator, test_repo, "repo", deep_branch, null);
+    defer allocator.free(deep_result);
+    
+    // Should contain the full nested path
+    try std.testing.expect(std.mem.indexOf(u8, deep_result, "a/b/c/d/e/f/g/h/i/j/k") != null);
+    
+    // Test with very long branch name
+    const long_branch_name = "feature-" ++ "x" ** 200;
+    const long_result = try constructWorktreePath(allocator, test_repo, "repo", long_branch_name, null);
+    defer allocator.free(long_result);
+    
+    // Should contain the long branch name
+    try std.testing.expect(std.mem.indexOf(u8, long_result, long_branch_name) != null);
+}
