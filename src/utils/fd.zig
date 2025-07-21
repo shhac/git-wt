@@ -1,34 +1,6 @@
 const std = @import("std");
 
-/// Write to a specific file descriptor
-pub fn writeToFd(fd_num: std.fs.File.Handle, data: []const u8) !void {
-    const file = std.fs.File{ .handle = fd_num };
-    const writer = file.writer();
-    try writer.writeAll(data);
-}
-
-/// Check if a file descriptor is available for writing
-pub fn isFdAvailable(fd_num: std.fs.File.Handle) bool {
-    // For now, only consider standard fds as available
-    // fd 3 requires special shell setup that we can't reliably detect
-    return fd_num == 1 or fd_num == 2;
-}
-
-/// Get a writer for command output (fd 3 if available, stdout otherwise)
-pub fn getCommandWriter() std.fs.File.Writer {
-    const command_fd: std.fs.File.Handle = 3;
-    
-    // Check if fd 3 is available
-    if (isFdAvailable(command_fd)) {
-        const file = std.fs.File{ .handle = command_fd };
-        return file.writer();
-    }
-    
-    // Fall back to stdout
-    return std.io.getStdOut().writer();
-}
-
-/// Writer that conditionally uses fd 3 or stdout
+/// Writer that conditionally uses fd 3 or stdout based on environment variable
 pub const CommandWriter = struct {
     use_fd3: bool,
     
@@ -55,18 +27,11 @@ pub const CommandWriter = struct {
     }
 };
 
-test "fd utilities" {
-    // Test writing to stdout (fd 1)
-    try writeToFd(1, "Hello from fd 1\n");
-    
-    // Test checking fd availability
-    try std.testing.expect(isFdAvailable(1)); // stdout should be available
-    try std.testing.expect(isFdAvailable(2)); // stderr should be available
-    
-    // fd 3 might not be available in test environment
-    _ = isFdAvailable(3);
-    
-    // Test CommandWriter
+test "CommandWriter" {
+    // Test CommandWriter defaults to stdout when env var not set
     const cmd_writer = CommandWriter.init();
+    try std.testing.expect(!cmd_writer.use_fd3);
+    
+    // Test that print doesn't crash
     try cmd_writer.print("Test output\n", .{});
 }
