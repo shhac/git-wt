@@ -1,5 +1,4 @@
 const std = @import("std");
-const process = std.process;
 
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
@@ -7,100 +6,111 @@ const input = @import("../utils/input.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("Usage: git-wt rm\n\n", .{});
-    try stdout.print("Remove the current git worktree.\n\n", .{});
+    try stdout.print("Usage: git-wt rm <branch-name>\n\n", .{});
+    try stdout.print("Remove a git worktree by branch name.\n\n", .{});
+    try stdout.print("Arguments:\n", .{});
+    try stdout.print("  <branch-name>    Name of the branch/worktree to remove (required)\n\n", .{});
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
-    try stdout.print("  -n, --non-interactive  Run without prompts\n\n", .{});
+    try stdout.print("  -n, --non-interactive  Run without prompts\n", .{});
+    try stdout.print("  -f, --force      Force removal even with uncommitted changes\n\n", .{});
     try stdout.print("Examples:\n", .{});
-    try stdout.print("  git-wt rm                      # Remove current worktree (interactive)\n", .{});
-    try stdout.print("  git-wt rm --non-interactive    # Remove without prompts\n\n", .{});
+    try stdout.print("  git-wt rm feature-branch       # Remove feature-branch worktree\n", .{});
+    try stdout.print("  git-wt rm feature/auth         # Remove worktree with slash in name\n", .{});
+    try stdout.print("  git-wt rm test-branch -n       # Remove without prompts\n", .{});
+    try stdout.print("  git-wt rm old-feature -f       # Force remove with uncommitted changes\n\n", .{});
     try stdout.print("This command will:\n", .{});
-    try stdout.print("  1. Verify you're in a worktree (not main repository)\n", .{});
-    try stdout.print("  2. Navigate back to the main repository\n", .{});
-    try stdout.print("  3. Remove the worktree\n", .{});
-    try stdout.print("  4. Optionally delete the associated branch\n\n", .{});
-    try stdout.print("Note: This command must be run from within a git worktree.\n", .{});
+    try stdout.print("  1. Find the worktree for the specified branch\n", .{});
+    try stdout.print("  2. Remove the worktree directory\n", .{});
+    try stdout.print("  3. Optionally delete the associated branch\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, non_interactive: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, force: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
-    // Get repository info
-    const repo_info = git.getRepoInfo(allocator) catch |err| {
-        try colors.printError(stderr, "Not in a git repository", .{});
-        return err;
-    };
-    defer allocator.free(repo_info.root);
-    defer if (repo_info.main_repo_root) |root| allocator.free(root);
     
-    // Check if we're in a worktree
-    if (!repo_info.is_worktree) {
-        try colors.printError(stderr, "You are in the main repository, not a worktree", .{});
-        try stdout.print("{s}Tip:{s} This command should be run from within a git worktree\n", .{ colors.warning_prefix, colors.reset });
-        return error.NotInWorktree;
+    // Prevent removing main branch
+    if (std.mem.eql(u8, branch_name, "main") or std.mem.eql(u8, branch_name, "master")) {
+        try colors.printError(stderr, "Cannot remove the main branch worktree", .{});
+        return error.CannotRemoveMain;
     }
     
-    // Check if there are uncommitted changes
-    if (try git.hasUncommittedChanges(allocator)) {
-        try colors.printError(stderr, "Worktree has uncommitted changes", .{});
-        if (!non_interactive) {
-            if (!try input.confirm("Are you sure you want to continue?", false)) {
-                try colors.printInfo(stdout, "Cancelled", .{});
-                return;
-            }
+    // Get all worktrees to find the one we want to remove
+    const worktrees = try git.listWorktrees(allocator);
+    defer git.freeWorktrees(allocator, worktrees);
+    
+    // Find the worktree for the specified branch
+    var worktree_path: ?[]const u8 = null;
+    for (worktrees) |wt| {
+        if (std.mem.eql(u8, wt.branch, branch_name)) {
+            worktree_path = wt.path;
+            break;
         }
     }
     
-    // Get the current branch name
-    const current_branch = try git.getCurrentBranch(allocator);
-    defer allocator.free(current_branch);
+    if (worktree_path == null) {
+        try stderr.print("{s}Error:{s} No worktree found for branch '{s}'\n", .{ 
+            colors.error_prefix, colors.reset, branch_name 
+        });
+        return error.WorktreeNotFound;
+    }
     
-    // Show what we're about to do
+    // Show what we're about to remove
     try stdout.print("{s}⚠️  About to remove worktree:{s}\n", .{ colors.warning_prefix, colors.reset });
-    try stdout.print("   {s}Path:{s} {s}\n", .{ colors.path_color, colors.reset, repo_info.root });
-    try stdout.print("   {s}Currently on branch:{s} {s}\n", .{ colors.path_color, colors.reset, current_branch });
+    try stdout.print("   {s}Branch:{s} {s}\n", .{ colors.yellow, colors.reset, branch_name });
+    try stdout.print("   {s}Path:{s} {s}\n", .{ colors.yellow, colors.reset, worktree_path.? });
     
-    if (!non_interactive) {
+    // Confirm removal (unless non-interactive or force)
+    if (!non_interactive and !force) {
         if (!try input.confirm("\nAre you sure you want to continue?", false)) {
             try colors.printInfo(stdout, "Cancelled", .{});
             return;
         }
     }
     
-    // Get the main repository path
-    const main_repo = repo_info.main_repo_root orelse return error.NoMainRepo;
-    
-    // Change to the main repository
-    try colors.printPath(stdout, "📁 Changing to main repository:", main_repo);
-    try process.changeCurDir(main_repo);
-    
-    // Remove the worktree
+    // Remove the worktree using git
     try colors.printInfo(stdout, "Removing worktree...", .{});
     
-    git.removeWorktree(allocator, repo_info.root) catch |err| {
-        try colors.printError(stderr, "Failed to remove worktree", .{});
-        return err;
-    };
+    if (force) {
+        _ = git.exec(allocator, &.{ "worktree", "remove", "--force", worktree_path.? }) catch |err| {
+            if (err == git.GitError.CommandFailed) {
+                try colors.printError(stderr, "Failed to remove worktree", .{});
+            }
+            return err;
+        };
+    } else {
+        _ = git.exec(allocator, &.{ "worktree", "remove", worktree_path.? }) catch |err| {
+            if (err == git.GitError.CommandFailed) {
+                try colors.printError(stderr, "Failed to remove worktree", .{});
+                try stderr.print("{s}Tip:{s} Use -f/--force to remove worktrees with uncommitted changes\n", .{
+                    colors.info_prefix, colors.reset
+                });
+            }
+            return err;
+        };
+    }
     
-    try colors.printSuccess(stdout, "Worktree removed successfully", .{});
+    try colors.printSuccess(stdout, "✓ Worktree removed successfully", .{});
     
     // Ask about deleting the branch
-    const prompt = try std.fmt.allocPrint(allocator, "\nWould you also like to delete the branch '{s}'?", .{current_branch});
-    defer allocator.free(prompt);
-    
-    const delete_branch = if (non_interactive) false else try input.confirm(prompt, false);
-    if (delete_branch) {
-        try colors.printInfo(stdout, "Deleting branch...", .{});
+    if (!non_interactive) {
+        const prompt = try std.fmt.allocPrint(allocator, "\nWould you also like to delete the branch '{s}'?", .{branch_name});
+        defer allocator.free(prompt);
         
-        git.deleteBranch(allocator, current_branch, true) catch {
-            try colors.printError(stderr, "Failed to delete branch", .{});
-            try stdout.print("{s}You may need to delete it manually{s}\n", .{ colors.warning_prefix, colors.reset });
-            return;
-        };
-        
-        try colors.printSuccess(stdout, "Branch deleted successfully", .{});
-    } else {
-        try stdout.print("{s}Branch '{s}' was kept{s}\n", .{ colors.info_prefix, current_branch, colors.reset });
+        if (try input.confirm(prompt, false)) {
+            try colors.printInfo(stdout, "Deleting branch...", .{});
+            
+            git.deleteBranch(allocator, branch_name, true) catch |err| {
+                try colors.printError(stderr, "Failed to delete branch", .{});
+                try stdout.print("{s}You may need to delete it manually with: git branch -D {s}{s}\n", .{ 
+                    colors.info_prefix, branch_name, colors.reset 
+                });
+                return err;
+            };
+            
+            try colors.printSuccess(stdout, "✓ Branch deleted successfully", .{});
+        } else {
+            try stdout.print("{s}Branch '{s}' was kept{s}\n", .{ colors.info_prefix, branch_name, colors.reset });
+        }
     }
 }

@@ -6,12 +6,6 @@
 - Default behavior if no index is provided should be to go to the most recent worktree (index 1)
 - Worktrees should be ordered by most recently modified first (currently implemented but verify)
 
-### Add branch argument to rm command
-- Allow `git-wt rm <branch-name>` to remove a specific worktree
-- Currently rm only works on the current worktree
-- Should navigate to the worktree first, then remove it
-- Example: `git-wt rm feature-branch` removes the feature-branch worktree
-- Should work with branch names containing slashes
 
 
 ### Support specifying worktree parent directory with command line flag
@@ -25,7 +19,6 @@
 ## Future Enhancements
 
 ### Additional ideas for consideration
-- Support for `--force` flag on removal to skip confirmation prompts
 - Add `clean` command to remove all worktrees for deleted branches
 - Support for custom worktree naming patterns via config file
 - Integration with git aliases for even shorter commands

@@ -22,7 +22,7 @@ const Command = struct {
 
 const commands = [_]Command{
     .{ .name = "new", .min_args = 1, .usage = "git-wt new <branch-name>", .execute = executeNew, .help = cmd_new.printHelp },
-    .{ .name = "rm", .min_args = 0, .usage = "git-wt rm", .execute = executeRemove, .help = cmd_remove.printHelp },
+    .{ .name = "rm", .min_args = 1, .usage = "git-wt rm <branch-name>", .execute = executeRemove, .help = cmd_remove.printHelp },
     .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
     .{ .name = "list", .min_args = 0, .usage = "git-wt list", .execute = executeList, .help = cmd_list.printHelp },
 };
@@ -32,8 +32,26 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
 }
 
 fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
-    _ = args;
-    try cmd_remove.execute(allocator, non_interactive);
+    var force = false;
+    var branch_name: ?[]const u8 = null;
+    
+    // Parse rm-specific flags
+    for (args) |arg| {
+        if (std.mem.eql(u8, arg, "--force") or std.mem.eql(u8, arg, "-f")) {
+            force = true;
+        } else if (branch_name == null) {
+            branch_name = arg;
+        }
+    }
+    
+    if (branch_name) |branch| {
+        try cmd_remove.execute(allocator, branch, non_interactive, force);
+    } else {
+        // This should not happen due to min_args check, but just in case
+        const stderr = std.io.getStdErr().writer();
+        try stderr.print("Error: Branch name is required\n", .{});
+        std.process.exit(1);
+    }
 }
 
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool) !void {
@@ -227,7 +245,7 @@ fn printUsage() void {
     print("Usage: git-wt [--non-interactive] <command> [options]\n", .{});
     print("\nCommands:\n", .{});
     print("  new <branch>  Create a new worktree\n", .{});
-    print("  rm            Remove current worktree\n", .{});
+    print("  rm <branch>   Remove worktree by branch name\n", .{});
     print("  go [branch]   Navigate to worktree\n", .{});
     print("  list          List all worktrees\n", .{});
     print("\nGlobal flags:\n", .{});
@@ -245,7 +263,7 @@ fn printHelp() void {
     printUsage();
     print("\nExamples:\n", .{});
     print("  git-wt new feature-branch   Create a new worktree for 'feature-branch'\n", .{});
-    print("  git-wt rm                   Remove the current worktree\n", .{});
+    print("  git-wt rm feature-branch    Remove the 'feature-branch' worktree\n", .{});
     print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
     print("  git-wt go main              Navigate to the main repository\n", .{});
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
