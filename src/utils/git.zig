@@ -135,7 +135,11 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
             // Save previous worktree if exists
             if (current_path) |path| {
                 // Check if this is the current worktree
-                const is_current = std.mem.startsWith(u8, cwd_path, path);
+                // We need to check if cwd is within this worktree path
+                const is_current = std.mem.eql(u8, cwd_path, path) or 
+                    (std.mem.startsWith(u8, cwd_path, path) and 
+                     cwd_path.len > path.len and 
+                     cwd_path[path.len] == '/');
                 
                 try worktrees.append(.{
                     .path = try allocator.dupe(u8, path),
@@ -170,7 +174,10 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     
     // Don't forget the last worktree
     if (current_path) |path| {
-        const is_current = std.mem.startsWith(u8, cwd_path, path);
+        const is_current = std.mem.eql(u8, cwd_path, path) or 
+            (std.mem.startsWith(u8, cwd_path, path) and 
+             cwd_path.len > path.len and 
+             cwd_path[path.len] == '/');
         
         try worktrees.append(.{
             .path = try allocator.dupe(u8, path),
