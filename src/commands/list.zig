@@ -156,7 +156,6 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
                     wt_info.display_name,
                     wt.branch,
                 });
-                try stdout.print("    Path: {s}\n", .{wt.path});
                 try stdout.print("    Last modified: {s} ago\n", .{duration_str});
             } else {
                 try stdout.print("{s} {s}{s}{s} @ {s}{s}{s}", .{
@@ -174,11 +173,6 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
                 }
                 try stdout.print("\n", .{});
                 
-                try stdout.print("    {s}Path:{s} {s}\n", .{
-                    colors.yellow,
-                    colors.reset,
-                    wt.path,
-                });
                 try stdout.print("    {s}Last modified:{s} {s} ago\n", .{
                     colors.yellow,
                     colors.reset,

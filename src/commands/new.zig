@@ -215,7 +215,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     }
     
     // Create the worktree
-    try colors.printPath(stdout, "Creating worktree at:", worktree_path);
+    try colors.printDisplayPath(stdout, "Creating worktree for branch:", worktree_path, allocator);
     
     git.createWorktree(allocator, worktree_path, branch_name) catch |err| {
         const err_output = git.getLastErrorOutput(allocator) catch null;
@@ -244,7 +244,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     
     // Change to the new worktree directory
     try process.changeCurDir(worktree_path);
-    try colors.printPath(stdout, "📁 Changed directory to:", worktree_path);
+    try colors.printDisplayPath(stdout, "📁 Changed to worktree:", worktree_path, allocator);
     
     // Check for .nvmrc and run nvm use if it exists
     if (try fs_utils.hasNvmrc(worktree_path)) {

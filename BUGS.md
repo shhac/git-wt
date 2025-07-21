@@ -26,6 +26,8 @@ The following issues have been resolved:
 - ✅ Bug #12: Redundant Git Calls (optimized with git dir caching)
 - ✅ Bug #22: Duplicate Code in Interactive Selection (shared utility functions)
 - ✅ Bug #26: Inconsistent Error Return Patterns (unified error handling in main)
+- ✅ Bug #29: Path Display Inconsistency (standardized to display names for consistency)
+- ✅ Bug #30: Missing --version Flag Validation (version generated from build system)
 
 ## Edge Cases
 
@@ -72,12 +74,3 @@ The following issues have been resolved:
 - **Impact**: Could fail to find worktrees with encoded branch names
 - **Fix**: Use sanitization consistently
 
-### 29. Path Display Inconsistency
-- **Issue**: Some commands show absolute paths, others show relative paths
-- **Impact**: Confusing user experience
-- **Fix**: Standardize path display format
-
-### 30. Missing --version Flag Validation
-- **Issue**: Version string is hardcoded in main.zig
-- **Impact**: Version may not match actual build
-- **Fix**: Generate version from build system

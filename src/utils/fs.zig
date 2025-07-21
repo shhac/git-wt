@@ -232,6 +232,20 @@ pub fn usesYarn(allocator: std.mem.Allocator, path: []const u8) !bool {
            std.mem.indexOf(u8, content, "\"yarn") != null;
 }
 
+/// Extract a user-friendly display path from an absolute worktree path
+/// Returns the branch name (basename) for display purposes, making output consistent
+/// For the main repository, detects it and returns "[main]"
+pub fn extractDisplayPath(allocator: std.mem.Allocator, worktree_path: []const u8) ![]u8 {
+    // Check if this appears to be a main repository (not in a -trees directory)
+    if (std.mem.indexOf(u8, worktree_path, "-trees") == null) {
+        return try allocator.dupe(u8, "[main]");
+    }
+    
+    // For worktrees, return the basename (branch name)
+    const basename = fs.path.basename(worktree_path);
+    return try allocator.dupe(u8, basename);
+}
+
 test "constructWorktreePath" {
     const allocator = std.testing.allocator;
     

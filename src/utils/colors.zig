@@ -40,6 +40,15 @@ pub fn printPath(writer: anytype, prefix: []const u8, path: []const u8) !void {
     try writer.print("{s} {s}{s}{s}\n", .{ prefix, path_color, path, reset });
 }
 
+/// Print a path with user-friendly display formatting
+/// Uses the display path (relative) instead of absolute path for better UX
+pub fn printDisplayPath(writer: anytype, prefix: []const u8, path: []const u8, allocator: std.mem.Allocator) !void {
+    const fs_utils = @import("fs.zig");
+    const display_path = try fs_utils.extractDisplayPath(allocator, path);
+    defer allocator.free(display_path);
+    try writer.print("{s} {s}{s}{s}\n", .{ prefix, path_color, display_path, reset });
+}
+
 test "color constants" {
     // Just verify the constants are defined correctly
     try std.testing.expect(reset.len > 0);

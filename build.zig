@@ -10,6 +10,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    
+    // Add version as build option
+    const version_option = b.option([]const u8, "version", "Version string") orelse "0.1.0";
+    const build_options = b.addOptions();
+    build_options.addOption([]const u8, "version", version_option);
+    exe.root_module.addOptions("build_options", build_options);
 
     // Add dependencies
     // Note: We're not using clap anymore but keeping dependency for future use

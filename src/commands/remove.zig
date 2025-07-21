@@ -113,8 +113,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     
     // Show what we're about to remove
     try stdout.print("{s}⚠️  About to remove worktree:{s}\n", .{ colors.warning_prefix, colors.reset });
+    
+    const fs_utils = @import("../utils/fs.zig");
+    const display_path = try fs_utils.extractDisplayPath(allocator, worktree_path.?);
+    defer allocator.free(display_path);
+    
     try stdout.print("   {s}Branch:{s} {s}\n", .{ colors.yellow, colors.reset, branch_name });
-    try stdout.print("   {s}Path:{s} {s}\n", .{ colors.yellow, colors.reset, worktree_path.? });
+    try stdout.print("   {s}Worktree:{s} {s}\n", .{ colors.yellow, colors.reset, display_path });
     
     // Confirm removal (unless non-interactive or force)
     if (!non_interactive and !force) {

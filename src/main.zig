@@ -1,6 +1,7 @@
 const std = @import("std");
 const process = std.process;
 const print = std.debug.print;
+const build_options = @import("build_options");
 
 const git = @import("utils/git.zig");
 const fs_utils = @import("utils/fs.zig");
@@ -208,7 +209,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     }
 
     if (std.mem.eql(u8, arg1, "--version") or std.mem.eql(u8, arg1, "-v")) {
-        print("git-wt version 0.1.0\n", .{});
+        print("git-wt version {s}\n", .{build_options.version});
         return;
     }
 

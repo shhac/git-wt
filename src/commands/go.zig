@@ -71,7 +71,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{wt.path});
                 } else {
-                    try colors.printPath(stdout, "📁 Navigating to worktree:", wt.path);
+                    try colors.printDisplayPath(stdout, "📁 Navigating to:", wt.path, allocator);
                     try process.changeCurDir(wt.path);
                 }
                 return;
@@ -246,7 +246,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{selected.path});
                 } else {
-                    try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
+                    try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
                 }
             } else {
@@ -291,7 +291,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{selected.path});
                 } else {
-                    try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
+                    try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
                 }
             }
