@@ -289,8 +289,11 @@ pub fn getCurrentWorktree(allocator: std.mem.Allocator) !?[]const u8 {
 test "git exec" {
     const allocator = std.testing.allocator;
     
-    // This should work in any git repository
-    const version = try exec(allocator, &.{"--version"});
+    // Skip test if git is not available
+    const version = exec(allocator, &.{"--version"}) catch |err| {
+        if (err == error.FileNotFound) return; // Git not installed
+        return err;
+    };
     defer allocator.free(version);
     
     try std.testing.expect(std.mem.startsWith(u8, version, "git version"));
@@ -321,8 +324,11 @@ test "trimNewline" {
 test "execTrimmed" {
     const allocator = std.testing.allocator;
     
-    // Test that it trims output
-    const version = try execTrimmed(allocator, &.{"--version"});
+    // Skip test if git is not available
+    const version = execTrimmed(allocator, &.{"--version"}) catch |err| {
+        if (err == error.FileNotFound) return; // Git not installed
+        return err;
+    };
     defer allocator.free(version);
     
     try std.testing.expect(std.mem.startsWith(u8, version, "git version"));

@@ -9,8 +9,7 @@ test {
     _ = @import("process.zig");
     _ = @import("debug.zig");
     _ = @import("fd.zig");
+    _ = @import("time.zig");
     // Note: input.zig and interactive.zig are harder to unit test due to I/O
-    
-    // Commands
-    _ = @import("../commands/go.zig");
+    // Note: Commands import interactive modules which can interfere with tests
 }

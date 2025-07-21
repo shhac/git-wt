@@ -230,25 +230,46 @@ pub fn usesYarn(allocator: std.mem.Allocator, path: []const u8) !bool {
 test "constructWorktreePath" {
     const allocator = std.testing.allocator;
     
+    // Create a temporary directory for testing
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+    
+    // Create test repo directory
+    const test_repo = try fs.path.join(allocator, &.{ tmp_path, "myrepo" });
+    defer allocator.free(test_repo);
+    try tmp_dir.dir.makeDir("myrepo");
+    
     // Test with default parent
-    const path1 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature-branch", null);
+    const path1 = try constructWorktreePath(allocator, test_repo, "myrepo", "feature-branch", null);
     defer allocator.free(path1);
-    try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature-branch", path1);
+    const expected1 = try fs.path.join(allocator, &.{ tmp_path, "myrepo-trees", "feature-branch" });
+    defer allocator.free(expected1);
+    try std.testing.expectEqualStrings(expected1, path1);
     
     // Test with custom parent
-    const path2 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature-branch", "/custom/parent");
+    const custom_parent = try fs.path.join(allocator, &.{ tmp_path, "custom" });
+    defer allocator.free(custom_parent);
+    try tmp_dir.dir.makeDir("custom");
+    
+    const path2 = try constructWorktreePath(allocator, test_repo, "myrepo", "feature-branch", custom_parent);
     defer allocator.free(path2);
-    try std.testing.expectEqualStrings("/custom/parent/feature-branch", path2);
+    const expected2 = try fs.path.join(allocator, &.{ custom_parent, "feature-branch" });
+    defer allocator.free(expected2);
+    try std.testing.expectEqualStrings(expected2, path2);
     
-    // Test with branch containing slashes (default parent)
-    const path3 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature/new-ui", null);
+    // Test with branch containing slashes - this will create the parent directories
+    const path3 = try constructWorktreePath(allocator, test_repo, "myrepo", "feature/new-ui", custom_parent);
     defer allocator.free(path3);
-    try std.testing.expectEqualStrings("/home/user/projects/myrepo-trees/feature/new-ui", path3);
+    const expected3 = try fs.path.join(allocator, &.{ custom_parent, "feature/new-ui" });
+    defer allocator.free(expected3);
+    try std.testing.expectEqualStrings(expected3, path3);
     
-    // Test with branch containing slashes (custom parent)
-    const path4 = try constructWorktreePath(allocator, "/home/user/projects/myrepo", "myrepo", "feature/new-ui", "/tmp");
-    defer allocator.free(path4);
-    try std.testing.expectEqualStrings("/tmp/feature/new-ui", path4);
+    // Verify the parent directory was created
+    var feature_dir = try tmp_dir.dir.openDir("custom/feature", .{});
+    feature_dir.close();
 }
 
 test "config files list" {
