@@ -4,6 +4,7 @@ const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 const input = @import("../utils/input.zig");
 const interactive = @import("../utils/interactive.zig");
+const time = @import("../utils/time.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
@@ -135,8 +136,6 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         return;
     }
     
-    // Format time helper
-    const formatDuration = @import("go.zig").formatDuration;
     
     // Check if we can use interactive mode
     const use_interactive = !force_non_interactive and interactive.isStdinTty() and interactive.isStdoutTty();
@@ -152,7 +151,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         for (worktrees_with_time) |wt_info| {
             const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
             const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
-            const duration_str = try formatDuration(allocator, time_ago_seconds);
+            const duration_str = try time.formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
             
             const option_text = try std.fmt.allocPrint(allocator, "{s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}", .{
@@ -189,7 +188,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         for (worktrees_with_time, 1..) |wt_info, idx| {
             const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
             const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
-            const duration_str = try formatDuration(allocator, time_ago_seconds);
+            const duration_str = try time.formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
             
             try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
