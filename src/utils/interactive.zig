@@ -8,12 +8,19 @@ var g_signal_mutex = std.Thread.Mutex{};
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.C) void {
-    // Restore terminal state
-    g_signal_mutex.lock();
-    defer g_signal_mutex.unlock();
+    // Get the raw mode pointer atomically
+    var raw_mode_ptr: ?*RawMode = null;
+    {
+        g_signal_mutex.lock();
+        defer g_signal_mutex.unlock();
+        raw_mode_ptr = g_raw_mode;
+    }
     
-    if (g_raw_mode) |raw_mode| {
-        raw_mode.exit();
+    // Restore terminal state outside of mutex lock
+    if (raw_mode_ptr) |raw_mode| {
+        if (raw_mode.is_raw) {
+            posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, raw_mode.original_termios) catch {};
+        }
         showCursor() catch {};
     }
     
@@ -76,13 +83,16 @@ pub const RawMode = struct {
     pub fn exit(self: *RawMode) void {
         if (!self.is_raw) return;
         
-        // Unregister from signal handling
-        g_signal_mutex.lock();
-        defer g_signal_mutex.unlock();
-        if (g_raw_mode == self) {
-            g_raw_mode = null;
+        // Unregister from signal handling atomically
+        {
+            g_signal_mutex.lock();
+            defer g_signal_mutex.unlock();
+            if (g_raw_mode == self) {
+                g_raw_mode = null;
+            }
         }
         
+        // Restore terminal settings outside of mutex lock
         posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
         self.is_raw = false;
     }
