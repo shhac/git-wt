@@ -8,6 +8,7 @@ test {
     _ = @import("validation.zig");
     _ = @import("process.zig");
     _ = @import("debug.zig");
+    _ = @import("fd.zig");
     // Note: input.zig is harder to unit test due to I/O
     
     // Commands
