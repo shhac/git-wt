@@ -21,6 +21,11 @@ The following issues have been resolved:
 - ✅ Bug #10: Missing Input Validation (already comprehensive)
 - ✅ Bug #24: Claude Process Not Detached Properly (fixed with shell exec)
 - ✅ Bug #11: Resource Cleanup (improved error handling and cleanup)
+- ✅ Bug #8: Shell Integration - fd3 mechanism documentation (comprehensive docs added)
+- ✅ Bug #15: Case-Insensitive Filesystems (conflict detection on macOS/Windows)
+- ✅ Bug #12: Redundant Git Calls (optimized with git dir caching)
+- ✅ Bug #22: Duplicate Code in Interactive Selection (shared utility functions)
+- ✅ Bug #26: Inconsistent Error Return Patterns (unified error handling in main)
 
 ## Edge Cases
 
@@ -29,25 +34,10 @@ The following issues have been resolved:
 ## Usability Issues
 
 
-### 8. Shell Integration
-- **Issue**: The fd3 mechanism for shell integration is fragile and undocumented
-- **Impact**: Users may not understand why commands behave differently
-- **Fix**: Better documentation and error handling
-
 ## Code Quality Issues
-
-### 9. Inconsistent Error Handling
-- **Issue**: Mix of try/catch patterns and error returns without clear strategy
-- **Impact**: Makes code harder to maintain and reason about
-- **Fix**: Establish consistent error handling patterns
 
 
 ## Performance Issues
-
-### 12. Redundant Git Calls
-- **Issue**: Multiple calls to git for information that could be cached
-- **Impact**: Slower performance, especially on large repositories
-- **Fix**: Cache git information within a single command execution
 
 ### 13. Large Repository Handling
 - **Issue**: Loading all worktrees into memory at once
@@ -55,12 +45,6 @@ The following issues have been resolved:
 - **Fix**: Implement pagination or streaming
 
 ## Platform-Specific Issues
-
-
-### 15. Case-Insensitive Filesystems
-- **Issue**: No handling of case-insensitive filesystem issues
-- **Impact**: Could create conflicting worktrees on macOS/Windows
-- **Fix**: Add filesystem capability detection
 
 ## Documentation Issues
 
@@ -83,24 +67,10 @@ The following issues have been resolved:
 
 ## Additional Issues Found
 
-### 22. Duplicate Code in Interactive Selection
-- **Issue**: Both remove.zig and go.zig have nearly identical interactive selection logic
-- **Impact**: Code duplication, harder to maintain
-- **Fix**: Extract shared interactive selection functionality
-
-
 ### 25. Missing Validation in executeRemove
 - **Issue**: No validation for branch names with special characters in remove command
 - **Impact**: Could fail to find worktrees with encoded branch names
 - **Fix**: Use sanitization consistently
-
-### 26. Inconsistent Error Return Patterns
-- **Issue**: Some functions return error unions, others use catch blocks with process.exit
-- **Impact**: Makes error handling unpredictable
-- **Examples**:
-  - main.zig uses process.exit in some paths
-  - Commands sometimes return errors, sometimes exit
-- **Fix**: Establish consistent error propagation
 
 ### 29. Path Display Inconsistency
 - **Issue**: Some commands show absolute paths, others show relative paths

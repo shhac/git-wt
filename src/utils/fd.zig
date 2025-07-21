@@ -1,5 +1,30 @@
 const std = @import("std");
 
+/// File descriptor 3 (fd3) mechanism for shell integration
+/// 
+/// This module provides a clean way for git-wt commands to communicate with
+/// shell wrapper functions without interfering with normal stdout/stderr output.
+/// 
+/// How it works:
+/// 1. Shell aliases set GWT_USE_FD3=1 and redirect fd3 to capture commands
+/// 2. When enabled, commands like 'go' write shell commands to fd3
+/// 3. The shell wrapper evaluates captured commands (e.g., 'cd /path')
+/// 4. This allows changing the shell's working directory from a subprocess
+/// 
+/// Example shell alias:
+/// ```bash
+/// gwt() {
+///     if [ "$1" = "go" ]; then
+///         local cd_cmd=$(GWT_USE_FD3=1 git-wt go "$@" 3>&1 1>&2)
+///         if [ -n "$cd_cmd" ]; then
+///             eval "$cd_cmd"
+///         fi
+///     else
+///         git-wt "$@"
+///     fi
+/// }
+/// ```
+
 /// Check if fd3 output is enabled via environment variable
 pub fn isEnabled() bool {
     if (std.process.getEnvVarOwned(std.heap.page_allocator, "GWT_USE_FD3")) |value| {
@@ -20,6 +45,8 @@ pub const CommandWriter = struct {
     
     pub fn writer(self: CommandWriter) std.fs.File.Writer {
         if (self.use_fd3) {
+            // File descriptor 3 should be provided by the shell wrapper
+            // If not available, this will fail when trying to write
             const file = std.fs.File{ .handle = 3 };
             return file.writer();
         }

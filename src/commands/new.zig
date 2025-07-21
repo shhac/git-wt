@@ -155,6 +155,32 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         return error.WorktreePathExists;
     }
     
+    // Check for case-insensitive conflicts on macOS/Windows
+    const target_os = @import("builtin").target.os.tag;
+    if (target_os == .macos or target_os == .windows) {
+        const worktree_parent_dir = fs.path.dirname(worktree_path) orelse ".";
+        const worktree_basename = fs.path.basename(worktree_path);
+        
+        // Only check if parent directory exists
+        if (fs.cwd().openDir(worktree_parent_dir, .{ .iterate = true })) |_| {
+            var dir_for_iter = try fs.cwd().openDir(worktree_parent_dir, .{ .iterate = true });
+            defer dir_for_iter.close();
+            
+            var iter = dir_for_iter.iterate();
+            while (try iter.next()) |entry| {
+                if (std.ascii.eqlIgnoreCase(entry.name, worktree_basename)) {
+                    try colors.printError(stderr, "Case-insensitive conflict: '{s}' already exists", .{entry.name});
+                    try stderr.print("{s}Tip:{s} Use a different branch name to avoid conflicts\n", .{
+                        colors.info_prefix, colors.reset
+                    });
+                    return error.CaseInsensitiveConflict;
+                }
+            }
+        } else |_| {
+            // Parent doesn't exist yet, no conflict possible
+        }
+    }
+    
     // Track whether we need to clean up on failure
     var worktree_created = false;
     var parent_dir_created = false;

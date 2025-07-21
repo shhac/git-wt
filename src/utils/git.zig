@@ -257,8 +257,16 @@ pub fn deleteBranch(allocator: std.mem.Allocator, branch: []const u8, force: boo
 
 /// Check if repository is in a clean state (no ongoing rebase, merge, etc.)
 pub fn isRepositoryClean(allocator: std.mem.Allocator) !bool {
+    return isRepositoryCleanWithGitDir(allocator, null);
+}
+
+/// Check if repository is in a clean state with optional git dir
+pub fn isRepositoryCleanWithGitDir(allocator: std.mem.Allocator, git_dir_opt: ?[]const u8) !bool {
     // Check for various git state files that indicate ongoing operations
-    const git_dir = execTrimmed(allocator, &.{ "rev-parse", "--git-dir" }) catch return false;
+    const git_dir = if (git_dir_opt) |dir| 
+        try allocator.dupe(u8, dir) 
+    else 
+        execTrimmed(allocator, &.{ "rev-parse", "--git-dir" }) catch return false;
     defer allocator.free(git_dir);
     
     const state_files = [_][]const u8{

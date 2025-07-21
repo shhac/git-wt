@@ -1,6 +1,8 @@
 const std = @import("std");
 const posix = std.posix;
 const colors = @import("colors.zig");
+const git = @import("git.zig");
+const time = @import("time.zig");
 
 /// Global state for signal handling
 var g_raw_mode: ?*RawMode = null;
@@ -435,4 +437,65 @@ pub fn selectFromList(
             }
         }
     }
+}
+
+/// Format worktree option for display
+pub fn formatWorktreeOption(
+    allocator: std.mem.Allocator,
+    wt_info: git.WorktreeWithTime, 
+    use_colors: bool,
+) ![]u8 {
+    const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
+    const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+    const duration_str = try time.formatDuration(allocator, time_ago_seconds);
+    defer allocator.free(duration_str);
+    
+    if (use_colors) {
+        return try std.fmt.allocPrint(allocator, "{s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}", .{
+            colors.path_color,
+            wt_info.display_name,
+            colors.reset,
+            colors.magenta,
+            wt_info.worktree.branch,
+            colors.reset,
+            colors.yellow,
+            duration_str,
+            colors.reset,
+        });
+    } else {
+        return try std.fmt.allocPrint(allocator, "{s} @ {s} - {s} ago", .{
+            wt_info.display_name,
+            wt_info.worktree.branch,
+            duration_str,
+        });
+    }
+}
+
+/// Read number selection from user
+pub fn readNumberSelection(
+    allocator: std.mem.Allocator,
+    prompt: []const u8,
+    max_value: usize,
+) !?usize {
+    const input_util = @import("input.zig");
+    const response = try input_util.readLine(allocator, prompt);
+    if (response) |resp| {
+        defer allocator.free(resp);
+        const trimmed = std.mem.trim(u8, resp, " \t\r\n");
+        
+        if (trimmed.len > 0 and (trimmed[0] == 'q' or trimmed[0] == 'Q')) {
+            return null;
+        }
+        
+        const selection = std.fmt.parseInt(usize, trimmed, 10) catch {
+            return error.InvalidSelection;
+        };
+        
+        if (selection < 1 or selection > max_value) {
+            return error.InvalidSelection;
+        }
+        
+        return selection - 1;
+    }
+    return null;
 }

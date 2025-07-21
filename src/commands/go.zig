@@ -37,6 +37,10 @@ pub fn printHelp() !void {
     try stdout.print("  3. Navigate to the selected worktree\n", .{});
     try stdout.print("  4. Change the current working directory\n\n", .{});
     try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
+    try stdout.print("\nShell Integration:\n", .{});
+    try stdout.print("  To enable directory changes from git-wt, use the shell alias:\n", .{});
+    try stdout.print("  eval \"$(git-wt --alias gwt)\"\n", .{});
+    try stdout.print("  Then use 'gwt go' instead of 'git-wt go' to change directories.\n", .{});
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_color: bool, plain: bool, show_command: bool) !void {

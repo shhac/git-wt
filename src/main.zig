@@ -44,7 +44,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
         const stderr = std.io.getStdErr().writer();
         try colors.printError(stderr, "Missing required arguments", .{});
         print("Usage: {s}\n", .{commands[0].usage});
-        process.exit(1);
+        return error.MissingBranchName;
     }
 }
 
@@ -91,11 +91,27 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_inter
     try cmd_list.execute(allocator, no_color, plain);
 }
 
-pub fn main() !void {
+pub fn main() void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    
+    mainImpl(allocator) catch |err| {
+        // Handle all errors consistently at the top level
+        switch (err) {
+            error.MissingRequiredArguments,
+            error.MissingBranchName,
+            error.UnknownCommand => process.exit(1),
+            else => {
+                const stderr = std.io.getStdErr().writer();
+                stderr.print("Error: {}\n", .{err}) catch {};
+                process.exit(1);
+            }
+        }
+    };
+}
 
+fn mainImpl(allocator: std.mem.Allocator) !void {
     const args = try process.argsAlloc(allocator);
     defer process.argsFree(allocator, args);
 
@@ -225,7 +241,7 @@ pub fn main() !void {
                 const stderr = std.io.getStdErr().writer();
                 try colors.printError(stderr, "Missing required arguments", .{});
                 print("Usage: {s}\n", .{cmd.usage});
-                process.exit(1);
+                return error.MissingRequiredArguments;
             }
             try cmd.execute(allocator, command_args, non_interactive, no_tty);
             return;
@@ -236,7 +252,7 @@ pub fn main() !void {
     const stderr = std.io.getStdErr().writer();
     try stderr.print("{s}Error:{s} Unknown command '{s}'\n", .{ colors.error_prefix, colors.reset, arg1 });
     printUsage();
-    process.exit(1);
+    return error.UnknownCommand;
 }
 
 fn printUsage() void {
