@@ -155,19 +155,33 @@ pub const SelectOptions = struct {
     use_colors: bool = true,
 };
 
-/// Render a selection list item
+/// Render a selection list item with enhanced formatting
 fn renderItem(
     writer: anytype,
     item_text: []const u8, 
     is_selected: bool,
     use_colors: bool,
 ) !void {
-    if (use_colors and is_selected) {
-        try writer.print("  {s}[*] {s}{s}\n", .{
-            colors.green,
-            item_text,
-            colors.reset,
-        });
+    if (use_colors) {
+        if (is_selected) {
+            // Selected item: bright green [*] with bold text
+            try writer.print("  {s}[{s}*{s}]{s} {s}", .{
+                colors.green,
+                "\x1b[1m\x1b[92m", // bright green + bold
+                colors.green,
+                colors.reset,
+                "\x1b[1m", // bold
+            });
+            try writer.print("{s}", .{item_text});
+            try writer.print("{s}\n", .{colors.reset});
+        } else {
+            // Unselected item: dim [ ] with normal text
+            try writer.print("  {s}[ ]{s} {s}\n", .{
+                "\x1b[2m", // dim
+                colors.reset,
+                item_text,
+            });
+        }
     } else {
         try writer.print("  [{s}] {s}\n", .{
             if (is_selected) "*" else " ",

@@ -288,10 +288,20 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 const duration_str = try formatDuration(allocator, time_ago_seconds);
                 defer allocator.free(duration_str);
                 
-                const option_text = try std.fmt.allocPrint(allocator, "{s} @ {s} - {s} ago", .{
+                const option_text = if (no_color) try std.fmt.allocPrint(allocator, "{s} @ {s} - {s} ago", .{
                     wt_info.display_name,
                     wt_info.worktree.branch,
                     duration_str,
+                }) else try std.fmt.allocPrint(allocator, "{s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}", .{
+                    colors.path_color,
+                    wt_info.display_name,
+                    colors.reset,
+                    colors.magenta,
+                    wt_info.worktree.branch,
+                    colors.reset,
+                    colors.yellow,
+                    duration_str,
+                    colors.reset,
                 });
                 try options_list.append(option_text);
             }
