@@ -265,7 +265,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         // Try interactive selection first
-        const use_interactive = interactive.isStdinTty() and interactive.isStdoutTty() and !show_command;
+        // Use interactive mode when:
+        // - We have TTY for input/output
+        // - Not in show_command mode (unless fd3 is enabled, in which case we still want interactive UI)
+        const use_interactive = interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
         
         if (use_interactive) {
             // Build list of options for interactive selection
@@ -310,8 +313,15 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             
             if (selection) |idx| {
                 const selected = worktrees_with_time[idx].worktree;
-                try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
-                try process.changeCurDir(selected.path);
+                
+                // Check if we should output to fd3 for shell integration
+                if (fd.isEnabled()) {
+                    const cmd_writer = fd.CommandWriter.init();
+                    try cmd_writer.print("cd {s}\n", .{selected.path});
+                } else {
+                    try colors.printPath(stdout, "📁 Navigating to worktree:", selected.path);
+                    try process.changeCurDir(selected.path);
+                }
             } else {
                 try colors.printInfo(stdout, "Cancelled", .{});
             }

@@ -1,17 +1,21 @@
 const std = @import("std");
 
+/// Check if fd3 output is enabled via environment variable
+pub fn isEnabled() bool {
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "GWT_USE_FD3")) |value| {
+        defer std.heap.page_allocator.free(value);
+        return std.mem.eql(u8, value, "1");
+    } else |_| {
+        return false;
+    }
+}
+
 /// Writer that conditionally uses fd 3 or stdout based on environment variable
 pub const CommandWriter = struct {
     use_fd3: bool,
     
     pub fn init() CommandWriter {
-        // Check if GWT_USE_FD3 environment variable is set
-        const use_fd3 = if (std.process.getEnvVarOwned(std.heap.page_allocator, "GWT_USE_FD3")) |value| blk: {
-            defer std.heap.page_allocator.free(value);
-            break :blk std.mem.eql(u8, value, "1");
-        } else |_| false;
-        
-        return .{ .use_fd3 = use_fd3 };
+        return .{ .use_fd3 = isEnabled() };
     }
     
     pub fn writer(self: CommandWriter) std.fs.File.Writer {
