@@ -40,6 +40,8 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #38: Insufficient Path Validation (added comprehensive Unicode validation)
 - ✅ Bug #39: Missing Null Checks (improved bounds checking and safer optional handling)
 - ✅ Bug #40: Windows Lock File Handling (added WSL2 support with fallback for native Windows)
+- ✅ Bug #34: Command Injection in Claude Process Spawning (replaced shell execution with direct process spawning)
+- ✅ Bug #35: TOCTOU Race in Lock File Implementation (implemented atomic rename operation)
 
 
 ## Edge Cases
@@ -69,19 +71,6 @@ The following issues have been resolved (sorted numerically):
 
 ## Security Issues
 
-### 34. Command Injection in Claude Process Spawning
-- **Issue**: Shell command construction without proper escaping
-- **Location**: `new.zig:255-266`
-- **Impact**: Theoretical command injection (unlikely to exploit)
-- **Priority**: Medium
-- **Status**: Open
-
-### 35. TOCTOU Race in Lock File Implementation
-- **Issue**: Race between checking if process exists and deleting lock file
-- **Location**: `lock.zig:84-114`
-- **Impact**: Could delete active locks
-- **Priority**: Medium
-- **Status**: Open
 
 ## Edge Cases
 
