@@ -44,10 +44,14 @@ pub const Lock = struct {
             };
             
             // Write PID and timestamp to lock file
-            const writer = self.file.?.writer();
-            const pid = std.c.getpid();
-            try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
-            break;
+            if (self.file) |file| {
+                const writer = file.writer();
+                const pid = std.c.getpid();
+                try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
+                break;
+            } else {
+                return LockError.LockAcquisitionFailed;
+            }
         }
     }
     
@@ -61,10 +65,14 @@ pub const Lock = struct {
         };
         
         // Write PID and timestamp to lock file
-        const writer = self.file.?.writer();
-        const pid = std.c.getpid();
-        try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
-        return true;
+        if (self.file) |file| {
+            const writer = file.writer();
+            const pid = std.c.getpid();
+            try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
+            return true;
+        } else {
+            return LockError.LockAcquisitionFailed;
+        }
     }
     
     /// Release the lock
@@ -99,7 +107,7 @@ pub const Lock = struct {
         const pid = std.fmt.parseInt(u32, pid_str, 10) catch return LockError.InvalidLockFile;
         
         // Check if process is still running
-        // On Unix systems, we can use kill(pid, 0) to check if process exists
+        // On Unix systems and WSL2, we can use kill(pid, 0) to check if process exists
         if (@hasDecl(std.posix, "kill")) {
             // kill returns error if process doesn't exist
             std.posix.kill(@intCast(pid), 0) catch {
@@ -108,21 +116,51 @@ pub const Lock = struct {
             return false; // Process exists, lock is not stale
         }
         
-        // On Windows, we'd need different approach
-        // For now, assume not stale on unsupported platforms
+        // On native Windows (non-WSL2), we'd need OpenProcess, but since we only support WSL2:
+        // If we reach here on Windows, assume WSL2 environment is expected
+        // and the kill check should have worked. Consider the lock potentially stale.
+        const builtin = @import("builtin");
+        if (builtin.target.os.tag == .windows) {
+            std.log.warn("Native Windows detected - WSL2 expected. Assuming stale lock for safety.\n", .{});
+            return true; // Assume stale for safety
+        }
+        
+        // For other unsupported platforms, assume not stale
         return false;
     }
     
-    /// Clean up stale lock if it exists
+    /// Clean up stale lock if it exists (atomic version)
     pub fn cleanStale(self: *Lock) !void {
-        if (try self.isStale()) {
-            fs.cwd().deleteFile(self.path) catch |err| {
-                switch (err) {
-                    error.FileNotFound => {}, // Already gone
-                    else => return err,
-                }
-            };
+        _ = try self.tryCleanStaleAtomic();
+    }
+    
+    /// Try to clean up stale lock atomically
+    /// Returns true if we successfully removed a stale lock
+    fn tryCleanStaleAtomic(self: *Lock) !bool {
+        // Check if process is still running
+        if (!(try self.isStale())) {
+            return false;
         }
+        
+        // Lock appears stale, try to remove it atomically
+        // by attempting to rename it first (which is atomic)
+        const stale_path = try std.fmt.allocPrint(self.allocator, "{s}.stale.{d}", .{ self.path, std.time.nanoTimestamp() });
+        defer self.allocator.free(stale_path);
+        
+        fs.cwd().rename(self.path, stale_path) catch |err| {
+            switch (err) {
+                error.FileNotFound => return false, // Someone else removed it
+                else => return err,
+            }
+        };
+        
+        // We successfully renamed it, now we can safely delete it
+        fs.cwd().deleteFile(stale_path) catch |err| {
+            // Log error but don't fail - the lock is effectively removed
+            std.debug.print("Warning: Failed to delete stale lock file: {}\n", .{err});
+        };
+        
+        return true;
     }
     
     /// Deinit (ensures lock is released)

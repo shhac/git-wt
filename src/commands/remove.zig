@@ -113,7 +113,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         }
     }
     
-    if (worktree_path == null) {
+    const confirmed_worktree_path = worktree_path orelse {
         try colors.printError(stderr, "No worktree found for branch '{s}'", .{branch_name});
         try stderr.print("{s}Tip:{s} Use 'git-wt list' to see available worktrees\n", .{
             colors.info_prefix, colors.reset
@@ -146,12 +146,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         }
         
         return error.WorktreeNotFound;
-    }
+    };
     
     // Show what we're about to remove
     try stdout.print("{s}⚠️  About to remove worktree:{s}\n", .{ colors.warning_prefix, colors.reset });
     
-    const display_path = try fs_utils.extractDisplayPath(allocator, worktree_path.?);
+    const display_path = try fs_utils.extractDisplayPath(allocator, confirmed_worktree_path);
     defer allocator.free(display_path);
     
     try stdout.print("   {s}Branch:{s} {s}\n", .{ colors.yellow, colors.reset, branch_name });
@@ -169,7 +169,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     try colors.printInfo(stdout, "Removing worktree...", .{});
     
     if (force) {
-        _ = git.exec(allocator, &.{ "worktree", "remove", "--force", worktree_path.? }) catch |err| {
+        _ = git.exec(allocator, &.{ "worktree", "remove", "--force", confirmed_worktree_path }) catch |err| {
             if (err == git.GitError.CommandFailed) {
                 const err_output = git.getLastErrorOutput(allocator) catch null;
                 defer if (err_output) |output| allocator.free(output);
@@ -182,7 +182,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
             return err;
         };
     } else {
-        _ = git.exec(allocator, &.{ "worktree", "remove", worktree_path.? }) catch |err| {
+        _ = git.exec(allocator, &.{ "worktree", "remove", confirmed_worktree_path }) catch |err| {
             if (err == git.GitError.CommandFailed) {
                 const err_output = git.getLastErrorOutput(allocator) catch null;
                 defer if (err_output) |output| allocator.free(output);

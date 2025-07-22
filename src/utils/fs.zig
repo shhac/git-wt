@@ -17,21 +17,104 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
     
-    for (branch) |char| {
-        var found = false;
-        for (UNSAFE_CHARS) |unsafe| {
-            if (char == unsafe.char) {
-                try result.appendSlice(unsafe.replacement);
-                found = true;
+    var i: usize = 0;
+    while (i < branch.len) {
+        const char = branch[i];
+        
+        // Check for UTF-8 continuation bytes
+        if (char >= 0x80) {
+            // This is a multi-byte UTF-8 sequence
+            const len = std.unicode.utf8ByteSequenceLength(char) catch {
+                // Invalid UTF-8, encode as %XX
+                try result.writer().print("%{X:0>2}", .{char});
+                i += 1;
+                continue;
+            };
+            
+            if (i + len > branch.len) {
+                // Incomplete UTF-8 sequence, encode remaining bytes
+                while (i < branch.len) : (i += 1) {
+                    try result.writer().print("%{X:0>2}", .{branch[i]});
+                }
                 break;
             }
-        }
-        if (!found) {
-            try result.append(char);
+            
+            // Validate the UTF-8 codepoint
+            const codepoint = std.unicode.utf8Decode(branch[i..i+len]) catch {
+                // Invalid UTF-8 sequence, encode each byte
+                for (branch[i..i+len]) |b| {
+                    try result.writer().print("%{X:0>2}", .{b});
+                }
+                i += len;
+                continue;
+            };
+            
+            // Check for problematic Unicode categories
+            if (isProblematicUnicode(codepoint)) {
+                // Encode the entire sequence
+                for (branch[i..i+len]) |b| {
+                    try result.writer().print("%{X:0>2}", .{b});
+                }
+            } else {
+                // Safe Unicode character, append as-is
+                try result.appendSlice(branch[i..i+len]);
+            }
+            i += len;
+        } else {
+            // ASCII character
+            var found = false;
+            for (UNSAFE_CHARS) |unsafe| {
+                if (char == unsafe.char) {
+                    try result.appendSlice(unsafe.replacement);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                // Also check for control characters
+                if (char < 0x20 or char == 0x7F) {
+                    try result.writer().print("%{X:0>2}", .{char});
+                } else {
+                    try result.append(char);
+                }
+            }
+            i += 1;
         }
     }
     
     return result.toOwnedSlice();
+}
+
+/// Check if a Unicode codepoint is problematic for filesystem paths
+fn isProblematicUnicode(codepoint: u21) bool {
+    // Zero-width characters
+    if (codepoint == 0x200B or // Zero-width space
+        codepoint == 0x200C or // Zero-width non-joiner
+        codepoint == 0x200D or // Zero-width joiner
+        codepoint == 0xFEFF) { // Zero-width no-break space
+        return true;
+    }
+    
+    // Bidirectional text markers
+    if (codepoint >= 0x202A and codepoint <= 0x202E) {
+        return true;
+    }
+    
+    // Replacement characters and specials
+    if (codepoint == 0xFFFD or // Replacement character
+        codepoint == 0xFFFE or // Not a character
+        codepoint == 0xFFFF) { // Not a character
+        return true;
+    }
+    
+    // Private use areas (could be confusables)
+    if ((codepoint >= 0xE000 and codepoint <= 0xF8FF) or
+        (codepoint >= 0xF0000 and codepoint <= 0xFFFFF) or
+        (codepoint >= 0x100000 and codepoint <= 0x10FFFF)) {
+        return true;
+    }
+    
+    return false;
 }
 
 /// Reverse sanitization for display (decode URL encoded characters)
@@ -419,6 +502,31 @@ test "sanitizeBranchPath edge cases" {
     defer allocator.free(unsanitized);
     
     try std.testing.expectEqualStrings(original, unsanitized);
+}
+
+test "sanitizeBranchPath unicode validation" {
+    const allocator = std.testing.allocator;
+    
+    // Control characters should be encoded
+    const control = try sanitizeBranchPath(allocator, "test\x00\x1F\x7F");
+    defer allocator.free(control);
+    try std.testing.expectEqualStrings("test%00%1F%7F", control);
+    
+    // Unicode zero-width space should be encoded
+    const zwsp = try sanitizeBranchPath(allocator, "test\u{200B}branch");
+    defer allocator.free(zwsp);
+    try std.testing.expectEqualStrings("test%E2%80%8Bbranch", zwsp);
+    
+    // Valid Unicode should pass through
+    const valid_unicode = try sanitizeBranchPath(allocator, "feature/日本語");
+    defer allocator.free(valid_unicode);
+    try std.testing.expectEqualStrings("feature/日本語", valid_unicode);
+    
+    // Invalid UTF-8 should be encoded
+    const invalid_utf8 = [_]u8{ 'b', 'a', 'd', 0xFF, 0xFE };
+    const encoded = try sanitizeBranchPath(allocator, &invalid_utf8);
+    defer allocator.free(encoded);
+    try std.testing.expectEqualStrings("bad%FF%FE", encoded);
 }
 
 test "constructWorktreePath edge cases" {

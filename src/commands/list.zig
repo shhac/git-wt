@@ -37,13 +37,16 @@ fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     // Format the two most significant units
     if (units.items.len == 1) {
         return try std.fmt.allocPrint(allocator, "{d}{s}", .{ units.items[0].value, units.items[0].unit });
-    } else {
+    } else if (units.items.len >= 2) {
         return try std.fmt.allocPrint(allocator, "{d}{s} {d}{s}", .{
             units.items[0].value,
             units.items[0].unit,
             units.items[1].value,
             units.items[1].unit,
         });
+    } else {
+        // Fallback for unexpected empty case
+        return try allocator.dupe(u8, "0s");
     }
 }
 
