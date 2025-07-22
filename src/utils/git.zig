@@ -30,9 +30,25 @@ fn trimNewline(str: []const u8) []const u8 {
     return std.mem.trimRight(u8, str, "\n");
 }
 
-// Thread-local storage for last git error
+// Thread-local storage for last git error - to be removed after refactoring
 threadlocal var last_git_error: ?[]u8 = null;
 threadlocal var last_git_error_allocator: ?std.mem.Allocator = null;
+
+// Result type for git commands that can fail with error output
+pub const GitResult = union(enum) {
+    success: []u8,
+    failure: struct {
+        exit_code: u8,
+        stderr: []u8,
+    },
+    
+    pub fn deinit(self: GitResult, allocator: std.mem.Allocator) void {
+        switch (self) {
+            .success => |output| allocator.free(output),
+            .failure => |err| allocator.free(err.stderr),
+        }
+    }
+};
 
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
@@ -65,11 +81,20 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     return result.stdout;
 }
 
-/// Get the last git error output (if any)
+/// Get the last git error output (if any) and clear the stored error
 pub fn getLastErrorOutput(allocator: std.mem.Allocator) !?[]u8 {
     if (last_git_error) |err| {
         const trimmed = trimNewline(err);
-        return try allocator.dupe(u8, trimmed);
+        const result = try allocator.dupe(u8, trimmed);
+        
+        // Clear the stored error to prevent memory leak
+        if (last_git_error_allocator) |alloc| {
+            alloc.free(err);
+        }
+        last_git_error = null;
+        last_git_error_allocator = null;
+        
+        return result;
     }
     return null;
 }
@@ -169,10 +194,19 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
             if (current_path) |path| {
                 // Check if this is the current worktree
                 // We need to check if cwd is within this worktree path
-                const is_current = std.mem.eql(u8, cwd_path, path) or 
-                    (std.mem.startsWith(u8, cwd_path, path) and 
-                     cwd_path.len > path.len and 
-                     cwd_path[path.len] == '/');
+                const is_current = blk: {
+                    // Exact match
+                    if (std.mem.eql(u8, cwd_path, path)) break :blk true;
+                    
+                    // Check if cwd is a subdirectory of this worktree
+                    // Ensure we have a proper path separator after the prefix
+                    if (std.mem.startsWith(u8, cwd_path, path)) {
+                        if (cwd_path.len > path.len and cwd_path[path.len] == '/') {
+                            break :blk true;
+                        }
+                    }
+                    break :blk false;
+                };
                 
                 try worktrees.append(.{
                     .path = try allocator.dupe(u8, path),
@@ -207,10 +241,19 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     
     // Don't forget the last worktree
     if (current_path) |path| {
-        const is_current = std.mem.eql(u8, cwd_path, path) or 
-            (std.mem.startsWith(u8, cwd_path, path) and 
-             cwd_path.len > path.len and 
-             cwd_path[path.len] == '/');
+        const is_current = blk: {
+            // Exact match
+            if (std.mem.eql(u8, cwd_path, path)) break :blk true;
+            
+            // Check if cwd is a subdirectory of this worktree
+            // Ensure we have a proper path separator after the prefix
+            if (std.mem.startsWith(u8, cwd_path, path)) {
+                if (cwd_path.len > path.len and cwd_path[path.len] == '/') {
+                    break :blk true;
+                }
+            }
+            break :blk false;
+        };
         
         try worktrees.append(.{
             .path = try allocator.dupe(u8, path),

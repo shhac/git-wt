@@ -5,23 +5,24 @@ const git = @import("git.zig");
 const time = @import("time.zig");
 
 /// Global state for signal handling
-var g_raw_mode: ?*RawMode = null;
+var g_original_termios: ?posix.termios = null;
+var g_is_raw_mode = std.atomic.Value(bool).init(false);
 var g_signal_mutex = std.Thread.Mutex{};
 var g_needs_redraw = std.atomic.Value(bool).init(false);
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.C) void {
-    // Get the raw mode pointer and state atomically
-    var should_restore = false;
+    // Check if we're in raw mode and get termios atomically
     var termios_copy: posix.termios = undefined;
+    var should_restore = false;
+    
     {
         g_signal_mutex.lock();
         defer g_signal_mutex.unlock();
-        if (g_raw_mode) |raw_mode| {
-            if (raw_mode.is_raw.load(.acquire)) {
-                should_restore = true;
-                termios_copy = raw_mode.original_termios;
-            }
+        
+        if (g_is_raw_mode.load(.acquire) and g_original_termios != null) {
+            termios_copy = g_original_termios.?;
+            should_restore = true;
         }
     }
     
@@ -89,7 +90,8 @@ pub const RawMode = struct {
         // Register for signal handling
         g_signal_mutex.lock();
         defer g_signal_mutex.unlock();
-        g_raw_mode = self;
+        g_original_termios = self.original_termios;
+        g_is_raw_mode.store(true, .release);
     }
     
     /// Exit raw mode and restore original settings
@@ -100,9 +102,8 @@ pub const RawMode = struct {
         {
             g_signal_mutex.lock();
             defer g_signal_mutex.unlock();
-            if (g_raw_mode == self) {
-                g_raw_mode = null;
-            }
+            g_is_raw_mode.store(false, .release);
+            g_original_termios = null;
         }
         
         // Restore terminal settings outside of mutex lock

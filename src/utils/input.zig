@@ -16,8 +16,17 @@ pub fn confirm(prompt: []const u8, default: bool) !bool {
     const default_str = if (default) "[Y/n]" else "[y/N]";
     try stdout.print("{s} {s} ", .{ prompt, default_str });
     
-    var buf: [10]u8 = undefined;
-    if (try stdin.readUntilDelimiterOrEof(&buf, '\n')) |response| {
+    var buf: [256]u8 = undefined;
+    const result = stdin.readUntilDelimiterOrEof(&buf, '\n') catch |err| switch (err) {
+        error.StreamTooLong => {
+            // Buffer overflow - consume rest of input and treat as 'no'
+            try stdin.skipUntilDelimiterOrEof('\n');
+            return if (default) false else default;
+        },
+        else => return err,
+    };
+    
+    if (result) |response| {
         const trimmed = std.mem.trim(u8, response, " \t\r\n");
         if (trimmed.len == 0) return default;
         return trimmed[0] == 'y' or trimmed[0] == 'Y';

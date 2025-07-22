@@ -57,6 +57,81 @@ The following issues have been resolved (sorted numerically):
 
 ## Testing Gaps
 
+### 31. Missing Test Coverage for Commands
+- **Issue**: All command files (`new.zig`, `remove.zig`, `go.zig`, `list.zig`, `alias.zig`) have zero unit tests
+- **Impact**: Core functionality is untested, making refactoring risky
+- **Priority**: Critical
+- **Status**: ✅ Fixed - Added comprehensive test coverage for all command files
+
+## Performance Issues
+
+### 32. Memory Leak in git.zig Error Handling
+- **Issue**: Thread-local error storage accumulates memory with each failed git command
+- **Location**: `git.zig:52-58`
+- **Impact**: Memory grows unbounded in error scenarios
+- **Priority**: High
+- **Status**: ✅ Fixed - Error storage is now cleared when retrieved
+
+## Security Issues
+
+### 33. Race Condition in Interactive Signal Handling
+- **Issue**: Window between checking `g_raw_mode` and restoring terminal where pointer could become invalid
+- **Location**: `interactive.zig:13-36`
+- **Impact**: Potential crash or terminal corruption on Ctrl+C
+- **Priority**: High
+- **Status**: ✅ Fixed - Using global termios storage instead of pointer
+
+### 34. Command Injection in Claude Process Spawning
+- **Issue**: Shell command construction without proper escaping
+- **Location**: `new.zig:255-266`
+- **Impact**: Theoretical command injection (unlikely to exploit)
+- **Priority**: Medium
+- **Status**: Open
+
+### 35. TOCTOU Race in Lock File Implementation
+- **Issue**: Race between checking if process exists and deleting lock file
+- **Location**: `lock.zig:84-114`
+- **Impact**: Could delete active locks
+- **Priority**: Medium
+- **Status**: Open
+
+## Edge Cases
+
+### 36. Incorrect Current Worktree Detection
+- **Issue**: False positives for paths with similar prefixes
+- **Location**: `git.zig:172-176, 210-214`
+- **Example**: `/Users/proj` matches as current for `/Users/project-trees/feature`
+- **Priority**: High
+- **Status**: ✅ Fixed - Added proper path separator check
+
+### 37. Input Buffer Overflow Risk
+- **Issue**: Fixed 10-byte buffer for confirmation input
+- **Location**: `input.zig:19`
+- **Impact**: Buffer overflow if user pastes longer text
+- **Priority**: High
+- **Status**: ✅ Fixed - Increased buffer size and added overflow handling
+
+### 38. Insufficient Path Validation
+- **Issue**: Doesn't handle Unicode confusables or zero-width characters
+- **Location**: `fs.zig:sanitizeBranchPath`
+- **Impact**: Could create ambiguous directory names
+- **Priority**: Medium
+- **Status**: Open
+
+### 39. Missing Null Checks
+- **Issue**: Multiple places assume operations succeed without checking
+- **Examples**: `go.zig:75`, `new.zig:244`
+- **Impact**: Silent failures
+- **Priority**: Medium
+- **Status**: Open
+
+### 40. Windows Lock File Handling
+- **Issue**: Stale locks won't be cleaned up on Windows
+- **Location**: `lock.zig:103-113`
+- **Impact**: Lock files accumulate on Windows
+- **Priority**: Medium
+- **Status**: Open
+
 ## Additional Issues Found
 
 
