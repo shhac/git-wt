@@ -42,6 +42,7 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #40: Windows Lock File Handling (added WSL2 support with fallback for native Windows)
 - ✅ Bug #34: Command Injection in Claude Process Spawning (replaced shell execution with direct process spawning)
 - ✅ Bug #35: TOCTOU Race in Lock File Implementation (implemented atomic rename operation)
+- ✅ Bug #13: Large Repository Handling (implemented smart threshold-based loading and early-exit branch search)
 
 
 ## Edge Cases
@@ -56,10 +57,6 @@ The following issues have been resolved (sorted numerically):
 
 ## Performance Issues
 
-### 13. Large Repository Handling
-- **Issue**: Loading all worktrees into memory at once
-- **Impact**: High memory usage with many worktrees
-- **Fix**: Implement pagination or streaming
 
 ## Platform-Specific Issues
 
