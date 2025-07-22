@@ -3,13 +3,7 @@ set -e
 
 # Build script for creating git-wt releases
 
-VERSION=${1:-$(grep 'version' src/main.zig | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')}
-
-if [ -z "$VERSION" ]; then
-    echo "Usage: $0 [version]"
-    echo "Could not determine version from src/main.zig"
-    exit 1
-fi
+VERSION=${1:-"0.1.0"}  # Default version from build.zig
 
 echo "Building git-wt v$VERSION for multiple platforms..."
 

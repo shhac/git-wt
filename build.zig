@@ -11,6 +11,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     
+    // Link libc for system calls (getpid, etc.)
+    exe.linkLibC();
+    
     // Add version as build option
     const version_option = b.option([]const u8, "version", "Version string") orelse "0.1.0";
     const build_options = b.addOptions();
