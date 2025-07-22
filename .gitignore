@@ -35,11 +35,13 @@ coverage/
 *.gcda
 *.gcno
 
-# E2E test directory
+# Test directories and scripts
 .e2e-test/
-
-# Claude's test script
+test-*/
+*-test/
 test-claude-script.sh
+test-*.sh
+verify-*.sh
 
 # Release builds
 release/
