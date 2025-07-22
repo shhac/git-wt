@@ -32,7 +32,7 @@ See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this p
 src/
 ├── main.zig           # Entry point, command dispatch using command table pattern
 ├── commands/
-│   ├── new.zig       # Create worktree with setup (config copy, nvm, yarn)
+│   ├── new.zig       # Create worktree with setup (config copy, yarn)
 │   ├── remove.zig    # Remove worktree with safety checks
 │   └── go.zig        # Navigate between worktrees (interactive/direct)
 └── utils/
@@ -164,9 +164,7 @@ When creating a new worktree, automatically copies:
 - `.ai-cache` - AI cache directory
 
 ### Node.js Integration
-- Detects and runs `nvm use` if `.nvmrc` exists
 - Detects yarn in package.json and runs `yarn install`
-- Proper PATH rehashing after nvm changes
 
 ### User Experience
 - **Colored output** for better visibility and status clarity

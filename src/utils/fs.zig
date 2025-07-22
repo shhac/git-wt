@@ -208,11 +208,6 @@ pub fn hasNodeProject(path: []const u8) !bool {
     return try fileExists(path, "package.json");
 }
 
-/// Check if we have .nvmrc file
-pub fn hasNvmrc(path: []const u8) !bool {
-    return try fileExists(path, ".nvmrc");
-}
-
 /// Check if package.json uses yarn
 pub fn usesYarn(allocator: std.mem.Allocator, path: []const u8) !bool {
     const package_json = try fs.path.join(allocator, &.{ path, "package.json" });
@@ -401,7 +396,7 @@ test "extractDisplayPath edge cases" {
     defer allocator.free(windows_result);
     // On non-Windows systems, basename of this path will be the whole string since \ isn't a separator
     // On Windows, it would be "feature-branch". Let's just test it doesn't crash.
-    try testing.expect(windows_result.len > 0);
+    try std.testing.expect(windows_result.len > 0);
     
     // Test mixed separators
     const mixed_path = "/path/to\\repo-trees/branch-name";
