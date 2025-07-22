@@ -1,6 +1,7 @@
 const std = @import("std");
 const process = std.process;
 const fs = std.fs;
+const fs_utils = @import("fs.zig");
 
 pub const GitError = error{
     NotInRepository,
@@ -233,6 +234,134 @@ pub fn findWorktreeByBranch(allocator: std.mem.Allocator, target_branch: []const
     }
     
     return null; // Not found
+}
+
+/// Get list of worktrees with smart loading for large repositories
+pub fn listWorktreesSmart(allocator: std.mem.Allocator, for_interactive: bool) ![]Worktree {
+    if (for_interactive) {
+        const count = countWorktrees(allocator) catch {
+            // If count fails, fall back to normal loading
+            return listWorktrees(allocator);
+        };
+        
+        if (count > LARGE_REPO_THRESHOLD) {
+            return listWorktreesLimited(allocator, MAX_INTERACTIVE_ITEMS);
+        }
+    }
+    
+    // Use existing implementation for normal cases
+    return listWorktrees(allocator);
+}
+
+/// Get modification time for a path (returns 0 on error)
+fn getPathModTime(allocator: std.mem.Allocator, path: []const u8) !i128 {
+    _ = allocator; // unused but kept for API consistency
+    const stat = try std.fs.cwd().statFile(path);
+    return stat.mtime;
+}
+
+/// Check if a given worktree path is the current directory
+fn checkIsCurrentWorktree(cwd_path: []const u8, worktree_path: []const u8) bool {
+    // Exact match
+    if (std.mem.eql(u8, cwd_path, worktree_path)) return true;
+    
+    // Check if cwd is a subdirectory of this worktree
+    // Ensure we have a proper path separator after the prefix
+    if (std.mem.startsWith(u8, cwd_path, worktree_path)) {
+        if (cwd_path.len > worktree_path.len and cwd_path[worktree_path.len] == '/') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Get limited list of worktrees for large repository optimization
+fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Worktree {
+    const output = try exec(allocator, &.{ "worktree", "list", "--porcelain" });
+    defer allocator.free(output);
+    
+    // Get current directory to mark current worktree
+    const cwd_path = try std.process.getCwdAlloc(allocator);
+    defer allocator.free(cwd_path);
+    
+    var worktrees = std.ArrayList(Worktree).init(allocator);
+    errdefer {
+        for (worktrees.items) |wt| {
+            allocator.free(wt.path);
+            allocator.free(wt.branch);
+            allocator.free(wt.commit);
+        }
+        worktrees.deinit();
+    }
+    
+    var current_path: ?[]const u8 = null;
+    var current_branch: ?[]const u8 = null;
+    var current_commit: ?[]const u8 = null;
+    var is_bare = false;
+    var is_detached = false;
+    
+    var lines = std.mem.tokenizeScalar(u8, output, '\n');
+    var processed_count: usize = 0;
+    
+    while (lines.next()) |line| {
+        if (processed_count >= max_items) {
+            break; // Stop processing when we hit the limit
+        }
+        
+        if (std.mem.startsWith(u8, line, "worktree ")) {
+            // Finalize previous worktree if we have one
+            if (current_path != null) {
+                const is_current = checkIsCurrentWorktree(cwd_path, current_path.?);
+                
+                try worktrees.append(Worktree{
+                    .path = try allocator.dupe(u8, current_path.?),
+                    .branch = try allocator.dupe(u8, current_branch orelse "HEAD"),
+                    .commit = try allocator.dupe(u8, current_commit orelse ""),
+                    .is_bare = is_bare,
+                    .is_detached = is_detached,
+                    .is_current = is_current,
+                });
+                
+                processed_count += 1;
+            }
+            
+            // Start new worktree
+            const path = std.mem.trim(u8, line[9..], " \t\n\r");
+            current_path = path;
+            current_branch = null;
+            current_commit = null;
+            is_bare = false;
+            is_detached = false;
+        } else if (std.mem.startsWith(u8, line, "branch ")) {
+            if (line.len > 7) {
+                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+            }
+        } else if (std.mem.startsWith(u8, line, "HEAD ")) {
+            if (line.len > 5) {
+                current_commit = std.mem.trim(u8, line[5..], " \t\n\r");
+            }
+        } else if (std.mem.eql(u8, line, "bare")) {
+            is_bare = true;
+        } else if (std.mem.eql(u8, line, "detached")) {
+            is_detached = true;
+        }
+    }
+    
+    // Process final worktree if we haven't hit the limit
+    if (current_path != null and processed_count < max_items) {
+        const is_current = checkIsCurrentWorktree(cwd_path, current_path.?);
+        
+        try worktrees.append(Worktree{
+            .path = try allocator.dupe(u8, current_path.?),
+            .branch = try allocator.dupe(u8, current_branch orelse "HEAD"),
+            .commit = try allocator.dupe(u8, current_commit orelse ""),
+            .is_bare = is_bare,
+            .is_detached = is_detached,
+            .is_current = is_current,
+        });
+    }
+    
+    return worktrees.toOwnedSlice();
 }
 
 /// Get list of worktrees
@@ -665,6 +794,75 @@ pub const WorktreeWithTime = struct {
 
 /// List worktrees with modification times, sorted by newest first
 /// Caller owns returned memory and must call freeWorktreesWithTime
+/// Get worktrees with time information, optimized for large repositories
+pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current: bool, for_interactive: bool) ![]WorktreeWithTime {
+    const worktrees = try listWorktreesSmart(allocator, for_interactive);
+    defer freeWorktrees(allocator, worktrees);
+    
+    // Use arena allocator for easier cleanup
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    
+    var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
+    errdefer {
+        for (worktrees_list.items) |wt| {
+            allocator.free(wt.worktree.path);
+            allocator.free(wt.worktree.branch);
+            allocator.free(wt.worktree.commit);
+            allocator.free(wt.display_name);
+        }
+        worktrees_list.deinit();
+    }
+    
+    for (worktrees) |wt| {
+        if (exclude_current and wt.is_current) {
+            continue;
+        }
+        
+        // Get modification time (0 if unavailable)
+        const mod_time = getPathModTime(arena_allocator, wt.path) catch 0;
+        
+        // Create display name
+        const display_name = try fs_utils.extractDisplayPath(allocator, wt.path);
+        errdefer allocator.free(display_name);
+        
+        const path = try allocator.dupe(u8, wt.path);
+        errdefer allocator.free(path);
+        
+        const branch = try allocator.dupe(u8, wt.branch);
+        errdefer allocator.free(branch);
+        
+        const commit = try allocator.dupe(u8, wt.commit);
+        errdefer allocator.free(commit);
+        
+        // Create the worktree copy
+        const wt_item = WorktreeWithTime{
+            .worktree = Worktree{
+                .path = path,
+                .branch = branch,
+                .commit = commit,
+                .is_bare = wt.is_bare,
+                .is_detached = wt.is_detached,
+                .is_current = wt.is_current,
+            },
+            .mod_time = mod_time,
+            .display_name = display_name,
+        };
+        
+        try worktrees_list.append(wt_item);
+    }
+    
+    // Sort by modification time (most recent first)
+    const items = try worktrees_list.toOwnedSlice();
+    std.mem.sort(WorktreeWithTime, items, {}, struct {
+        fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
+            return a.mod_time > b.mod_time;
+        }
+    }.lessThan);
+    return items;
+}
+
 pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool) ![]WorktreeWithTime {
     const worktrees = try listWorktrees(allocator);
     defer freeWorktrees(allocator, worktrees);

@@ -80,38 +80,62 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         return error.CannotRemoveMain;
     }
     
-    // Get all worktrees to find the one we want to remove
-    const worktrees = try git.listWorktrees(allocator);
-    defer git.freeWorktrees(allocator, worktrees);
-    
-    // Find the worktree for the specified branch
-    // Try both the original branch name and sanitized version for special characters
+    // Get all worktrees (optimized search or full load)
     var worktree_path: ?[]const u8 = null;
-    const sanitized_branch = try fs_utils.sanitizeBranchPath(allocator, branch_name);
-    defer allocator.free(sanitized_branch);
+    var target_worktree_opt: ?git.Worktree = null;
     
-    for (worktrees) |wt| {
-        // Try direct match first (most common case)
-        if (std.mem.eql(u8, wt.branch, branch_name)) {
-            worktree_path = wt.path;
-            break;
+    // Try fast branch search first for large repositories
+    if (git.findWorktreeByBranch(allocator, branch_name)) |maybe_target_wt| {
+        if (maybe_target_wt) |target_wt| {
+            target_worktree_opt = target_wt;
+            worktree_path = target_wt.path;
         }
+    } else |_| {
+        // Fast search failed, continue with fallback logic
+    }
+    
+    // If fast search didn't work, load all worktrees for fallback logic and error handling
+    const worktrees = if (worktree_path == null) blk: {
+        break :blk try git.listWorktrees(allocator);
+    } else null;
+    defer if (worktrees) |wts| git.freeWorktrees(allocator, wts);
+    
+    if (worktrees) |wts| {
+        // Find the worktree for the specified branch
+        // Try both the original branch name and sanitized version for special characters
+        const sanitized_branch = try fs_utils.sanitizeBranchPath(allocator, branch_name);
+        defer allocator.free(sanitized_branch);
         
-        // Try match with sanitized branch name (for branches with special characters)
-        if (std.mem.eql(u8, wt.branch, sanitized_branch)) {
-            worktree_path = wt.path;
-            break;
-        }
-        
-        // Try reverse: unsanitize the stored branch name and compare
-        // This handles cases where the stored name is sanitized
-        const unsanitized_stored = fs_utils.unsanitizeBranchPath(allocator, wt.branch) catch continue;
-        defer allocator.free(unsanitized_stored);
-        if (std.mem.eql(u8, unsanitized_stored, branch_name)) {
-            worktree_path = wt.path;
-            break;
+        for (wts) |wt| {
+            // Try direct match first (most common case)
+            if (std.mem.eql(u8, wt.branch, branch_name)) {
+                worktree_path = wt.path;
+                break;
+            }
+            
+            // Try match with sanitized branch name (for branches with special characters)
+            if (std.mem.eql(u8, wt.branch, sanitized_branch)) {
+                worktree_path = wt.path;
+                break;
+            }
+            
+            // Try reverse: unsanitize the stored branch name and compare
+            // This handles cases where the stored name is sanitized
+            const unsanitized_stored = fs_utils.unsanitizeBranchPath(allocator, wt.branch) catch continue;
+            defer allocator.free(unsanitized_stored);
+            if (std.mem.eql(u8, unsanitized_stored, branch_name)) {
+                worktree_path = wt.path;
+                break;
+            }
         }
     }
+    
+    // Cleanup for optimized search result
+    defer if (target_worktree_opt) |wt| {
+        allocator.free(wt.path);
+        allocator.free(wt.branch);
+        allocator.free(wt.commit);
+    };
     
     const confirmed_worktree_path = worktree_path orelse {
         try colors.printError(stderr, "No worktree found for branch '{s}'", .{branch_name});
@@ -123,7 +147,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         var similar_branches = std.ArrayList([]const u8).init(allocator);
         defer similar_branches.deinit();
         
-        for (worktrees) |wt| {
+        for (worktrees orelse &.{}) |wt| {
             // Check direct branch name match
             if (std.ascii.indexOfIgnoreCase(wt.branch, branch_name) != null) {
                 try similar_branches.append(wt.branch);
@@ -242,7 +266,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
     const stderr = std.io.getStdErr().writer();
     
     // Get worktrees with modification times, excluding current
-    const worktrees_with_time = try git.listWorktreesWithTime(allocator, true);
+    const worktrees_with_time = try git.listWorktreesWithTimeSmart(allocator, true, true);
     defer git.freeWorktreesWithTime(allocator, worktrees_with_time);
     
     if (worktrees_with_time.len == 0) {

@@ -75,7 +75,7 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     const stderr = std.io.getStdErr().writer();
     
     // Get all worktrees using git worktree list
-    const worktrees = try git.listWorktrees(allocator);
+    const worktrees = try git.listWorktreesSmart(allocator, false); // false = not for interactive
     defer git.freeWorktrees(allocator, worktrees);
     
     if (worktrees.len == 0) {

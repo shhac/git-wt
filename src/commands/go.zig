@@ -57,7 +57,25 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     }
     
     if (branch_name) |branch| {
-        // Direct navigation to specific branch
+        // Optimize: Use early-exit branch search for large repositories  
+        if (git.findWorktreeByBranch(allocator, branch)) |maybe_target_wt| {
+            if (maybe_target_wt) |target_wt| {
+                defer {
+                    allocator.free(target_wt.path);
+                    allocator.free(target_wt.branch);
+                    allocator.free(target_wt.commit);
+                }
+                
+                // Use fd 3 if available for cleaner shell integration
+                const cmd_writer = fd.CommandWriter.init();
+                try cmd_writer.print("cd {s}\n", .{target_wt.path});
+                return;
+            }
+        } else |_| {
+            // Fallback to existing logic if fast search fails
+        }
+        
+        // Direct navigation to specific branch (fallback)
         for (worktrees) |wt| {
             // Check if branch matches (handle both "main" for the main worktree and regular branch names)
             const matches = if (std.mem.eql(u8, branch, "main") and std.mem.indexOf(u8, wt.path, "-trees") == null) 
@@ -87,7 +105,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         // Interactive selection (or just list if non-interactive)
         
         // Get worktrees with modification times, sorted by newest first
-        const worktrees_with_time = try git.listWorktreesWithTime(allocator, true);
+        // Use smart loading for large repositories in interactive mode
+        const worktrees_with_time = try git.listWorktreesWithTimeSmart(allocator, true, !non_interactive);
         defer git.freeWorktreesWithTime(allocator, worktrees_with_time);
         
         if (worktrees_with_time.len == 0) {
