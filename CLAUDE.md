@@ -63,7 +63,17 @@ zig build
 
 ### Testing
 ```bash
-zig build test
+# Run all tests (Note: zig build test may hang due to --listen=- issue)
+# Instead, run tests directly:
+zig test src/main.zig              # Run unit tests
+zig test src/integration_tests.zig # Run integration tests
+
+# Or run both in sequence:
+zig test src/main.zig && zig test src/integration_tests.zig
+
+# Individual test files can also be run:
+zig test src/utils/validation.zig  # Test specific module
+zig test src/utils/lock.zig        # Test lock functionality
 ```
 
 ### Installation
@@ -116,9 +126,11 @@ Originally planned to use external libraries but simplified:
 - Watch for memory leaks with GeneralPurposeAllocator in debug mode
 
 ### Testing
-- Run `zig build test` to execute unit tests
+- **Important**: `zig build test` may hang due to a known Zig issue with `--listen=-`
+- Use direct test commands instead (see Testing section above)
 - Manual testing in git repositories is essential
 - Consider edge cases like being in main repo vs worktree
+- All tests use temporary directories to avoid side effects
 
 ## Robustness and Safety Features
 
@@ -176,8 +188,11 @@ When creating a new worktree, automatically copies:
 ### Unit Tests
 All utility modules have comprehensive unit tests:
 ```bash
-# Run all unit tests
-zig build test
+# Run all unit tests (avoiding zig build test hang issue)
+zig test src/main.zig
+
+# This runs tests for all modules imported by main.zig
+# which includes all utility modules via test_all.zig
 ```
 
 ### Non-Interactive Mode
