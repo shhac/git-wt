@@ -41,8 +41,9 @@ zig build -Doptimize=ReleaseFast -Dtarget=x86_64-linux
 # Linux ARM64
 zig build -Doptimize=ReleaseFast -Dtarget=aarch64-linux
 
-# Windows
-zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows
+# Windows (use WSL2)
+# Install in WSL2 with the Linux build:
+zig build -Doptimize=ReleaseFast -Dtarget=x86_64-linux
 ```
 
 ## Creating a Release

@@ -40,3 +40,10 @@ coverage/
 
 # Claude's test script
 test-claude-script.sh
+
+# Release builds
+release/
+git-wt-*-macos
+git-wt-*-linux
+git-wt-*.tar.gz
+git-wt-*.zip

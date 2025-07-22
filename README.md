@@ -23,7 +23,8 @@ zig build -Doptimize=ReleaseFast
 cp zig-out/bin/git-wt ~/.local/bin/
 ```
 
-**Requirements**: Zig 0.14.1+, Git
+**Requirements**: Zig 0.14.1+, Git  
+**Windows users**: Use WSL2 with the Linux build
 
 ### Shell Integration Setup
 
