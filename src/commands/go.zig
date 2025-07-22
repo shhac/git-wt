@@ -252,6 +252,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 allocator,
                 options_list.items,
                 .{
+                    .mode = .single,
                     .show_instructions = true,
                     .use_colors = !no_color,
                 },

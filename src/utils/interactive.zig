@@ -197,313 +197,162 @@ pub fn showCursor() !void {
     try stdout.print("\x1b[?25h", .{});
 }
 
-/// Interactive selection result
-pub const SelectionResult = enum {
-    selected,
-    cancelled,
-    failed,
-};
+
+/// Selection mode for interactive selection
+pub const SelectionMode = enum { single, multi };
 
 /// Options for interactive selection
 pub const SelectOptions = struct {
+    mode: SelectionMode = .single,
     prompt: []const u8 = "Select an option:",
     show_instructions: bool = true,
     use_colors: bool = true,
-    multi_select: bool = false,
+    allow_empty: bool = false, // For multi-select, allow confirming with no selection
 };
 
-/// Render a selection list item with enhanced formatting
+/// Unified result type for selections
+pub const SelectionResult = union(enum) {
+    single: usize,
+    multiple: []usize,
+    cancelled: void,
+};
+
+/// Render a selection list item with consistent [*] formatting
 fn renderItem(
     writer: anytype,
     item_text: []const u8, 
     is_current: bool,
     is_selected: bool,
     use_colors: bool,
-    multi_select_mode: bool,
+    selection_mode: SelectionMode,
 ) !void {
     if (use_colors) {
-        if (multi_select_mode) {
-            // Multi-select mode: show checkbox and highlight current item
-            const checkbox = if (is_selected) "☑" else "☐";
-            if (is_current) {
-                // Current item: highlighted background
-                try writer.print("  {s}{s} {s}{s}{s}\n", .{
-                    "\x1b[7m", // reverse video (highlight)
-                    checkbox,
-                    item_text,
-                    colors.reset,
-                    colors.reset,
-                });
-            } else if (is_selected) {
-                // Selected but not current: green checkbox
-                try writer.print("  {s}{s}{s} {s}\n", .{
-                    colors.green,
-                    checkbox,
-                    colors.reset,
-                    item_text,
-                });
-            } else {
-                // Unselected: dim checkbox
-                try writer.print("  {s}{s}{s} {s}\n", .{
-                    "\x1b[2m", // dim
-                    checkbox,
-                    colors.reset,
-                    item_text,
-                });
-            }
-        } else {
-            // Single-select mode: original behavior
-            if (is_current) {
-                // Current item: green brackets with bright green asterisk and bold text
-                try writer.print("  {s}[{s}{s}*{s}{s}]{s} {s}{s}{s}\n", .{
-                    colors.green,          // green [
-                    colors.reset,          // reset to remove any inherited formatting
-                    "\x1b[1m\x1b[92m",    // bright green + bold for *
-                    colors.reset,          // reset to clear bold
-                    colors.green,          // back to green for ]
-                    colors.reset,          // reset before text
-                    "\x1b[1m",            // bold for text
-                    item_text,
-                    colors.reset,          // final reset
-                });
-            } else {
-                // Non-current item: dim [ ] with normal text
-                try writer.print("  {s}[ ]{s} {s}\n", .{
-                    "\x1b[2m", // dim
-                    colors.reset,
-                    item_text,
-                });
-            }
+        switch (selection_mode) {
+            .multi => {
+                // Multi-select mode: show [*] for selected, [ ] for unselected
+                const bracket_content = if (is_selected) "*" else " ";
+                if (is_current) {
+                    // Current item: highlighted background with green brackets
+                    try writer.print("  {s}[{s}{s}{s}{s}]{s} {s}{s}{s}\n", .{
+                        colors.green,      // green [
+                        "\x1b[7m",        // reverse video for highlight
+                        bracket_content,
+                        colors.reset,     // reset reverse video
+                        colors.green,     // green ]
+                        colors.reset,     // reset color
+                        "\x1b[1m",       // bold text
+                        item_text,
+                        colors.reset,     // final reset
+                    });
+                } else if (is_selected) {
+                    // Selected but not current: green [*]
+                    try writer.print("  {s}[{s}*{s}] {s}\n", .{
+                        colors.green,
+                        "\x1b[1m\x1b[92m", // bright green + bold for *
+                        colors.reset,
+                        item_text,
+                    });
+                } else {
+                    // Unselected: dim [ ]
+                    try writer.print("  {s}[ ]{s} {s}\n", .{
+                        "\x1b[2m", // dim
+                        colors.reset,
+                        item_text,
+                    });
+                }
+            },
+            .single => {
+                // Single-select mode: highlight current item only
+                if (is_current) {
+                    // Current item: green brackets with bright green asterisk and bold text
+                    try writer.print("  {s}[{s}{s}*{s}{s}]{s} {s}{s}{s}\n", .{
+                        colors.green,          // green [
+                        colors.reset,          // reset to remove any inherited formatting
+                        "\x1b[1m\x1b[92m",    // bright green + bold for *
+                        colors.reset,          // reset to clear bold
+                        colors.green,          // back to green for ]
+                        colors.reset,          // reset before text
+                        "\x1b[1m",            // bold for text
+                        item_text,
+                        colors.reset,          // final reset
+                    });
+                } else {
+                    // Non-current item: dim [ ] with normal text
+                    try writer.print("  {s}[ ]{s} {s}\n", .{
+                        "\x1b[2m", // dim
+                        colors.reset,
+                        item_text,
+                    });
+                }
+            },
         }
     } else {
-        if (multi_select_mode) {
-            const checkbox = if (is_selected) "[X]" else "[ ]";
-            const indicator = if (is_current) " <--" else "";
-            try writer.print("  {s} {s}{s}\n", .{ checkbox, item_text, indicator });
-        } else {
-            try writer.print("  [{s}] {s}\n", .{
-                if (is_current) "*" else " ",
-                item_text,
-            });
+        // No colors mode - consistent [*] style
+        switch (selection_mode) {
+            .multi => {
+                const bracket_content = if (is_selected) "*" else " ";
+                const indicator = if (is_current) " <--" else "";
+                try writer.print("  [{s}] {s}{s}\n", .{ bracket_content, item_text, indicator });
+            },
+            .single => {
+                try writer.print("  [{s}] {s}\n", .{
+                    if (is_current) "*" else " ",
+                    item_text,
+                });
+            },
         }
     }
 }
 
-/// Display an interactive selection list
-/// Returns the selected index or null if cancelled (single-select)
-/// For multi-select, use selectMultipleFromList
+/// Display an interactive selection list (legacy API - single select only)
+/// Returns the selected index or null if cancelled
+/// For new code, use selectFromListUnified
 pub fn selectFromList(
     allocator: std.mem.Allocator,
     items: []const []const u8,
     options: SelectOptions,
 ) !?usize {
-    _ = allocator; // Reserved for future use
-    if (items.len == 0) return null;
-    
-    // Check if we're in a TTY
-    if (!isStdinTty() or !isStdoutTty()) {
-        // Fall back to non-interactive mode
-        return null;
-    }
-    
-    const stdout = std.io.getStdOut().writer();
-    var selected: usize = 0;
-    
-    // Install signal handler for SIGINT
-    var sigaction = posix.Sigaction{
-        .handler = .{ .handler = handleSignal },
-        .mask = posix.empty_sigset,
-        .flags = 0,
+    const unified_options = SelectOptions{
+        .mode = .single,
+        .prompt = options.prompt,
+        .show_instructions = options.show_instructions,
+        .use_colors = options.use_colors,
+        .allow_empty = false,
     };
-    var old_sigaction: posix.Sigaction = undefined;
-    posix.sigaction(posix.SIG.INT, &sigaction, &old_sigaction);
-    defer {
-        // Restore original signal handler
-        posix.sigaction(posix.SIG.INT, &old_sigaction, null);
-    }
     
-    // Install signal handler for SIGWINCH
-    var winch_action = posix.Sigaction{
-        .handler = .{ .handler = handleWinch },
-        .mask = posix.empty_sigset,
-        .flags = 0,
+    const result = try selectFromListUnified(allocator, items, unified_options);
+    return switch (result) {
+        .single => |idx| idx,
+        .cancelled => null,
+        .multiple => unreachable, // Should never happen in single mode
     };
-    var old_winch_action: posix.Sigaction = undefined;
-    posix.sigaction(posix.SIG.WINCH, &winch_action, &old_winch_action);
-    defer {
-        // Restore original signal handler
-        posix.sigaction(posix.SIG.WINCH, &old_winch_action, null);
-    }
-    
-    // Set up raw mode
-    var raw_mode = RawMode{ .original_termios = undefined };
-    try raw_mode.enter();
-    defer raw_mode.exit();
-    
-    // Hide cursor
-    try hideCursor();
-    defer showCursor() catch {};
-    
-    // Initial render with newline for spacing
-    try stdout.print("\n", .{});
-    for (items, 0..) |item, i| {
-        try renderItem(stdout, item, i == selected, false, options.use_colors, false);
-    }
-    
-    if (options.show_instructions) {
-        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter/Space{s} Select  {s}ESC{s} Cancel\n", .{
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-        });
-    }
-    
-    // Input loop
-    while (true) {
-        // Check if terminal was resized
-        if (g_needs_redraw.swap(false, .acq_rel)) {
-            // Clear entire screen and redraw from scratch
-            try stdout.print("\x1b[2J\x1b[H", .{}); // Clear screen and move to home
-            
-            // Redraw everything
-            try stdout.print("\n", .{});
-            for (items, 0..) |item, i| {
-                try renderItem(stdout, item, i == selected, false, options.use_colors, false);
-            }
-            
-            if (options.show_instructions) {
-                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter/Space{s} Select  {s}ESC{s} Cancel\n", .{
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                });
-            }
-        }
-        
-        const key_info = try readKey();
-        
-        var needs_redraw = false;
-        
-        switch (key_info.key) {
-            .up => {
-                if (selected > 0) {
-                    selected -= 1;
-                    needs_redraw = true;
-                }
-            },
-            .down => {
-                if (selected < items.len - 1) {
-                    selected += 1;
-                    needs_redraw = true;
-                }
-            },
-            .enter, .space => {
-                // Clear the selection display including initial newline
-                const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                // Move up one extra line to account for initial newline
-                try moveCursorUp(total_lines + 1);
-                try clearLine(); // Clear the initial empty line
-                try stdout.print("\n", .{});
-                for (0..total_lines) |_| {
-                    try clearLine();
-                    try stdout.print("\n", .{});
-                }
-                try moveCursorUp(total_lines + 1);
-                
-                return selected;
-            },
-            .escape => {
-                // Clear the selection display including initial newline
-                const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                // Move up one extra line to account for initial newline
-                try moveCursorUp(total_lines + 1);
-                try clearLine(); // Clear the initial empty line
-                try stdout.print("\n", .{});
-                for (0..total_lines) |_| {
-                    try clearLine();
-                    try stdout.print("\n", .{});
-                }
-                try moveCursorUp(total_lines + 1);
-                
-                return null;
-            },
-            .char => {
-                // Handle 'q' for quit
-                if (key_info.char == 'q' or key_info.char == 'Q') {
-                    // Clear the selection display including initial newline
-                    const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                    // Move up one extra line to account for initial newline
-                    try moveCursorUp(total_lines + 1);
-                    try clearLine(); // Clear the initial empty line
-                    try stdout.print("\n", .{});
-                    for (0..total_lines) |_| {
-                        try clearLine();
-                        try stdout.print("\n", .{});
-                    }
-                    try moveCursorUp(total_lines + 1);
-                    
-                    return null;
-                }
-            },
-            .none => continue,
-        }
-        
-        // Redraw if selection changed
-        if (needs_redraw) {
-            // Move back to start of list
-            const redraw_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-            try moveCursorUp(redraw_lines);
-            
-            // Redraw all items
-            for (items, 0..) |item, i| {
-                try clearLine();
-                try renderItem(stdout, item, i == selected, false, options.use_colors, false);
-            }
-            
-            // Redraw instructions
-            if (options.show_instructions) {
-                try clearLine();
-                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter/Space{s} Select  {s}ESC{s} Cancel\n", .{
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                });
-            }
-        }
-    }
 }
 
-/// Display an interactive multi-selection list
-/// Returns array of selected indices or null if cancelled
-pub fn selectMultipleFromList(
+/// Unified interactive selection function
+/// Handles both single and multi-select modes based on options.mode
+pub fn selectFromListUnified(
     allocator: std.mem.Allocator,
     items: []const []const u8,
     options: SelectOptions,
-) !?[]usize {
-    if (items.len == 0) return null;
+) !SelectionResult {
+    if (items.len == 0) return SelectionResult.cancelled;
     
     // Check if we're in a TTY
     if (!isStdinTty() or !isStdoutTty()) {
-        // Fall back to non-interactive mode
-        return null;
+        return SelectionResult.cancelled;
     }
     
     const stdout = std.io.getStdOut().writer();
     var current: usize = 0;
-    var selected = std.ArrayList(bool).init(allocator);
-    defer selected.deinit();
     
-    // Initialize selection state - all unselected
-    try selected.appendNTimes(false, items.len);
+    // Selection state - only used in multi mode
+    var selected: ?std.ArrayList(bool) = null;
+    defer if (selected) |*sel| sel.deinit();
+    
+    if (options.mode == .multi) {
+        selected = std.ArrayList(bool).init(allocator);
+        try selected.?.appendNTimes(false, items.len);
+    }
     
     // Install signal handlers
     var sigaction = posix.Sigaction{
@@ -513,9 +362,7 @@ pub fn selectMultipleFromList(
     };
     var old_sigaction: posix.Sigaction = undefined;
     posix.sigaction(posix.SIG.INT, &sigaction, &old_sigaction);
-    defer {
-        posix.sigaction(posix.SIG.INT, &old_sigaction, null);
-    }
+    defer posix.sigaction(posix.SIG.INT, &old_sigaction, null);
     
     var winch_action = posix.Sigaction{
         .handler = .{ .handler = handleWinch },
@@ -524,9 +371,7 @@ pub fn selectMultipleFromList(
     };
     var old_winch_action: posix.Sigaction = undefined;
     posix.sigaction(posix.SIG.WINCH, &winch_action, &old_winch_action);
-    defer {
-        posix.sigaction(posix.SIG.WINCH, &old_winch_action, null);
-    }
+    defer posix.sigaction(posix.SIG.WINCH, &old_winch_action, null);
     
     // Set up raw mode
     var raw_mode = RawMode{ .original_termios = undefined };
@@ -537,38 +382,40 @@ pub fn selectMultipleFromList(
     try hideCursor();
     defer showCursor() catch {};
     
+    // Helper function to render all items
+    const renderAllItems = struct {
+        fn call(
+            writer: anytype,
+            item_list: []const []const u8,
+            current_idx: usize,
+            selection_state: ?*const std.ArrayList(bool),
+            opts: SelectOptions,
+        ) !void {
+            for (item_list, 0..) |item, i| {
+                const is_selected = if (selection_state) |sel| sel.items[i] else false;
+                try renderItem(writer, item, i == current_idx, is_selected, opts.use_colors, opts.mode);
+            }
+        }
+    }.call;
+    
     // Initial render
     try stdout.print("\n", .{});
-    for (items, 0..) |item, i| {
-        try renderItem(stdout, item, i == current, selected.items[i], options.use_colors, true);
-    }
+    try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
     
+    // Show instructions
     if (options.show_instructions) {
-        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-            if (options.use_colors) colors.yellow else "",
-            if (options.use_colors) colors.reset else "",
-        });
-    }
-    
-    // Input loop
-    while (true) {
-        // Check if terminal was resized
-        if (g_needs_redraw.swap(false, .acq_rel)) {
-            try stdout.print("\x1b[2J\x1b[H", .{}); // Clear screen and move to home
-            
-            // Redraw everything
-            try stdout.print("\n", .{});
-            for (items, 0..) |item, i| {
-                try renderItem(stdout, item, i == current, selected.items[i], options.use_colors, true);
-            }
-            
-            if (options.show_instructions) {
+        switch (options.mode) {
+            .single => {
+                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                    if (options.use_colors) colors.yellow else "",
+                    if (options.use_colors) colors.reset else "",
+                });
+            },
+            .multi => {
                 try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                     if (options.use_colors) colors.yellow else "",
                     if (options.use_colors) colors.reset else "",
@@ -579,6 +426,45 @@ pub fn selectMultipleFromList(
                     if (options.use_colors) colors.yellow else "",
                     if (options.use_colors) colors.reset else "",
                 });
+            },
+        }
+    }
+    
+    // Input loop
+    while (true) {
+        // Check if terminal was resized
+        if (g_needs_redraw.swap(false, .acq_rel)) {
+            try stdout.print("\x1b[2J\x1b[H", .{}); // Clear screen and move to home
+            
+            // Redraw everything
+            try stdout.print("\n", .{});
+            try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
+            
+            if (options.show_instructions) {
+                switch (options.mode) {
+                    .single => {
+                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                        });
+                    },
+                    .multi => {
+                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                        });
+                    },
+                }
             }
         }
         
@@ -599,25 +485,21 @@ pub fn selectMultipleFromList(
                 }
             },
             .space => {
-                // Toggle selection
-                selected.items[current] = !selected.items[current];
-                needs_redraw = true;
+                switch (options.mode) {
+                    .single => {
+                        // SPACE does nothing in single-select mode
+                        continue;
+                    },
+                    .multi => {
+                        // Toggle selection in multi-select mode
+                        if (selected) |*sel| {
+                            sel.items[current] = !sel.items[current];
+                            needs_redraw = true;
+                        }
+                    },
+                }
             },
             .enter => {
-                // Confirm selection or select current if nothing selected
-                var has_selection = false;
-                for (selected.items) |is_selected| {
-                    if (is_selected) {
-                        has_selection = true;
-                        break;
-                    }
-                }
-                
-                if (!has_selection) {
-                    // Nothing selected, select current item
-                    selected.items[current] = true;
-                }
-                
                 // Clear display
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
                 try moveCursorUp(total_lines + 1);
@@ -629,15 +511,38 @@ pub fn selectMultipleFromList(
                 }
                 try moveCursorUp(total_lines + 1);
                 
-                // Build result array
-                var result = std.ArrayList(usize).init(allocator);
-                for (selected.items, 0..) |is_selected, i| {
-                    if (is_selected) {
-                        try result.append(i);
-                    }
+                switch (options.mode) {
+                    .single => {
+                        return SelectionResult{ .single = current };
+                    },
+                    .multi => {
+                        if (selected) |*sel| {
+                            // Check if anything is selected
+                            var has_selection = false;
+                            for (sel.items) |is_selected_item| {
+                                if (is_selected_item) {
+                                    has_selection = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!has_selection and !options.allow_empty) {
+                                // Nothing selected, select current item
+                                sel.items[current] = true;
+                            }
+                            
+                            // Build result array
+                            var result = std.ArrayList(usize).init(allocator);
+                            for (sel.items, 0..) |is_selected_item, i| {
+                                if (is_selected_item) {
+                                    try result.append(i);
+                                }
+                            }
+                            
+                            return SelectionResult{ .multiple = try result.toOwnedSlice() };
+                        }
+                    },
                 }
-                
-                return try result.toOwnedSlice();
             },
             .escape => {
                 // Clear display
@@ -651,7 +556,7 @@ pub fn selectMultipleFromList(
                 }
                 try moveCursorUp(total_lines + 1);
                 
-                return null;
+                return SelectionResult.cancelled;
             },
             .char => {
                 if (key_info.char == 'q' or key_info.char == 'Q') {
@@ -666,7 +571,7 @@ pub fn selectMultipleFromList(
                     }
                     try moveCursorUp(total_lines + 1);
                     
-                    return null;
+                    return SelectionResult.cancelled;
                 }
             },
             .none => continue,
@@ -678,27 +583,62 @@ pub fn selectMultipleFromList(
             try moveCursorUp(redraw_lines);
             
             // Redraw all items
-            for (items, 0..) |item, i| {
-                try clearLine();
-                try renderItem(stdout, item, i == current, selected.items[i], options.use_colors, true);
-            }
+            try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
             
             // Redraw instructions
             if (options.show_instructions) {
                 try clearLine();
-                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                });
+                switch (options.mode) {
+                    .single => {
+                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                        });
+                    },
+                    .multi => {
+                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                            if (options.use_colors) colors.yellow else "",
+                            if (options.use_colors) colors.reset else "",
+                        });
+                    },
+                }
             }
         }
     }
+}
+
+/// Display an interactive multi-selection list (legacy API)
+/// Returns array of selected indices or null if cancelled  
+/// For new code, use selectFromListUnified
+pub fn selectMultipleFromList(
+    allocator: std.mem.Allocator,
+    items: []const []const u8,
+    options: SelectOptions,
+) !?[]usize {
+    const unified_options = SelectOptions{
+        .mode = .multi,
+        .prompt = options.prompt,
+        .show_instructions = options.show_instructions,
+        .use_colors = options.use_colors,
+        .allow_empty = options.allow_empty,
+    };
+    
+    const result = try selectFromListUnified(allocator, items, unified_options);
+    return switch (result) {
+        .multiple => |indices| indices,
+        .cancelled => null,
+        .single => unreachable, // Should never happen in multi mode
+    };
 }
 
 /// Format worktree option for display

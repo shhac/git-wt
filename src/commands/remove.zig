@@ -31,7 +31,7 @@ pub fn printHelp() !void {
     try stdout.print("  git-wt rm --no-tty               # Use number-based selection\n\n", .{});
     try stdout.print("Interactive mode:\n", .{});
     try stdout.print("  ↑/↓       Navigate selection\n", .{});
-    try stdout.print("  Space     Toggle selection (☑/☐)\n", .{});
+    try stdout.print("  Space     Toggle selection ([*]/[ ])\n", .{});
     try stdout.print("  Enter     Confirm current selection\n", .{});
     try stdout.print("  ESC/Q     Cancel operation\n\n", .{});
     try stdout.print("This command will:\n", .{});
@@ -380,9 +380,10 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
             allocator,
             options_list.items,
             .{
+                .mode = .multi,
                 .show_instructions = true,
                 .use_colors = true,
-                .multi_select = true,
+                .allow_empty = false,
             },
         );
         
