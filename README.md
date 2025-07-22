@@ -22,7 +22,7 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 ### Build from source
 
 ```bash
-git clone https://github.com/yourusername/git-wt.git
+git clone <repository-url>
 cd git-wt
 
 # Debug build (for development)
@@ -544,6 +544,18 @@ git cherry-pick --abort  # or --continue
 4. Push to the branch
 5. Create a Pull Request
 
+Please make sure to:
+- Follow the existing code style and patterns
+- Add tests for new features
+- Update documentation as needed
+- Ensure all tests pass with `zig build test`
+
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with [Zig](https://ziglang.org/) for performance and reliability
+- Inspired by the need for better git worktree management workflows
+- Special thanks to the Zig community for excellent tooling and documentation
