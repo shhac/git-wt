@@ -63,7 +63,7 @@ zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows
 ### Creating a release
 
 ```bash
-# 1. Update version in src/main.zig
+# 1. Update version in build.zig if needed
 # 2. Build for all platforms
 ./scripts/build-release.sh  # (create this script with above commands)
 
@@ -72,6 +72,19 @@ gh release create v0.1.0 \
   --title "v0.1.0" \
   --notes "Initial release" \
   zig-out/bin/git-wt-*
+```
+
+### Version management
+
+The version is automatically generated from the build system:
+
+```bash
+# Check current version
+git-wt --version
+git-wt -v
+
+# Set custom version during build
+zig build -Dversion="1.2.3"
 ```
 
 ## Setup Shell Integration
@@ -134,9 +147,13 @@ git-wt rm feature-branch -n
 ```
 
 This will:
-1. Find the worktree for the specified branch
-2. Remove the worktree directory
-3. Optionally delete the associated branch (interactive mode only)
+1. Validate the branch name against git naming rules
+2. Find the worktree for the specified branch
+3. Check for uncommitted changes (unless --force is used)
+4. Remove the worktree directory
+5. Optionally delete the associated branch (interactive mode only)
+
+**Note**: The remove command supports sanitized branch names (slashes converted to hyphens) for compatibility with filesystem paths.
 
 ### Navigate to a worktree
 
@@ -147,15 +164,34 @@ git-wt go
 # Direct navigation
 git-wt go main              # Go to main repository
 git-wt go feature-branch    # Go to specific worktree
+
+# Additional options
+git-wt go --no-tty          # Force number-based selection (disable arrow keys)
+git-wt go --show-command    # Output shell cd commands instead of navigating
+git-wt go --no-color        # Disable colored output
+git-wt go --plain           # Output plain paths only (one per line)
 ```
+
+**Interactive Features:**
+- Arrow key navigation (when TTY is available)
+- Terminal resize handling (SIGWINCH support)
+- Real-time display updates
+- Graceful fallback to number-based selection
 
 ## Configuration Files
 
-The following files are automatically copied when creating new worktrees:
+The following files and directories are automatically copied when creating new worktrees:
 - `.claude` - Claude Code configuration
-- `.env`, `.env.local`, `.env.development`, `.env.test`, `.env.production`
+- `.env*` - All environment files (`.env`, `.env.local`, `.env.development`, `.env.test`, `.env.production`)
 - `CLAUDE.local.md` - Local Claude instructions
-- `.ai-cache` - AI cache directory
+- `.ai-cache` - AI cache directory (entire directory)
+
+**CLAUDE Files Support:**
+The tool has special support for Claude Code integration:
+- Automatically detects Claude configuration files
+- Preserves AI cache for faster Claude startup
+- Maintains local instructions across worktrees
+- Optional Claude auto-start after worktree creation (interactive mode only)
 
 ## How It Works
 
@@ -206,26 +242,39 @@ git-wt --non-interactive go feature-branch
 
 ### End-to-End Testing
 
-A simple test script is provided:
+Multiple test scripts are provided:
 
 ```bash
 # Run non-interactive tests
 ./test-non-interactive.sh
+
+# Test shell integration (requires shell alias setup)
+./test-shell-integration.sh
+
+# Run integration tests
+zig build test-integration
 ```
 
-The test script will:
+The test scripts will:
 - Build the binary
-- Create a temporary git repository
-- Test all commands in non-interactive mode
-- Clean up after itself
+- Create temporary git repositories in `.e2e-test` directory
+- Test all commands in various modes
+- Validate actual outcomes (not just command execution)
+- Clean up after themselves
+
+**Test Directory:**
+The `.e2e-test` directory is used for all test data and is gitignored to prevent test artifacts from being committed.
 
 ## Development
 
 See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
 
 ```bash
-# Run tests
+# Run all tests
 zig build test
+
+# Run integration tests specifically
+zig build test-integration
 
 # Build debug version
 zig build
@@ -235,35 +284,214 @@ zig build run -- new test-branch
 
 # Enable debug output
 git-wt --debug new test-branch
+
+# Build with custom version
+zig build -Dversion="dev-1.0.0"
 ```
+
+### Debug Mode
+
+Enable debug output with the `--debug` flag to see detailed information about:
+- Git operations and their output
+- File system operations
+- Lock acquisition and release
+- Configuration file copying
+- Process execution details
+
+### Concurrent Operation Protection
+
+The tool uses file-based locking to prevent concurrent worktree operations:
+- Lock files are created in `.git/git-wt.lock`
+- Automatic stale lock cleanup (detects if process died)
+- 30-second timeout for lock acquisition
+- Clean error messages for lock conflicts
 
 ### Project Structure
 
 ```
 src/
-├── main.zig           # CLI entry point and command dispatch
-├── commands/          # Command implementations
-│   ├── new.zig       
-│   ├── remove.zig    
-│   └── go.zig        
-└── utils/            # Shared utilities
-    ├── git.zig       # Git operations
-    ├── fs.zig        # Filesystem helpers
-    ├── colors.zig    # Terminal colors
-    ├── input.zig     # User input handling
-    └── process.zig   # Process execution
+├── main.zig                  # CLI entry point and command dispatch
+├── commands/                 # Command implementations
+│   ├── new.zig              # Create worktree with setup
+│   ├── remove.zig           # Remove worktree with safety checks
+│   └── go.zig               # Navigate between worktrees
+├── utils/                   # Shared utilities
+│   ├── git.zig              # Git operations and repository info
+│   ├── fs.zig               # Filesystem helpers and config copying
+│   ├── colors.zig           # Terminal colors and formatted output
+│   ├── input.zig            # User input handling and confirmations
+│   ├── process.zig          # External command execution
+│   ├── validation.zig       # Branch name and path validation
+│   ├── lock.zig             # File-based locking for concurrent operations
+│   ├── fd.zig               # File descriptor 3 (fd3) shell integration
+│   ├── interactive.zig      # Interactive UI with arrow key navigation
+│   ├── time.zig             # Time formatting utilities
+│   └── debug.zig            # Debug output utilities
+└── integration_tests.zig    # Integration tests without git dependencies
 ```
+
+## Command Reference
+
+### Global Options
+
+Available for all commands:
+
+```bash
+git-wt --help                    # Show general help
+git-wt --version, -v             # Show version information
+git-wt --debug                   # Enable debug output
+git-wt --non-interactive, -n     # Disable all interactive prompts
+git-wt --alias <name>            # Generate shell integration function
+```
+
+### Command-Specific Options
+
+#### `git-wt new`
+```bash
+git-wt new <branch-name>
+  -h, --help                     # Show command help
+  -n, --non-interactive          # Skip all prompts (no Claude startup)
+  -p, --parent-dir <path>        # Custom parent directory for worktree
+```
+
+#### `git-wt rm`
+```bash
+git-wt rm [branch-name]
+  -h, --help                     # Show command help
+  -n, --non-interactive          # Skip confirmation prompts
+  -f, --force                    # Skip uncommitted changes check
+```
+
+#### `git-wt go`
+```bash
+git-wt go [branch-name]
+  -h, --help                     # Show command help
+  -n, --non-interactive          # List worktrees without interaction
+  --no-tty                       # Force number-based selection
+  --show-command                 # Output shell cd commands
+  --no-color                     # Disable colored output
+  --plain                        # Output plain paths only
+```
+
+### Environment Variables
+
+- `NO_COLOR=1` - Disable colored output globally
+- `DEBUG=1` - Enable debug output (alternative to `--debug`)
+
+### Exit Codes
+
+- `0` - Success
+- `1` - General error (invalid arguments, git errors, etc.)
+- `2` - Not in a git repository
+- `3` - Branch already exists (new command)
+- `4` - Worktree not found (go/rm commands)
+- `5` - Lock timeout (concurrent operation)
+
+## Advanced Features
+
+### Shell Integration (fd3 Mechanism)
+
+The tool uses a sophisticated shell integration system via file descriptor 3 (fd3):
+
+```bash
+# The shell alias function sets up fd3 for communication
+eval "$(git-wt --alias gwt)"
+
+# Now gwt commands can change the shell's directory
+gwt go feature-branch    # Actually changes shell directory
+gwt new my-feature      # Creates worktree AND navigates to it
+```
+
+**How it works:**
+1. The alias function opens fd3 for reading
+2. git-wt detects fd3 and writes cd commands to it
+3. The shell function reads from fd3 and executes the commands
+4. This allows the CLI tool to change the parent shell's directory
+
+### Locking Mechanism
+
+Protects against concurrent worktree operations:
+- **Lock file location**: `.git/git-wt.lock`
+- **Lock timeout**: 30 seconds
+- **Stale lock detection**: Automatically cleans up locks from dead processes
+- **Process ID tracking**: Stores PID and timestamp in lock files
+
+### Branch Name Validation
+
+Comprehensive validation following git standards:
+- **Invalid characters**: No spaces, control characters, or `~^:?*[`
+- **Path components**: No `.` or `..` components
+- **Reserved names**: Rejects `HEAD`, `-`, `@`
+- **Format rules**: No consecutive dots, proper start/end characters
+- **Case sensitivity**: Detects conflicts on case-insensitive filesystems
+
+### Path Sanitization
+
+Handles complex branch names safely:
+- **Slash conversion**: `feature/auth` → `feature-auth` for filesystem compatibility
+- **Directory creation**: Supports subdirectory structures when using `--parent-dir`
+- **Display consistency**: Shows relative names consistently across commands
 
 ## Troubleshooting
 
 ### "Not in a git repository" error
 Make sure you're running the command from within a git repository.
 
+### "Another git-wt operation is in progress" error
+Another instance is running, or a stale lock exists:
+```bash
+# Wait for the operation to complete, or
+# Remove stale lock manually (only if process is definitely dead)
+rm .git/git-wt.lock
+```
+
 ### Colors not showing
-The tool uses ANSI escape codes. Make sure your terminal supports them. You can disable colors by setting `NO_COLOR=1`.
+The tool uses ANSI escape codes. Options to fix:
+- Ensure your terminal supports ANSI colors
+- Use `--no-color` flag to disable colors
+- Set `NO_COLOR=1` environment variable
+
+### Interactive mode not working
+Requires TTY for both input and output:
+- Use `--no-tty` flag to force number-based selection
+- Check that stdin/stdout are connected to a terminal
+- In scripts, use `--non-interactive` flag
+
+### Shell integration not working
+Ensure the alias is properly set up:
+```bash
+# Check if alias exists
+type gwt
+
+# Recreate alias
+eval "$(git-wt --alias gwt)"
+
+# Add to shell configuration permanently
+echo 'eval "$(git-wt --alias gwt)"' >> ~/.zshrc
+```
 
 ### nvm/yarn commands not found
 These are optional dependencies. The tool will skip them if not installed.
+
+### Case-insensitive filesystem conflicts
+On macOS/Windows, branch names differing only in case will conflict:
+```bash
+# This will fail if 'Feature' directory already exists
+git-wt new feature
+```
+Use different branch names to avoid conflicts.
+
+### "Repository is not in a clean state" error
+Complete any ongoing git operations:
+```bash
+# Check repository status
+git status
+
+# Complete or abort ongoing operations
+git merge --abort     # or --continue
+git rebase --abort    # or --continue
+git cherry-pick --abort  # or --continue
+```
 
 ## Contributing
 

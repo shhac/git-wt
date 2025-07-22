@@ -31,6 +31,7 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #28: Time Formatting Edge Cases (handles "just now" and decades)
 - ✅ Bug #29: Path Display Inconsistency (standardized to display names for consistency)
 - ✅ Bug #30: Missing --version Flag Validation (version generated from build system)
+- ✅ Bug #18: Undocumented Behavior (comprehensive documentation added for all features including fd3, CLAUDE files, locking, validation, flags, and troubleshooting)
 
 
 ## Edge Cases
@@ -53,11 +54,6 @@ The following issues have been resolved (sorted numerically):
 ## Platform-Specific Issues
 
 ## Documentation Issues
-
-### 18. Undocumented Behavior
-- **Issue**: Several features lack documentation (e.g., fd3 mechanism, CLAUDE files)
-- **Impact**: Users don't know about features or use them incorrectly
-- **Fix**: Comprehensive documentation
 
 ## Testing Gaps
 
