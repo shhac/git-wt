@@ -75,7 +75,6 @@ pub const CONFIG_FILES = [_][]const u8{
     ".env.production",
     "CLAUDE.local.md",
     ".ai-cache",
-    "node_modules",
 };
 
 /// Construct worktree path based on repository structure
@@ -203,29 +202,6 @@ pub fn pathExists(path: []const u8) bool {
     return true;
 }
 
-/// Check if we have node.js project files
-pub fn hasNodeProject(path: []const u8) !bool {
-    return try fileExists(path, "package.json");
-}
-
-/// Check if package.json uses yarn
-pub fn usesYarn(allocator: std.mem.Allocator, path: []const u8) !bool {
-    const package_json = try fs.path.join(allocator, &.{ path, "package.json" });
-    defer allocator.free(package_json);
-    
-    const file = fs.cwd().openFile(package_json, .{}) catch |err| switch (err) {
-        error.FileNotFound => return false,
-        else => return err,
-    };
-    defer file.close();
-    
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024); // 1MB max
-    defer allocator.free(content);
-    
-    // Simple check for packageManager field containing yarn
-    return std.mem.indexOf(u8, content, "\"packageManager\"") != null and
-           std.mem.indexOf(u8, content, "\"yarn") != null;
-}
 
 /// Extract a user-friendly display path from an absolute worktree path
 /// Returns the branch name (basename) for display purposes, making output consistent

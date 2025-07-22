@@ -32,12 +32,12 @@ See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this p
 src/
 ├── main.zig           # Entry point, command dispatch using command table pattern
 ├── commands/
-│   ├── new.zig       # Create worktree with setup (config copy, yarn)
+│   ├── new.zig       # Create worktree with setup (config copy)
 │   ├── remove.zig    # Remove worktree with safety checks
 │   └── go.zig        # Navigate between worktrees (interactive/direct)
 └── utils/
     ├── git.zig       # Git command wrapper, repository info
-    ├── fs.zig        # File operations, config copying, Node.js detection
+    ├── fs.zig        # File operations, config copying
     ├── colors.zig    # ANSI color codes and formatted printing
     ├── input.zig     # User input utilities (confirmations, line reading)
     └── process.zig   # External command execution helpers
@@ -163,8 +163,6 @@ When creating a new worktree, automatically copies:
 - `CLAUDE.local.md` - Local Claude instructions  
 - `.ai-cache` - AI cache directory
 
-### Node.js Integration
-- Detects yarn in package.json and runs `yarn install`
 
 ### User Experience
 - **Colored output** for better visibility and status clarity

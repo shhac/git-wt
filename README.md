@@ -9,7 +9,6 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 - **Navigate between worktrees** interactively or directly
 - **Support for branch names with slashes** (creates subdirectory structures)
 - Automatic copying of configuration files (.env, .claude, etc.)
-- Node.js project support (yarn detection and installation)
 - Colored terminal output for better UX
 
 ## Installation
@@ -17,7 +16,6 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 ### Requirements
 - Zig 0.14.1 or later
 - Git (obviously!)
-- Optional: yarn for Node.js dependency installation
 
 ### Build from source
 
@@ -127,8 +125,7 @@ This will:
 1. Create a new worktree at `../repo-trees/feature-branch` (or subdirectories for slashes)
 2. Create and checkout the new branch
 3. Copy configuration files from the main repository
-4. Run `yarn install` if package.json with yarn is detected
-5. Optionally start Claude
+4. Optionally start Claude
 
 ### Remove a worktree
 
@@ -469,8 +466,6 @@ eval "$(git-wt --alias gwt)"
 echo 'eval "$(git-wt --alias gwt)"' >> ~/.zshrc
 ```
 
-### yarn command not found
-This is an optional dependency. The tool will skip yarn install if yarn is not available.
 
 ### Case-insensitive filesystem conflicts
 On macOS/Windows, branch names differing only in case will conflict:

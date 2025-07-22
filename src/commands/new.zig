@@ -31,9 +31,8 @@ pub fn printHelp() !void {
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. Create a new worktree in ../repo-trees/branch-name\n", .{});
     try stdout.print("  2. Create and checkout the new branch\n", .{});
-    try stdout.print("  3. Copy configuration files (.env, .claude, node_modules, etc.)\n", .{});
-    try stdout.print("  4. Install dependencies if yarn project detected\n", .{});
-    try stdout.print("  5. Optionally start claude (interactive mode only)\n\n", .{});
+    try stdout.print("  3. Copy configuration files (.env, .claude, etc.)\n", .{});
+    try stdout.print("  4. Optionally start claude (interactive mode only)\n\n", .{});
     try stdout.print("Note: Parent directory must exist, be writable, and not be inside\n", .{});
     try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }
@@ -244,15 +243,6 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     // Change to the new worktree directory
     try process.changeCurDir(worktree_path);
     try colors.printDisplayPath(stdout, "📁 Changed to worktree:", worktree_path, allocator);
-    
-    // Check for package.json with yarn
-    if (try fs_utils.hasNodeProject(worktree_path) and try fs_utils.usesYarn(allocator, worktree_path)) {
-        try colors.printInfo(stdout, "📦 Found package.json with yarn, running yarn install...", .{});
-        
-        if (try proc.runSilent(allocator, &.{"yarn"})) {
-            try colors.printSuccess(stdout, "Dependencies installed", .{});
-        }
-    }
     
     // Ask if user wants to run claude (skip in non-interactive mode)
     if (!non_interactive) {
