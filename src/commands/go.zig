@@ -308,9 +308,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 }
                 
                 const selected = worktrees_with_time[selection - 1].worktree;
-                if (show_command) {
+                
+                // Use fd3 if available for shell integration
+                if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{selected.path});
+                } else if (show_command) {
+                    // If fd3 is not available but show_command is requested, output to stdout
+                    try stdout.print("cd {s}\n", .{selected.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
