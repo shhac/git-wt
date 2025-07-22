@@ -84,10 +84,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 std.mem.eql(u8, wt.branch, branch) or std.mem.endsWith(u8, wt.path, branch);
                 
             if (matches) {
-                if (show_command) {
-                    // Use fd 3 if available for cleaner shell integration
+                // Use fd3 if available for shell integration
+                if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{wt.path});
+                } else if (show_command) {
+                    // If fd3 is not available but show_command is requested, output to stdout
+                    try stdout.print("cd {s}\n", .{wt.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", wt.path, allocator);
                     try process.changeCurDir(wt.path);
