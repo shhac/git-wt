@@ -190,6 +190,13 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
             debug.print("NO_COLOR: not set", .{});
         }
         
+        if (std.process.getEnvVarOwned(allocator, "GWT_USE_FD3")) |v| {
+            defer allocator.free(v);
+            debug.print("GWT_USE_FD3: {s}", .{v});
+        } else |_| {
+            debug.print("GWT_USE_FD3: not set", .{});
+        }
+        
         // Git version
         if (git.execTrimmed(allocator, &.{"--version"})) |version| {
             defer allocator.free(version);
