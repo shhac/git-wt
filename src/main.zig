@@ -13,6 +13,7 @@ const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
 const cmd_go = @import("commands/go.zig");
 const cmd_list = @import("commands/list.zig");
+const cmd_alias = @import("commands/alias.zig");
 
 const Command = struct {
     name: []const u8,
@@ -27,6 +28,7 @@ const commands = [_]Command{
     .{ .name = "rm", .min_args = 0, .usage = "git-wt rm [branch-name]", .execute = executeRemove, .help = cmd_remove.printHelp },
     .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
     .{ .name = "list", .min_args = 0, .usage = "git-wt list", .execute = executeList, .help = cmd_list.printHelp },
+    .{ .name = "alias", .min_args = 1, .usage = "git-wt alias <name> [options]", .execute = executeAlias, .help = cmd_alias.printHelp },
 };
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
@@ -92,6 +94,10 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_inter
     try cmd_list.execute(allocator, no_color, plain);
 }
 
+fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+    try cmd_alias.execute(allocator, args, non_interactive, no_tty);
+}
+
 pub fn main() void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -123,11 +129,22 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     var filtered_args = std.ArrayList([]const u8).init(allocator);
     defer filtered_args.deinit();
     
+    // Check if this is the alias command (needs special handling)
+    const is_alias_command = args.len >= 2 and std.mem.eql(u8, args[1], "alias");
+    
     for (args) |arg| {
         if (std.mem.eql(u8, arg, "--non-interactive") or std.mem.eql(u8, arg, "-n")) {
             non_interactive = true;
+            // Pass through to alias command
+            if (is_alias_command) {
+                try filtered_args.append(arg);
+            }
         } else if (std.mem.eql(u8, arg, "--no-tty")) {
             no_tty = true;
+            // Pass through to alias command
+            if (is_alias_command) {
+                try filtered_args.append(arg);
+            }
         } else if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
             debug.setEnabled(true);
@@ -213,16 +230,6 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
         return;
     }
 
-    if (std.mem.eql(u8, arg1, "--alias")) {
-        if (final_args.len < 3) {
-            printAliasUsage();
-            return;
-        }
-        const exe_path = try std.fs.selfExePathAlloc(allocator);
-        defer allocator.free(exe_path);
-        printAliasFunction(final_args[2], exe_path);
-        return;
-    }
 
     const command_args = if (final_args.len > 2) final_args[2..] else &[_][]const u8{};
     
@@ -263,12 +270,12 @@ fn printUsage() void {
     print("  rm [branch]   Remove worktree (interactive if no branch)\n", .{});
     print("  go [branch]   Navigate to worktree\n", .{});
     print("  list          List all worktrees\n", .{});
+    print("  alias <name>  Generate shell function wrapper\n", .{});
     print("\nGlobal flags:\n", .{});
     print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
     print("  --no-tty               Force number-based selection (disable arrow keys)\n", .{});
     print("  -h, --help             Show help\n", .{});
     print("  -v, --version          Show version\n", .{});
-    print("  --alias <name>         Generate shell function for directory navigation\n", .{});
     print("  --debug                Show diagnostic information\n", .{});
     print("\nUse 'git-wt --help' for more information\n", .{});
     print("Use 'git-wt --help setup' for shell integration setup\n", .{});
@@ -285,6 +292,7 @@ fn printHelp() void {
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
     print("  git-wt list                 List all worktrees with details\n", .{});
     print("  git-wt list --plain         List worktrees in machine-readable format\n", .{});
+    print("  git-wt alias gwt            Generate shell function for 'gwt' command\n", .{});
     print("\nFor shell integration setup, use: git-wt --help setup\n", .{});
 }
 
@@ -294,13 +302,13 @@ fn printSetupHelp() void {
     print("a shell function wrapper to enable proper directory navigation.\n\n", .{});
     print("SETUP INSTRUCTIONS:\n", .{});
     print("\n1. Generate the shell function:\n", .{});
-    print("   git-wt --alias gwt\n", .{});
+    print("   git-wt alias gwt\n", .{});
     print("\n2. Add to your shell configuration:\n", .{});
     print("   For zsh (.zshrc):\n", .{});
-    print("     echo 'eval \"$(git-wt --alias gwt)\"' >> ~/.zshrc\n", .{});
+    print("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.zshrc\n", .{});
     print("     source ~/.zshrc\n", .{});
     print("\n   For bash (.bashrc):\n", .{});
-    print("     echo 'eval \"$(git-wt --alias gwt)\"' >> ~/.bashrc\n", .{});
+    print("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.bashrc\n", .{});
     print("     source ~/.bashrc\n", .{});
     print("\n3. Use the alias for directory navigation:\n", .{});
     print("   gwt new feature-branch    # Creates worktree AND navigates to it\n", .{});
@@ -308,55 +316,14 @@ fn printSetupHelp() void {
     print("   gwt go feature-branch    # Actually changes to worktree\n", .{});
     print("   gwt rm feature-branch    # Removes the feature-branch worktree\n", .{});
     print("\nNOTE: You can use any alias name instead of 'gwt':\n", .{});
-    print("  git-wt --alias wt        # Creates 'wt' alias\n", .{});
-    print("  git-wt --alias gw        # Creates 'gw' alias\n", .{});
+    print("  git-wt alias wt        # Creates 'wt' alias\n", .{});
+    print("  git-wt alias gw        # Creates 'gw' alias\n", .{});
+    print("\nAdvanced options:\n", .{});
+    print("  git-wt alias gwt --plain              # Always use plain output\n", .{});
+    print("  git-wt alias gwt --parent-dir '../{{repo}}-trees'  # Custom parent dir\n", .{});
     print("\nWithout this setup, git-wt commands will work but won't change directories.\n", .{});
 }
 
-fn printAliasUsage() void {
-    print("Usage: git-wt --alias <alias-name>\n\n", .{});
-    print("Generate shell function for proper directory navigation.\n\n", .{});
-    print("Example:\n", .{});
-    print("  # Add to your .zshrc or .bashrc:\n", .{});
-    print("  eval \"$(git-wt --alias gwt)\"\n\n", .{});
-    print("  # Then use:\n", .{});
-    print("  gwt go feature-branch    # This will actually change directories\n", .{});
-}
-
-fn printAliasFunction(alias_name: []const u8, exe_path: []const u8) void {
-    const stdout = std.io.getStdOut().writer();
-    stdout.print("# Shell function wrapper for git-wt to enable directory navigation\n", .{}) catch return;
-    stdout.print("{s}() {{\n", .{alias_name}) catch return;
-    stdout.print("    local git_wt_bin=\"{s}\"\n", .{exe_path}) catch return;
-    stdout.print("    if [ \"$1\" = \"go\" ]; then\n", .{}) catch return;
-    stdout.print("        shift\n", .{}) catch return;
-    stdout.print("        # Check for help flag\n", .{}) catch return;
-    stdout.print("        for arg in \"$@\"; do\n", .{}) catch return;
-    stdout.print("            if [[ \"$arg\" = \"--help\" ]] || [[ \"$arg\" = \"-h\" ]]; then\n", .{}) catch return;
-    stdout.print("                \"$git_wt_bin\" go \"$@\"\n", .{}) catch return;
-    stdout.print("                return\n", .{}) catch return;
-    stdout.print("            fi\n", .{}) catch return;
-    stdout.print("        done\n", .{}) catch return;
-    stdout.print("        # Run go command with fd3 support\n", .{}) catch return;
-    stdout.print("        local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"$@\" 3>&1 1>&2)\n", .{}) catch return;
-    stdout.print("        if [ $? -eq 0 ] && [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;
-    stdout.print("            eval \"$cd_cmd\"\n", .{}) catch return;
-    stdout.print("        fi\n", .{}) catch return;
-    stdout.print("    elif [ \"$1\" = \"new\" ]; then\n", .{}) catch return;
-    stdout.print("        shift\n", .{}) catch return;
-    stdout.print("        local branch=\"$1\"\n", .{}) catch return;
-    stdout.print("        \"$git_wt_bin\" new \"$@\"\n", .{}) catch return;
-    stdout.print("        if [ $? -eq 0 ] && [ -n \"$branch\" ] && [[ \"$branch\" != -* ]]; then\n", .{}) catch return;
-    stdout.print("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --show-command \"$branch\" 3>&1 1>&2)\n", .{}) catch return;
-    stdout.print("            if [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n", .{}) catch return;
-    stdout.print("                eval \"$cd_cmd\"\n", .{}) catch return;
-    stdout.print("            fi\n", .{}) catch return;
-    stdout.print("        fi\n", .{}) catch return;
-    stdout.print("    else\n", .{}) catch return;
-    stdout.print("        \"$git_wt_bin\" \"$@\"\n", .{}) catch return;
-    stdout.print("    fi\n", .{}) catch return;
-    stdout.print("}}\n", .{}) catch return;
-}
 
 test {
     _ = @import("utils/test_all.zig");

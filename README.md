@@ -7,6 +7,8 @@ A Zig-based CLI tool for managing git worktrees with enhanced features like auto
 - **Create worktrees** with automatic branch creation and setup
 - **Remove worktrees** safely with branch cleanup options
 - **Navigate between worktrees** interactively or directly
+- **List all worktrees** with details or in machine-readable format
+- **Generate shell aliases** with customizable flags and parent directories
 - **Support for branch names with slashes** (creates subdirectory structures)
 - Automatic copying of configuration files (.env, .claude, etc.)
 - Colored terminal output for better UX
@@ -95,10 +97,16 @@ git-wt --help setup
 
 Quick setup:
 ```bash
-# Add to your shell configuration
-echo 'eval "$(git-wt --alias gwt)"' >> ~/.zshrc  # for zsh
-echo 'eval "$(git-wt --alias gwt)"' >> ~/.bashrc # for bash
+# Generate and add to your shell configuration
+echo 'eval "$(git-wt alias gwt)"' >> ~/.zshrc  # for zsh
+echo 'eval "$(git-wt alias gwt)"' >> ~/.bashrc # for bash
 source ~/.zshrc  # or ~/.bashrc
+
+# Advanced options
+git-wt alias gwt --no-tty          # Always force number-based selection
+git-wt alias gwt --plain           # Always use plain output
+git-wt alias gwt --parent-dir "../my-worktrees"  # Custom parent directory
+git-wt alias gwt --parent-dir "../{repo}-trees"  # Dynamic parent with repo name
 ```
 
 Then use `gwt` instead of `git-wt` for commands that change directories:
@@ -173,6 +181,36 @@ git-wt go --plain           # Output plain paths only (one per line)
 - Terminal resize handling (SIGWINCH support)
 - Real-time display updates
 - Graceful fallback to number-based selection
+
+### List all worktrees
+
+```bash
+# List all worktrees with details
+git-wt list
+
+# Plain output (machine-readable, one path per line)
+git-wt list --plain
+
+# Without colors
+git-wt list --no-color
+```
+
+### Generate shell alias
+
+```bash
+# Generate basic alias
+git-wt alias gwt
+
+# With forwarded flags
+git-wt alias gwt --no-tty           # Always force number-based selection
+git-wt alias gwt --non-interactive  # Always run without prompts
+git-wt alias gwt --plain            # Always use plain output
+
+# With custom parent directory
+git-wt alias gwt --parent-dir "../my-worktrees"    # Static path
+git-wt alias gwt --parent-dir "../{repo}-trees"    # Dynamic with repo name
+git-wt alias gwt --parent-dir "~/worktrees/{repo}" # Home directory with repo name
+```
 
 ## Configuration Files
 
@@ -337,7 +375,7 @@ git-wt --help                    # Show general help
 git-wt --version, -v             # Show version information
 git-wt --debug                   # Enable debug output
 git-wt --non-interactive, -n     # Disable all interactive prompts
-git-wt --alias <name>            # Generate shell integration function
+git-wt --no-tty                  # Force number-based selection (disable arrow keys)
 ```
 
 ### Command-Specific Options
@@ -369,6 +407,17 @@ git-wt go [branch-name]
   --plain                        # Output plain paths only
 ```
 
+#### `git-wt alias`
+```bash
+git-wt alias <name> [options]
+  -h, --help                     # Show command help
+  --no-tty                       # Forward --no-tty flag to all commands
+  -n, --non-interactive          # Forward --non-interactive flag to all commands
+  --plain                        # Forward --plain flag for machine-readable output
+  -p, --parent-dir <path>        # Set default parent directory for worktrees
+                                 # Supports {repo} template substitution
+```
+
 ### Environment Variables
 
 - `NO_COLOR=1` - Disable colored output globally
@@ -390,8 +439,8 @@ git-wt go [branch-name]
 The tool uses a sophisticated shell integration system via file descriptor 3 (fd3):
 
 ```bash
-# The shell alias function sets up fd3 for communication
-eval "$(git-wt --alias gwt)"
+# The alias command generates a shell function for integration
+eval "$(git-wt alias gwt)"
 
 # Now gwt commands can change the shell's directory
 gwt go feature-branch    # Actually changes shell directory
@@ -460,10 +509,10 @@ Ensure the alias is properly set up:
 type gwt
 
 # Recreate alias
-eval "$(git-wt --alias gwt)"
+eval "$(git-wt alias gwt)"
 
 # Add to shell configuration permanently
-echo 'eval "$(git-wt --alias gwt)"' >> ~/.zshrc
+echo 'eval "$(git-wt alias gwt)"' >> ~/.zshrc
 ```
 
 
