@@ -249,21 +249,22 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         if (try input.confirm("\nWould you like to start claude?", true)) {
             try colors.printSuccess(stdout, "🚀 Starting claude...", .{});
             
-            // Start claude using the shell to properly detach it
-            // Using 'exec' to replace the shell process with claude
-            // and '&' to run in background
-            const shell_cmd = try std.fmt.allocPrint(allocator, "exec claude &", .{});
-            defer allocator.free(shell_cmd);
-            
-            var claude_process = std.process.Child.init(&.{ "sh", "-c", shell_cmd }, allocator);
+            // Start claude directly without shell (safe from command injection)
+            var claude_process = std.process.Child.init(&.{"claude"}, allocator);
             claude_process.stdin_behavior = .Ignore;
             claude_process.stdout_behavior = .Ignore;
             claude_process.stderr_behavior = .Ignore;
             
+            // Spawn the process and let it run independently
             claude_process.spawn() catch |err| {
                 try colors.printError(stderr, "Failed to start claude: {}", .{err});
-                // Don't fail the whole command if claude can't start
+                // Don't fail the whole command if claude can't start (graceful degradation)
+                return;
             };
+            
+            // Don't wait for the child - let it continue running independently
+            // The child process will be automatically cleaned up by the OS
+            // This approach follows DESIGN principle: Safety by Default
         } else {
             try colors.printInfo(stdout, "Skipped starting claude", .{});
         }
