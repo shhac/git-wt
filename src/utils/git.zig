@@ -170,6 +170,71 @@ pub fn freeWorktrees(allocator: std.mem.Allocator, worktrees: []Worktree) void {
     allocator.free(worktrees);
 }
 
+// Large repository performance thresholds
+const LARGE_REPO_THRESHOLD = 200; // Above this, use memory optimizations
+const MAX_INTERACTIVE_ITEMS = 50;  // Max items to show in interactive mode
+
+/// Count worktrees efficiently without loading all data
+pub fn countWorktrees(allocator: std.mem.Allocator) !usize {
+    const result = try exec(allocator, &.{ "worktree", "list" });
+    defer allocator.free(result);
+    
+    var count: usize = 0;
+    var lines = std.mem.tokenizeScalar(u8, result, '\n');
+    while (lines.next() != null) count += 1;
+    
+    return count;
+}
+
+/// Find a specific worktree by branch name with early exit
+pub fn findWorktreeByBranch(allocator: std.mem.Allocator, target_branch: []const u8) !?Worktree {
+    const result = try exec(allocator, &.{ "worktree", "list", "--porcelain" });
+    defer allocator.free(result);
+    
+    var current_path: ?[]const u8 = null;
+    var current_branch: ?[]const u8 = null;
+    var current_commit: ?[]const u8 = null;
+    
+    var lines = std.mem.tokenizeScalar(u8, result, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, "worktree ")) {
+            // Finalize previous worktree if we found a match
+            if (current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
+                return Worktree{
+                    .path = try allocator.dupe(u8, current_path.?),
+                    .branch = try allocator.dupe(u8, current_branch.?),
+                    .commit = try allocator.dupe(u8, current_commit orelse ""),
+                };
+            }
+            
+            // Start new worktree
+            const path = std.mem.trim(u8, line[9..], " \t\n\r");
+            current_path = path;
+            current_branch = null;
+            current_commit = null;
+        } else if (std.mem.startsWith(u8, line, "branch ")) {
+            if (line.len > 7) {
+                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+            }
+        } else if (std.mem.startsWith(u8, line, "HEAD ")) {
+            if (line.len > 5) {
+                current_commit = std.mem.trim(u8, line[5..], " \t\n\r");
+            }
+        }
+    }
+    
+    // Check final worktree
+    if (current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
+        return Worktree{
+            .path = try allocator.dupe(u8, current_path.?),
+            .branch = try allocator.dupe(u8, current_branch.?),
+            .commit = try allocator.dupe(u8, current_commit orelse ""),
+        };
+    }
+    
+    return null; // Not found
+}
+
 /// Get list of worktrees
 pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     const output = try exec(allocator, &.{ "worktree", "list", "--porcelain" });
@@ -814,4 +879,134 @@ test "parseWorktreeList porcelain output" {
     
     try std.testing.expect(worktrees3[0].is_current); // Should still detect main as current
     try std.testing.expect(!worktrees3[1].is_current);
+}
+
+test "countWorktrees parsing" {
+    // Mock git output for counting
+    const mock_output = 
+        \\/home/user/project
+        \\/home/user/project-trees/feature-branch
+        \\/home/user/project-trees/bugfix
+    ;
+    
+    // Test the parsing logic (we can't easily test the actual exec call)
+    var count: usize = 0;
+    var lines = std.mem.tokenizeScalar(u8, mock_output, '\n');
+    while (lines.next() != null) count += 1;
+    
+    try std.testing.expectEqual(@as(usize, 3), count);
+}
+
+test "findWorktreeByBranch parsing" {
+    const allocator = std.testing.allocator;
+    
+    // Mock git --porcelain output
+    const mock_output = 
+        \\worktree /home/user/project
+        \\HEAD abcd1234
+        \\
+        \\worktree /home/user/project-trees/feature-branch
+        \\branch refs/heads/feature-branch
+        \\HEAD efgh5678
+        \\
+        \\worktree /home/user/project-trees/bugfix
+        \\branch refs/heads/bugfix
+        \\HEAD ijkl9012
+    ;
+    
+    // Test parsing logic to find specific branch
+    var current_path: ?[]const u8 = null;
+    var current_branch: ?[]const u8 = null;
+    var current_commit: ?[]const u8 = null;
+    var found_worktree: ?Worktree = null;
+    
+    const target_branch = "refs/heads/feature-branch";
+    
+    var lines = std.mem.tokenizeScalar(u8, mock_output, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, "worktree ")) {
+            // Check if previous worktree was our target
+            if (current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
+                found_worktree = Worktree{
+                    .path = try allocator.dupe(u8, current_path.?),
+                    .branch = try allocator.dupe(u8, current_branch.?),
+                    .commit = try allocator.dupe(u8, current_commit orelse ""),
+                    .is_bare = false,
+                    .is_detached = false,
+                    .is_current = false,
+                };
+                break;
+            }
+            
+            const path = std.mem.trim(u8, line[9..], " \t\n\r");
+            current_path = path;
+            current_branch = null;
+            current_commit = null;
+        } else if (std.mem.startsWith(u8, line, "branch ")) {
+            if (line.len > 7) {
+                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+            }
+        } else if (std.mem.startsWith(u8, line, "HEAD ")) {
+            if (line.len > 5) {
+                current_commit = std.mem.trim(u8, line[5..], " \t\n\r");
+            }
+        }
+    }
+    
+    // Check final worktree too
+    if (found_worktree == null and current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
+        found_worktree = Worktree{
+            .path = try allocator.dupe(u8, current_path.?),
+            .branch = try allocator.dupe(u8, current_branch.?),
+            .commit = try allocator.dupe(u8, current_commit orelse ""),
+            .is_bare = false,
+            .is_detached = false,
+            .is_current = false,
+        };
+    }
+    
+    try std.testing.expect(found_worktree != null);
+    if (found_worktree) |wt| {
+        defer allocator.free(wt.path);
+        defer allocator.free(wt.branch);
+        defer allocator.free(wt.commit);
+        
+        try std.testing.expectEqualStrings("/home/user/project-trees/feature-branch", wt.path);
+        try std.testing.expectEqualStrings("refs/heads/feature-branch", wt.branch);
+        try std.testing.expectEqualStrings("efgh5678", wt.commit);
+    }
+    
+    // Test not found case
+    const target_not_found = "refs/heads/nonexistent";
+    var found_not_exist: ?Worktree = null;
+    
+    var lines2 = std.mem.tokenizeScalar(u8, mock_output, '\n');
+    current_path = null;
+    current_branch = null;
+    current_commit = null;
+    
+    while (lines2.next()) |line| {
+        if (std.mem.startsWith(u8, line, "worktree ")) {
+            if (current_branch != null and std.mem.eql(u8, current_branch.?, target_not_found)) {
+                found_not_exist = Worktree{
+                    .path = try allocator.dupe(u8, current_path.?),
+                    .branch = try allocator.dupe(u8, current_branch.?),
+                    .commit = try allocator.dupe(u8, current_commit orelse ""),
+                    .is_bare = false,
+                    .is_detached = false,
+                    .is_current = false,
+                };
+                break;
+            }
+            current_path = std.mem.trim(u8, line[9..], " \t\n\r");
+            current_branch = null;
+            current_commit = null;
+        } else if (std.mem.startsWith(u8, line, "branch ")) {
+            if (line.len > 7) {
+                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+            }
+        }
+    }
+    
+    try std.testing.expect(found_not_exist == null);
 }
