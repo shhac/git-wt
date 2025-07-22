@@ -43,7 +43,7 @@ pub fn printHelp() !void {
     try stdout.print("  Then use 'gwt go' instead of 'git-wt go' to change directories.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_color: bool, plain: bool, show_command: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool) !void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
     
@@ -118,7 +118,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         // Check if we'll use interactive mode
-        const will_use_interactive = !non_interactive and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
+        const will_use_interactive = !non_interactive and !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
         
         // Display worktrees (skip if we're going to show interactive UI)
         if (!plain and !will_use_interactive) {
@@ -215,7 +215,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         // Use interactive mode when:
         // - We have TTY for input/output
         // - Not in show_command mode (unless fd3 is enabled, in which case we still want interactive UI)
-        const use_interactive = interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
+        // - Not in no_tty mode (which forces number-based selection)
+        const use_interactive = !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
         
         if (use_interactive) {
             // Build list of options for interactive selection

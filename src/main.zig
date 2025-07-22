@@ -84,7 +84,7 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
     const show_command = parsed.hasFlag(&.{"--show-command"});
     const branch = parsed.getPositional(0);
     
-    try cmd_go.execute(allocator, branch, non_interactive or no_tty, no_color, plain, show_command);
+    try cmd_go.execute(allocator, branch, non_interactive, no_tty, no_color, plain, show_command);
 }
 
 fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
