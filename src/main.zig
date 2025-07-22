@@ -57,10 +57,17 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
     defer parsed.deinit();
     
     const force = parsed.hasFlag(&.{ "--force", "-f" });
-    const branch_name = parsed.getPositional(0);
+    const branch_names = parsed.getPositionals();
     
-    if (branch_name) |branch| {
-        try cmd_remove.execute(allocator, branch, non_interactive, force);
+    if (branch_names.len > 0) {
+        // Multiple branch removal mode
+        if (branch_names.len == 1) {
+            // Single branch - use existing function
+            try cmd_remove.execute(allocator, branch_names[0], non_interactive, force);
+        } else {
+            // Multiple branches - use new function
+            try cmd_remove.executeMultiple(allocator, branch_names, non_interactive, force);
+        }
     } else {
         // Interactive mode - let the remove command handle it
         try cmd_remove.executeInteractive(allocator, non_interactive or no_tty, force);
@@ -267,7 +274,7 @@ fn printUsage() void {
     print("Usage: git-wt [--non-interactive] [--no-tty] <command> [options]\n", .{});
     print("\nCommands:\n", .{});
     print("  new <branch>  Create a new worktree\n", .{});
-    print("  rm [branch]   Remove worktree (interactive if no branch)\n", .{});
+    print("  rm [branch...] Remove worktree(s) (interactive multi-select if none)\n", .{});
     print("  go [branch]   Navigate to worktree\n", .{});
     print("  list          List all worktrees\n", .{});
     print("  alias <name>  Generate shell function wrapper\n", .{});
@@ -287,6 +294,7 @@ fn printHelp() void {
     print("\nExamples:\n", .{});
     print("  git-wt new feature-branch   Create a new worktree for 'feature-branch'\n", .{});
     print("  git-wt rm feature-branch    Remove the 'feature-branch' worktree\n", .{});
+    print("  git-wt rm branch1 branch2   Remove multiple worktrees at once\n", .{});
     print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
     print("  git-wt go main              Navigate to the main repository\n", .{});
     print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});

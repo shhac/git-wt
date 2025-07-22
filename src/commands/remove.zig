@@ -11,27 +11,33 @@ const fs_utils = @import("../utils/fs.zig");
 
 pub fn printHelp() !void {
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("Usage: git-wt rm [branch-name]\n\n", .{});
-    try stdout.print("Remove a git worktree by branch name.\n\n", .{});
+    try stdout.print("Usage: git-wt rm [branch-name...]\n\n", .{});
+    try stdout.print("Remove one or more git worktrees by branch name.\n\n", .{});
     try stdout.print("Arguments:\n", .{});
-    try stdout.print("  [branch-name]    Name of the branch/worktree to remove (optional)\n", .{});
-    try stdout.print("                   If not provided, shows interactive selection\n\n", .{});
+    try stdout.print("  [branch-name...]  Names of branches/worktrees to remove (optional)\n", .{});
+    try stdout.print("                    If not provided, shows interactive multi-selection\n\n", .{});
     try stdout.print("Options:\n", .{});
-    try stdout.print("  -h, --help       Show this help message\n", .{});
+    try stdout.print("  -h, --help        Show this help message\n", .{});
     try stdout.print("  -n, --non-interactive  Run without prompts\n", .{});
-    try stdout.print("  --no-tty         Force number-based selection (disable arrow keys)\n", .{});
-    try stdout.print("  -f, --force      Force removal even with uncommitted changes\n\n", .{});
+    try stdout.print("  --no-tty          Force number-based selection (disable arrow keys)\n", .{});
+    try stdout.print("  -f, --force       Force removal even with uncommitted changes\n\n", .{});
     try stdout.print("Examples:\n", .{});
-    try stdout.print("  git-wt rm                      # Interactive selection of worktree to remove\n", .{});
-    try stdout.print("  git-wt rm feature-branch       # Remove feature-branch worktree\n", .{});
-    try stdout.print("  git-wt rm feature/auth         # Remove worktree with slash in name\n", .{});
-    try stdout.print("  git-wt rm test-branch -n       # Remove without prompts\n", .{});
-    try stdout.print("  git-wt rm old-feature -f       # Force remove with uncommitted changes\n", .{});
-    try stdout.print("  git-wt rm --no-tty             # Use number-based selection\n\n", .{});
+    try stdout.print("  git-wt rm                        # Interactive multi-selection\n", .{});
+    try stdout.print("  git-wt rm feature-branch         # Remove single worktree\n", .{});
+    try stdout.print("  git-wt rm branch1 branch2 branch3 # Remove multiple worktrees\n", .{});
+    try stdout.print("  git-wt rm feature/auth test-*    # Remove worktrees with special names\n", .{});
+    try stdout.print("  git-wt rm test-branch -n         # Remove without prompts\n", .{});
+    try stdout.print("  git-wt rm old-feature -f         # Force remove with uncommitted changes\n", .{});
+    try stdout.print("  git-wt rm --no-tty               # Use number-based selection\n\n", .{});
+    try stdout.print("Interactive mode:\n", .{});
+    try stdout.print("  ↑/↓       Navigate selection\n", .{});
+    try stdout.print("  Space     Toggle selection (☑/☐)\n", .{});
+    try stdout.print("  Enter     Confirm current selection\n", .{});
+    try stdout.print("  ESC/Q     Cancel operation\n\n", .{});
     try stdout.print("This command will:\n", .{});
-    try stdout.print("  1. Find the worktree for the specified branch\n", .{});
-    try stdout.print("  2. Remove the worktree directory\n", .{});
-    try stdout.print("  3. Optionally delete the associated branch\n", .{});
+    try stdout.print("  1. Find worktrees for the specified branches\n", .{});
+    try stdout.print("  2. Remove the worktree directories\n", .{});
+    try stdout.print("  3. Optionally delete the associated branches\n", .{});
     try stdout.print("\nNote: The current worktree cannot be removed.\n", .{});
 }
 
@@ -260,6 +266,66 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     }
 }
 
+/// Execute remove command for multiple branches
+pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []const u8, non_interactive: bool, force: bool) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+    
+    if (branch_names.len == 0) return;
+    
+    // Show summary of what we're about to remove
+    try colors.printInfo(stdout, "About to remove worktrees:\n", .{});
+    for (branch_names) |branch| {
+        try stdout.print("  - {s}{s}{s}\n", .{ colors.yellow, branch, colors.reset });
+    }
+    
+    // Confirm removal (unless non-interactive or force)
+    if (!non_interactive and !force) {
+        const prompt = try std.fmt.allocPrint(allocator, "\nAre you sure you want to remove {d} worktree{s}?", .{ branch_names.len, if (branch_names.len == 1) "" else "s" });
+        defer allocator.free(prompt);
+        
+        if (!try input.confirm(prompt, false)) {
+            try colors.printInfo(stdout, "Cancelled", .{});
+            return;
+        }
+    }
+    
+    // Process each branch
+    var failed_count: usize = 0;
+    var success_count: usize = 0;
+    var failed_branches = std.ArrayList([]const u8).init(allocator);
+    defer failed_branches.deinit();
+    
+    for (branch_names) |branch| {
+        try stdout.print("\n{s}Removing worktree for branch '{s}'...{s}\n", .{
+            colors.info_prefix, branch, colors.reset
+        });
+        
+        // Execute single branch removal
+        execute(allocator, branch, true, force) catch |err| {
+            failed_count += 1;
+            try failed_branches.append(branch);
+            try colors.printError(stderr, "Failed to remove worktree for branch '{s}': {}", .{ branch, err });
+            continue;
+        };
+        
+        success_count += 1;
+        try colors.printSuccess(stdout, "✓ Removed worktree for '{s}'", .{branch});
+    }
+    
+    // Summary
+    try stdout.print("\n{s}=== SUMMARY ==={s}\n", .{ colors.yellow, colors.reset });
+    try colors.printSuccess(stdout, "✓ Successfully removed: {d} worktree{s}", .{ success_count, if (success_count == 1) "" else "s" });
+    
+    if (failed_count > 0) {
+        try colors.printError(stderr, "✗ Failed to remove: {d} worktree{s}", .{ failed_count, if (failed_count == 1) "" else "s" });
+        try stderr.print("{s}Failed branches:{s}\n", .{ colors.yellow, colors.reset });
+        for (failed_branches.items) |branch| {
+            try stderr.print("  - {s}\n", .{branch});
+        }
+    }
+}
+
 /// Execute remove command with interactive selection
 pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: bool, force: bool) !void {
     const stdout = std.io.getStdOut().writer();
@@ -278,7 +344,8 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
     // Check if we can use interactive mode
     const use_interactive = !force_non_interactive and interactive.isStdinTty() and interactive.isStdoutTty();
     
-    var selected_idx: ?usize = null;
+    var selected_indices: ?[]usize = null;
+    defer if (selected_indices) |indices| allocator.free(indices);
     
     if (use_interactive) {
         // Build list of options for interactive selection
@@ -307,18 +374,19 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         }
         
         // Show header
-        try colors.printInfo(stdout, "Select worktree to remove:\n", .{});
+        try colors.printInfo(stdout, "Select worktree(s) to remove:\n", .{});
         
-        const selection = try interactive.selectFromList(
+        const selection = try interactive.selectMultipleFromList(
             allocator,
             options_list.items,
             .{
                 .show_instructions = true,
                 .use_colors = true,
+                .multi_select = true,
             },
         );
         
-        selected_idx = selection;
+        selected_indices = selection;
     } else {
         // Number-based selection mode
         try colors.printInfo(stdout, "Available worktrees:\n", .{});
@@ -349,7 +417,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
             });
         }
         
-        const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to remove (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
+        const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter numbers to remove (space-separated, or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
         defer allocator.free(prompt);
         
         const response = try input.readLine(allocator, prompt);
@@ -362,35 +430,71 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
                 return;
             }
             
-            const selection = std.fmt.parseInt(usize, trimmed, 10) catch {
-                try colors.printError(stderr, "Invalid selection", .{});
-                return error.InvalidSelection;
-            };
-            
-            if (selection < 1 or selection > worktrees_with_time.len) {
-                try colors.printError(stderr, "Invalid selection", .{});
-                return error.InvalidSelection;
+            // Parse multiple numbers
+            var indices = std.ArrayList(usize).init(allocator);
+            var it = std.mem.tokenizeAny(u8, trimmed, " \t,");
+            while (it.next()) |token| {
+                const selection = std.fmt.parseInt(usize, token, 10) catch {
+                    try colors.printError(stderr, "Invalid selection: '{s}'", .{token});
+                    return error.InvalidSelection;
+                };
+                
+                if (selection < 1 or selection > worktrees_with_time.len) {
+                    try colors.printError(stderr, "Selection out of range: {d}", .{selection});
+                    return error.InvalidSelection;
+                }
+                
+                const idx = selection - 1;
+                // Check for duplicates
+                var already_selected = false;
+                for (indices.items) |existing| {
+                    if (existing == idx) {
+                        already_selected = true;
+                        break;
+                    }
+                }
+                if (!already_selected) {
+                    try indices.append(idx);
+                }
             }
             
-            selected_idx = selection - 1;
+            if (indices.items.len > 0) {
+                selected_indices = try indices.toOwnedSlice();
+            }
         }
     }
     
-    // If a worktree was selected, remove it
-    if (selected_idx) |idx| {
-        const selected = worktrees_with_time[idx];
-        try colors.printInfo(stdout, "Selected worktree: ", .{});
-        try stdout.print("{s}{s}{s} @ {s}{s}{s}\n", .{
-            colors.path_color,
-            selected.display_name,
-            colors.reset,
-            colors.magenta,
-            selected.worktree.branch,
-            colors.reset,
-        });
+    // If worktrees were selected, remove them
+    if (selected_indices) |indices| {
+        if (indices.len == 0) {
+            try colors.printInfo(stdout, "No worktrees selected\n", .{});
+            return;
+        }
         
-        // Call the regular execute function with the selected branch
-        try execute(allocator, selected.worktree.branch, force_non_interactive, force);
+        // Show selected worktrees
+        try colors.printInfo(stdout, "Selected worktree{s}:\n", .{if (indices.len == 1) "" else "s"});
+        var branch_names = std.ArrayList([]const u8).init(allocator);
+        defer branch_names.deinit();
+        
+        for (indices) |idx| {
+            const selected = worktrees_with_time[idx];
+            try stdout.print("  - {s}{s}{s} @ {s}{s}{s}\n", .{
+                colors.path_color,
+                selected.display_name,
+                colors.reset,
+                colors.magenta,
+                selected.worktree.branch,
+                colors.reset,
+            });
+            try branch_names.append(selected.worktree.branch);
+        }
+        
+        // Call the multiple execute function with selected branches
+        if (branch_names.items.len == 1) {
+            try execute(allocator, branch_names.items[0], force_non_interactive, force);
+        } else {
+            try executeMultiple(allocator, branch_names.items, force_non_interactive, force);
+        }
     } else {
         try colors.printInfo(stdout, "Cancelled\n", .{});
     }

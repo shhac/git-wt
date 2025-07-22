@@ -34,6 +34,11 @@ pub const ParsedArgs = struct {
         if (index >= self.positional.items.len) return null;
         return self.positional.items[index];
     }
+    
+    /// Get all positional arguments
+    pub fn getPositionals(self: *const ParsedArgs) []const []const u8 {
+        return self.positional.items;
+    }
 };
 
 /// Parse command-line arguments into flags and positional arguments
