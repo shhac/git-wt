@@ -93,7 +93,7 @@ test "parseArgs basic" {
 test "parseArgs with aliases" {
     const allocator = std.testing.allocator;
     
-    const args = [_][]const u8{ "-n", "feature", "-p", "/custom" };
+    const args = [_][]const u8{ "-n", "-p", "/custom", "feature" };
     var parsed = try parseArgs(allocator, &args);
     defer parsed.deinit();
     

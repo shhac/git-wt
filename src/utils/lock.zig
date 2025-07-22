@@ -148,11 +148,16 @@ pub fn withLock(allocator: std.mem.Allocator, lock_path: []const u8, timeout_ms:
 
 test "Lock basic operations" {
     const allocator = std.testing.allocator;
-    const lock_path = "test.lock";
     
-    // Clean up any existing lock file
-    fs.cwd().deleteFile(lock_path) catch {};
-    defer fs.cwd().deleteFile(lock_path) catch {};
+    // Use a temporary directory for testing
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+    
+    const lock_path = try fs.path.join(allocator, &.{ tmp_path, "test.lock" });
+    defer allocator.free(lock_path);
     
     var lock = Lock.init(allocator, lock_path);
     defer lock.deinit();
@@ -174,11 +179,16 @@ test "Lock basic operations" {
 
 test "Lock timeout" {
     const allocator = std.testing.allocator;
-    const lock_path = "test_timeout.lock";
     
-    // Clean up any existing lock file
-    fs.cwd().deleteFile(lock_path) catch {};
-    defer fs.cwd().deleteFile(lock_path) catch {};
+    // Use a temporary directory for testing
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const tmp_path = try tmp_dir.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_path);
+    
+    const lock_path = try fs.path.join(allocator, &.{ tmp_path, "test_timeout.lock" });
+    defer allocator.free(lock_path);
     
     var lock1 = Lock.init(allocator, lock_path);
     defer lock1.deinit();

@@ -105,7 +105,8 @@ test "validateBranchName - invalid names" {
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature/"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("/feature"));
     // Test shell metacharacters
-    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature;rm -rf"));
+    try std.testing.expectError(ValidationError.BranchNameHasSpaces, validateBranchName("feature;rm -rf"));
+    try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature;rm-rf"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature$USER"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature`date`"));
     try std.testing.expectError(ValidationError.BranchNameHasInvalidChars, validateBranchName("feature|cmd"));
@@ -247,10 +248,18 @@ pub fn getParentDirErrorMessage(err: ParentDirError) []const u8 {
 test "validateParentDir" {
     const testing_allocator = std.testing.allocator;
     
-    // Create a test directory
-    var temp_dir = try std.fs.cwd().makeOpenPath("test-parent-dir", .{});
-    defer temp_dir.close();
-    defer std.fs.cwd().deleteDir("test-parent-dir") catch {};
+    // Use a proper temporary directory
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const tmp_path = try tmp_dir.dir.realpathAlloc(testing_allocator, ".");
+    defer testing_allocator.free(tmp_path);
+    
+    // Create a test subdirectory
+    try tmp_dir.dir.makeDir("test-parent-dir");
+    
+    const test_parent_path = try std.fs.path.join(testing_allocator, &.{ tmp_path, "test-parent-dir" });
+    defer testing_allocator.free(test_parent_path);
     
     const repo_info = git.RepoInfo{
         .root = "/fake/repo",
@@ -260,12 +269,14 @@ test "validateParentDir" {
     };
     
     // Test 1: Valid directory
-    const result = try validateParentDir(testing_allocator, "test-parent-dir", repo_info);
+    const result = try validateParentDir(testing_allocator, test_parent_path, repo_info);
     defer testing_allocator.free(result);
     try std.testing.expect(std.fs.path.isAbsolute(result));
     
     // Test 2: Non-existent directory
-    const err = validateParentDir(testing_allocator, "non-existent-dir", repo_info);
+    const non_existent = try std.fs.path.join(testing_allocator, &.{ tmp_path, "non-existent-dir" });
+    defer testing_allocator.free(non_existent);
+    const err = validateParentDir(testing_allocator, non_existent, repo_info);
     try std.testing.expectError(ParentDirError.ParentDirNotFound, err);
     
     // Test 3: Path traversal attempt
