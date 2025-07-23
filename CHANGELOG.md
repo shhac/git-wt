@@ -2,6 +2,24 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.1.1] - 2025-01-24
+
+### Fixed
+- **Critical**: Fixed fd3 mechanism failure in shell alias due to incorrect `eval` usage
+  - Shell alias now properly passes `GWT_USE_FD3` environment variable to subprocess
+  - Navigation now works correctly in all interactive modes
+  - Restored arrow-key navigation support (no longer forces `--no-tty`)
+
+### Added
+- Enhanced debug logging for fd3 mechanism (`--debug` flag in alias command)
+- Regression tests to prevent eval-related issues from reoccurring
+- Comprehensive learnings documentation about shell integration pitfalls
+
+### Developer Notes
+- Removed unnecessary `eval` from shell function generation
+- Added debug output showing `cd_cmd` value even when empty
+- Improved fd3 debugging with environment variable detection logs
+
 ## [0.1.0] - 2025-01-22
 
 ### Initial Release

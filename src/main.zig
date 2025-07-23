@@ -347,4 +347,5 @@ fn printSetupHelp() void {
 test {
     _ = @import("utils/test_all.zig");
     _ = @import("commands/test_all.zig");
+    _ = @import("tests/test_all.zig");
 }
