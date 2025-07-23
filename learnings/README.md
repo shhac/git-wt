@@ -8,7 +8,6 @@ This directory contains development learnings and discoveries from the git-wt pr
 - **EVAL_FD3_FIX.md** - Discovery of how eval broke fd3 and the proper fix (2025-01-24)
 - **TEST_NO_TTY.md** - Documentation of --no-tty flag behavior and testing
 - **HOW_TO_TEST_TTY_INPUTS.md** - Testing methodology for TTY-related features
-- **BUGS.md** - Historical bug tracking from early development
 
 ## Key Takeaways
 

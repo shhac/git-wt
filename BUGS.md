@@ -28,6 +28,7 @@ The following issues have been resolved (sorted numerically):
 - ✅ Bug #24: Claude Process Not Detached Properly (fixed with shell exec)
 - ✅ Bug #25: Missing Validation in executeRemove (added branch name validation and sanitization handling)
 - ✅ Bug #26: Inconsistent Error Return Patterns (unified error handling in main)
+- ✅ Bug #27: fd3 mechanism broken by eval in shell alias (removed unnecessary eval usage)
 - ✅ Bug #28: Time Formatting Edge Cases (handles "just now" and decades)
 - ✅ Bug #29: Path Display Inconsistency (standardized to display names for consistency)
 - ✅ Bug #30: Missing --version Flag Validation (version generated from build system)
