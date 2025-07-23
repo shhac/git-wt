@@ -106,14 +106,13 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("            fi\n");
     try stdout.writeAll("        done\n");
     try stdout.writeAll("        # Run go command with fd3 support\n");
-    try stdout.writeAll("        # Force --no-tty when no arguments to ensure fd3 works in interactive mode\n");
     try stdout.writeAll("        local cd_cmd\n");
     try stdout.writeAll("        if [ $# -eq 0 ]; then\n");
-    try stdout.writeAll("            # Interactive mode - force number selection for reliable fd3\n");
+    try stdout.writeAll("            # Interactive mode\n");
     if (debug) {
         try stdout.writeAll("            echo \"[DEBUG] Running interactive go command...\" >&2\n");
     }
-    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --no-tty $flags 3>&1 1>&2)\n");
+    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        else\n");
     try stdout.writeAll("            # Direct branch navigation\n");
     if (debug) {
