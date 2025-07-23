@@ -29,8 +29,15 @@ const std = @import("std");
 pub fn isEnabled() bool {
     if (std.process.getEnvVarOwned(std.heap.page_allocator, "GWT_USE_FD3")) |value| {
         defer std.heap.page_allocator.free(value);
-        return std.mem.eql(u8, value, "1");
+        const enabled = std.mem.eql(u8, value, "1");
+        if (@import("../utils/debug.zig").isEnabled()) {
+            std.debug.print("[DEBUG] fd3: GWT_USE_FD3='{s}', enabled={}\n", .{ value, enabled });
+        }
+        return enabled;
     } else |_| {
+        if (@import("../utils/debug.zig").isEnabled()) {
+            std.debug.print("[DEBUG] fd3: GWT_USE_FD3 not set\n", .{});
+        }
         return false;
     }
 }
