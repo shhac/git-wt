@@ -101,7 +101,7 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        # Check for help flag\n");
     try stdout.writeAll("        for arg in \"$@\"; do\n");
     try stdout.writeAll("            if [[ \"$arg\" = \"--help\" ]] || [[ \"$arg\" = \"-h\" ]]; then\n");
-    try stdout.writeAll("                eval \"$git_wt_bin\" go \"$@\" $flags\n");
+    try stdout.writeAll("                \"$git_wt_bin\" go \"$@\" $flags\n");
     try stdout.writeAll("                return\n");
     try stdout.writeAll("            fi\n");
     try stdout.writeAll("        done\n");
@@ -113,13 +113,13 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     if (debug) {
         try stdout.writeAll("            echo \"[DEBUG] Running interactive go command...\" >&2\n");
     }
-    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go --no-tty $flags 3>&1 1>&2)\n");
+    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --no-tty $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        else\n");
     try stdout.writeAll("            # Direct branch navigation\n");
     if (debug) {
         try stdout.writeAll("            echo \"[DEBUG] Running go command with args: $@\" >&2\n");
     }
-    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go \"$@\" $flags 3>&1 1>&2)\n");
+    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"$@\" $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        fi\n");
     try stdout.writeAll("        local exit_code=$?\n");
     if (debug) {
@@ -136,9 +136,9 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("    elif [ \"$1\" = \"new\" ]; then\n");
     try stdout.writeAll("        shift\n");
     try stdout.writeAll("        local branch=\"$1\"\n");
-    try stdout.writeAll("        eval \"$git_wt_bin\" new \"$@\" $flags\n");
+    try stdout.writeAll("        \"$git_wt_bin\" new \"$@\" $flags\n");
     try stdout.writeAll("        if [ $? -eq 0 ] && [ -n \"$branch\" ] && [[ \"$branch\" != -* ]]; then\n");
-    try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go --show-command \"$branch\" $flags 3>&1 1>&2)\n");
+    try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --show-command \"$branch\" $flags 3>&1 1>&2)\n");
     if (debug) {
         try stdout.writeAll("            if [ -z \"$cd_cmd\" ]; then\n");
         try stdout.writeAll("                echo \"[DEBUG] cd_cmd: (empty)\" >&2\n");
@@ -151,7 +151,7 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("            fi\n");
     try stdout.writeAll("        fi\n");
     try stdout.writeAll("    else\n");
-    try stdout.writeAll("        eval \"$git_wt_bin\" \"$@\" $flags\n");
+    try stdout.writeAll("        \"$git_wt_bin\" \"$@\" $flags\n");
     try stdout.writeAll("    fi\n");
     try stdout.writeAll("}\n");
 }

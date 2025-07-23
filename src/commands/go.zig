@@ -9,6 +9,7 @@ const input = @import("../utils/input.zig");
 const fd = @import("../utils/fd.zig");
 const interactive = @import("../utils/interactive.zig");
 const time = @import("../utils/time.zig");
+const debug = @import("../utils/debug.zig");
 
 
 pub fn printHelp() !void {
@@ -313,7 +314,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 const selected = worktrees_with_time[selection - 1].worktree;
                 
                 // Use fd3 if available for shell integration
-                if (fd.isEnabled()) {
+                const fd_enabled = fd.isEnabled();
+                if (debug.isEnabled()) {
+                    std.debug.print("[DEBUG] go: fd_enabled={}, show_command={}, path={s}\n", .{ fd_enabled, show_command, selected.path });
+                }
+                if (fd_enabled) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd {s}\n", .{selected.path});
                 } else if (show_command) {
