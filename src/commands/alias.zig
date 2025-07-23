@@ -110,14 +110,25 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        local cd_cmd\n");
     try stdout.writeAll("        if [ $# -eq 0 ]; then\n");
     try stdout.writeAll("            # Interactive mode - force number selection for reliable fd3\n");
+    if (debug) {
+        try stdout.writeAll("            echo \"[DEBUG] Running interactive go command...\" >&2\n");
+    }
     try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go --no-tty $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        else\n");
     try stdout.writeAll("            # Direct branch navigation\n");
+    if (debug) {
+        try stdout.writeAll("            echo \"[DEBUG] Running go command with args: $@\" >&2\n");
+    }
     try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go \"$@\" $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        fi\n");
     try stdout.writeAll("        local exit_code=$?\n");
     if (debug) {
-        try stdout.writeAll("        [ -n \"$cd_cmd\" ] && echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+        try stdout.writeAll("        echo \"[DEBUG] Exit code: $exit_code\" >&2\n");
+        try stdout.writeAll("        if [ -z \"$cd_cmd\" ]; then\n");
+        try stdout.writeAll("            echo \"[DEBUG] cd_cmd: (empty)\" >&2\n");
+        try stdout.writeAll("        else\n");
+        try stdout.writeAll("            echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+        try stdout.writeAll("        fi\n");
     }
     try stdout.writeAll("        if [ $exit_code -eq 0 ] && [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n");
     try stdout.writeAll("            eval \"$cd_cmd\"\n");
@@ -129,7 +140,11 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        if [ $? -eq 0 ] && [ -n \"$branch\" ] && [[ \"$branch\" != -* ]]; then\n");
     try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go --show-command \"$branch\" $flags 3>&1 1>&2)\n");
     if (debug) {
-        try stdout.writeAll("            [ -n \"$cd_cmd\" ] && echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+        try stdout.writeAll("            if [ -z \"$cd_cmd\" ]; then\n");
+        try stdout.writeAll("                echo \"[DEBUG] cd_cmd: (empty)\" >&2\n");
+        try stdout.writeAll("            else\n");
+        try stdout.writeAll("                echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+        try stdout.writeAll("            fi\n");
     }
     try stdout.writeAll("            if [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n");
     try stdout.writeAll("                eval \"$cd_cmd\"\n");
