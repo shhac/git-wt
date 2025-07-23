@@ -13,6 +13,7 @@ pub fn printHelp() !void {
     try stdout.writeAll("  --no-tty              Forward --no-tty flag to all commands\n");
     try stdout.writeAll("  -n, --non-interactive Forward --non-interactive flag to all commands\n");
     try stdout.writeAll("  --plain               Forward --plain flag for machine-readable output\n");
+    try stdout.writeAll("  --debug               Add debug logging to the shell function\n");
     try stdout.writeAll("  -p, --parent-dir <path>  Set default parent directory for worktrees\n");
     try stdout.writeAll("                           Supports {repo} template substitution\n\n");
     try stdout.writeAll("Examples:\n");
@@ -54,6 +55,7 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     const non_interactive = parsed.hasFlag(&.{ "--non-interactive", "-n" });
     const plain = parsed.hasFlag(&.{"--plain"});
     const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" });
+    const debug = parsed.hasFlag(&.{"--debug"});
     
     // Generate shell function
     try stdout.writeAll("# Shell function wrapper for git-wt to enable directory navigation\n");
@@ -114,6 +116,9 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go \"$@\" $flags 3>&1 1>&2)\n");
     try stdout.writeAll("        fi\n");
     try stdout.writeAll("        local exit_code=$?\n");
+    if (debug) {
+        try stdout.writeAll("        [ -n \"$cd_cmd\" ] && echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+    }
     try stdout.writeAll("        if [ $exit_code -eq 0 ] && [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n");
     try stdout.writeAll("            eval \"$cd_cmd\"\n");
     try stdout.writeAll("        fi\n");
@@ -123,6 +128,9 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        eval \"$git_wt_bin\" new \"$@\" $flags\n");
     try stdout.writeAll("        if [ $? -eq 0 ] && [ -n \"$branch\" ] && [[ \"$branch\" != -* ]]; then\n");
     try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 eval \"$git_wt_bin\" go --show-command \"$branch\" $flags 3>&1 1>&2)\n");
+    if (debug) {
+        try stdout.writeAll("            [ -n \"$cd_cmd\" ] && echo \"[DEBUG] cd_cmd: '$cd_cmd'\" >&2\n");
+    }
     try stdout.writeAll("            if [ -n \"$cd_cmd\" ] && echo \"$cd_cmd\" | grep -q '^cd '; then\n");
     try stdout.writeAll("                eval \"$cd_cmd\"\n");
     try stdout.writeAll("            fi\n");

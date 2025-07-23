@@ -155,6 +155,10 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
         } else if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
             debug.setEnabled(true);
+            // Pass through to alias command
+            if (is_alias_command) {
+                try filtered_args.append(arg);
+            }
         } else {
             try filtered_args.append(arg);
         }

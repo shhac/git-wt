@@ -91,8 +91,10 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     };
     
     var worktrees_with_time = try allocator.alloc(WorktreeWithTime, worktrees.len);
+    var allocated_count: usize = 0;
     defer {
-        for (worktrees_with_time) |wt| {
+        // Only free display_names that were actually allocated
+        for (worktrees_with_time[0..allocated_count]) |wt| {
             allocator.free(wt.display_name);
         }
         allocator.free(worktrees_with_time);
@@ -116,6 +118,7 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
             .mod_time = stat.mtime,
             .display_name = display_name,
         };
+        allocated_count = i + 1;
     }
     
     // Sort by modification time (newest first)
