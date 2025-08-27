@@ -1,5 +1,3 @@
-const std = @import("std");
-const fs = std.fs;
 
 pub const LockError = error{
     LockAcquisitionFailed,
@@ -36,7 +34,7 @@ pub const Lock = struct {
                         }
                         
                         // Sleep a bit and retry
-                        std.time.sleep(100 * std.time.ns_per_ms);
+                        std.Thread.sleep(100 * std.time.ns_per_ms);
                         continue;
                     },
                     else => return err,
@@ -45,9 +43,11 @@ pub const Lock = struct {
             
             // Write PID and timestamp to lock file
             if (self.file) |file| {
-                const writer = file.writer();
                 const pid = std.c.getpid();
-                try writer.print("{d}\n{d}\n", .{ pid, std.time.timestamp() });
+                const timestamp = std.time.timestamp();
+                var buffer: [256]u8 = undefined;
+                const content = try std.fmt.bufPrint(&buffer, "{d}\n{d}\n", .{ pid, timestamp });
+                try file.writeAll(content);
                 break;
             } else {
                 return LockError.LockAcquisitionFailed;
@@ -170,9 +170,12 @@ pub const Lock = struct {
 };
 
 /// Helper to run a function with a lock
+const std = @import("std");
+const fs = std.fs;
+const io = @import("io.zig");
 pub fn withLock(allocator: std.mem.Allocator, lock_path: []const u8, timeout_ms: u64, comptime func: anytype, args: anytype) !@typeInfo(@TypeOf(func)).Fn.return_type.? {
     var lock = Lock.init(allocator, lock_path);
-    defer lock.deinit();
+    defer lock.deinit(allocator);
     
     // Clean up any stale locks first
     try lock.cleanStale();
@@ -198,14 +201,14 @@ test "Lock basic operations" {
     defer allocator.free(lock_path);
     
     var lock = Lock.init(allocator, lock_path);
-    defer lock.deinit();
+    defer lock.deinit(allocator);
     
     // Test tryAcquire
     try std.testing.expect(try lock.tryAcquire());
     
     // Second tryAcquire should fail
     var lock2 = Lock.init(allocator, lock_path);
-    defer lock2.deinit();
+    defer lock2.deinit(allocator);
     try std.testing.expect(!try lock2.tryAcquire());
     
     // Release first lock
@@ -229,14 +232,14 @@ test "Lock timeout" {
     defer allocator.free(lock_path);
     
     var lock1 = Lock.init(allocator, lock_path);
-    defer lock1.deinit();
+    defer lock1.deinit(allocator);
     
     // Acquire first lock
     try lock1.acquire(1000);
     
     // Second lock should timeout
     var lock2 = Lock.init(allocator, lock_path);
-    defer lock2.deinit();
+    defer lock2.deinit(allocator);
     
     const result = lock2.acquire(200);
     try std.testing.expectError(LockError.LockTimeout, result);

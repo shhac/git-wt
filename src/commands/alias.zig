@@ -1,9 +1,10 @@
+
 const std = @import("std");
 const colors = @import("../utils/colors.zig");
 const args = @import("../utils/args.zig");
-
+const io = @import("../utils/io.zig");
 pub fn printHelp() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.writeAll("Usage: git-wt alias <name> [options]\n\n");
     try stdout.writeAll("Generate a shell function wrapper for proper directory navigation.\n\n");
     try stdout.writeAll("Arguments:\n");
@@ -32,12 +33,12 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _: bool, _: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Parse arguments
     var parsed = try args.parseArgs(allocator, command_args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     // Get alias name
     const alias_name = parsed.getPositional(0) orelse {
@@ -156,18 +157,18 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
 }
 
 fn escapeShellString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    errdefer result.deinit();
+    var result = std.ArrayList(u8).empty;
+    errdefer result.deinit(allocator);
     
     for (str) |c| {
         switch (c) {
             '"', '$', '`', '\\' => {
-                try result.append('\\');
-                try result.append(c);
+                try result.append(allocator, '\\');
+                try result.append(allocator, c);
             },
-            else => try result.append(c),
+            else => try result.append(allocator, c),
         }
     }
     
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }

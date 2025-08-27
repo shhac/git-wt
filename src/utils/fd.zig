@@ -1,4 +1,5 @@
 const std = @import("std");
+const io = @import("io.zig");
 
 /// File descriptor 3 (fd3) mechanism for shell integration
 /// 
@@ -50,14 +51,14 @@ pub const CommandWriter = struct {
         return .{ .use_fd3 = isEnabled() };
     }
     
-    pub fn writer(self: CommandWriter) std.fs.File.Writer {
+    pub fn writer(self: CommandWriter) io.FileWriter {
         if (self.use_fd3) {
             // File descriptor 3 should be provided by the shell wrapper
             // If not available, this will fail when trying to write
             const file = std.fs.File{ .handle = 3 };
-            return file.writer();
+            return io.FileWriter{ .file = file };
         }
-        return std.io.getStdOut().writer();
+        return io.getStdOut();
     }
     
     pub fn print(self: CommandWriter, comptime fmt: []const u8, args: anytype) !void {

@@ -1,3 +1,5 @@
+
+
 const std = @import("std");
 
 const git = @import("../utils/git.zig");
@@ -8,9 +10,9 @@ const time = @import("../utils/time.zig");
 const lock = @import("../utils/lock.zig");
 const validation = @import("../utils/validation.zig");
 const fs_utils = @import("../utils/fs.zig");
-
+const io = @import("../utils/io.zig");
 pub fn printHelp() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt rm [branch-name...]\n\n", .{});
     try stdout.print("Remove one or more git worktrees by branch name.\n\n", .{});
     try stdout.print("Arguments:\n", .{});
@@ -42,8 +44,8 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, force: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Validate branch name
     validation.validateBranchName(branch_name) catch |err| {
@@ -150,13 +152,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         });
         
         // Try to find similar branch names (including unsanitized versions)
-        var similar_branches = std.ArrayList([]const u8).init(allocator);
-        defer similar_branches.deinit();
+        var similar_branches = std.ArrayList([]const u8).empty;
+        defer similar_branches.deinit(allocator);
         
         for (worktrees orelse &.{}) |wt| {
             // Check direct branch name match
             if (std.ascii.indexOfIgnoreCase(wt.branch, branch_name) != null) {
-                try similar_branches.append(wt.branch);
+                try similar_branches.append(allocator, wt.branch);
                 continue;
             }
             
@@ -164,7 +166,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
             const unsanitized_stored = fs_utils.unsanitizeBranchPath(allocator, wt.branch) catch continue;
             defer allocator.free(unsanitized_stored);
             if (std.ascii.indexOfIgnoreCase(unsanitized_stored, branch_name) != null) {
-                try similar_branches.append(wt.branch);
+                try similar_branches.append(allocator, wt.branch);
             }
         }
         
@@ -268,8 +270,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
 
 /// Execute remove command for multiple branches
 pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []const u8, non_interactive: bool, force: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     if (branch_names.len == 0) return;
     
@@ -293,8 +295,8 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
     // Process each branch
     var failed_count: usize = 0;
     var success_count: usize = 0;
-    var failed_branches = std.ArrayList([]const u8).init(allocator);
-    defer failed_branches.deinit();
+    var failed_branches = std.ArrayList([]const u8).empty;
+    defer failed_branches.deinit(allocator);
     
     for (branch_names) |branch| {
         try stdout.print("\n{s}Removing worktree for branch '{s}'...{s}\n", .{
@@ -304,7 +306,7 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
         // Execute single branch removal
         execute(allocator, branch, true, force) catch |err| {
             failed_count += 1;
-            try failed_branches.append(branch);
+            try failed_branches.append(allocator, branch);
             try colors.printError(stderr, "Failed to remove worktree for branch '{s}': {}", .{ branch, err });
             continue;
         };
@@ -328,8 +330,8 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
 
 /// Execute remove command with interactive selection
 pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: bool, force: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Get worktrees with modification times, excluding current
     const worktrees_with_time = try git.listWorktreesWithTimeSmart(allocator, true, true);
@@ -349,8 +351,8 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
     
     if (use_interactive) {
         // Build list of options for interactive selection
-        var options_list = std.ArrayList([]u8).init(allocator);
-        defer options_list.deinit();
+        var options_list = std.ArrayList([]u8).empty;
+        defer options_list.deinit(allocator);
         defer for (options_list.items) |item| allocator.free(item);
         
         for (worktrees_with_time) |wt_info| {
@@ -370,7 +372,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
                 duration_str,
                 colors.reset,
             });
-            try options_list.append(option_text);
+            try options_list.append(allocator, option_text);
         }
         
         // Show header
@@ -432,7 +434,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
             }
             
             // Parse multiple numbers
-            var indices = std.ArrayList(usize).init(allocator);
+            var indices = std.ArrayList(usize).empty;
             var it = std.mem.tokenizeAny(u8, trimmed, " \t,");
             while (it.next()) |token| {
                 const selection = std.fmt.parseInt(usize, token, 10) catch {
@@ -455,12 +457,12 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
                     }
                 }
                 if (!already_selected) {
-                    try indices.append(idx);
+                    try indices.append(allocator, idx);
                 }
             }
             
             if (indices.items.len > 0) {
-                selected_indices = try indices.toOwnedSlice();
+                selected_indices = try indices.toOwnedSlice(allocator);
             }
         }
     }
@@ -474,8 +476,8 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         
         // Show selected worktrees
         try colors.printInfo(stdout, "Selected worktree{s}:\n", .{if (indices.len == 1) "" else "s"});
-        var branch_names = std.ArrayList([]const u8).init(allocator);
-        defer branch_names.deinit();
+        var branch_names = std.ArrayList([]const u8).empty;
+        defer branch_names.deinit(allocator);
         
         for (indices) |idx| {
             const selected = worktrees_with_time[idx];
@@ -487,7 +489,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
                 selected.worktree.branch,
                 colors.reset,
             });
-            try branch_names.append(selected.worktree.branch);
+            try branch_names.append(allocator, selected.worktree.branch);
         }
         
         // Call the multiple execute function with selected branches

@@ -44,16 +44,16 @@ pub fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const secs = seconds % minute;
     
     // Build array of non-zero units
-    var units = std.ArrayList(struct { value: u64, unit: []const u8 }).init(allocator);
-    defer units.deinit();
+    var units = std.ArrayList(struct { value: u64, unit: []const u8 }).empty;
+    defer units.deinit(allocator);
     
-    if (years > 0) try units.append(.{ .value = years, .unit = "y" });
-    if (months > 0) try units.append(.{ .value = months, .unit = "mo" });
-    if (weeks > 0) try units.append(.{ .value = weeks, .unit = "w" });
-    if (days > 0) try units.append(.{ .value = days, .unit = "d" });
-    if (hours > 0) try units.append(.{ .value = hours, .unit = "h" });
-    if (minutes > 0) try units.append(.{ .value = minutes, .unit = "m" });
-    if (secs > 0) try units.append(.{ .value = secs, .unit = "s" });
+    if (years > 0) try units.append(allocator, .{ .value = years, .unit = "y" });
+    if (months > 0) try units.append(allocator, .{ .value = months, .unit = "mo" });
+    if (weeks > 0) try units.append(allocator, .{ .value = weeks, .unit = "w" });
+    if (days > 0) try units.append(allocator, .{ .value = days, .unit = "d" });
+    if (hours > 0) try units.append(allocator, .{ .value = hours, .unit = "h" });
+    if (minutes > 0) try units.append(allocator, .{ .value = minutes, .unit = "m" });
+    if (secs > 0) try units.append(allocator, .{ .value = secs, .unit = "s" });
     
     // This shouldn't happen due to special cases above, but just in case
     if (units.items.len == 0) {

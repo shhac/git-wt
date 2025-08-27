@@ -53,11 +53,11 @@ pub const GitResult = union(enum) {
 
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
-    var argv = std.ArrayList([]const u8).init(allocator);
-    defer argv.deinit();
+    var argv = std.ArrayList([]const u8).empty;
+    defer argv.deinit(allocator);
     
-    try argv.append("git");
-    try argv.appendSlice(args);
+    try argv.append(allocator, "git");
+    try argv.appendSlice(allocator, args);
     
     const result = try std.process.Child.run(.{
         .allocator = allocator,
@@ -284,14 +284,14 @@ fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Workt
     const cwd_path = try std.process.getCwdAlloc(allocator);
     defer allocator.free(cwd_path);
     
-    var worktrees = std.ArrayList(Worktree).init(allocator);
+    var worktrees = std.ArrayList(Worktree).empty;
     errdefer {
         for (worktrees.items) |wt| {
             allocator.free(wt.path);
             allocator.free(wt.branch);
             allocator.free(wt.commit);
         }
-        worktrees.deinit();
+        worktrees.deinit(allocator);
     }
     
     var current_path: ?[]const u8 = null;
@@ -313,7 +313,7 @@ fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Workt
             if (current_path != null) {
                 const is_current = checkIsCurrentWorktree(cwd_path, current_path.?);
                 
-                try worktrees.append(Worktree{
+                try worktrees.append(allocator, Worktree{
                     .path = try allocator.dupe(u8, current_path.?),
                     .branch = try allocator.dupe(u8, current_branch orelse "HEAD"),
                     .commit = try allocator.dupe(u8, current_commit orelse ""),
@@ -351,7 +351,7 @@ fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Workt
     if (current_path != null and processed_count < max_items) {
         const is_current = checkIsCurrentWorktree(cwd_path, current_path.?);
         
-        try worktrees.append(Worktree{
+        try worktrees.append(allocator, Worktree{
             .path = try allocator.dupe(u8, current_path.?),
             .branch = try allocator.dupe(u8, current_branch orelse "HEAD"),
             .commit = try allocator.dupe(u8, current_commit orelse ""),
@@ -361,7 +361,7 @@ fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Workt
         });
     }
     
-    return worktrees.toOwnedSlice();
+    return worktrees.toOwnedSlice(allocator);
 }
 
 /// Get list of worktrees
@@ -373,7 +373,7 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     const cwd_path = try std.process.getCwdAlloc(allocator);
     defer allocator.free(cwd_path);
     
-    var worktrees = std.ArrayList(Worktree).init(allocator);
+    var worktrees = std.ArrayList(Worktree).empty;
     var lines = std.mem.tokenizeScalar(u8, output, '\n');
     
     var current_path: ?[]const u8 = null;
@@ -402,7 +402,7 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
                     break :blk false;
                 };
                 
-                try worktrees.append(.{
+                try worktrees.append(allocator, .{
                     .path = try allocator.dupe(u8, path),
                     .branch = if (current_branch) |b| blk: {
                         // Remove refs/heads/ prefix if present
@@ -449,7 +449,7 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
             break :blk false;
         };
         
-        try worktrees.append(.{
+        try worktrees.append(allocator, .{
             .path = try allocator.dupe(u8, path),
             .branch = if (current_branch) |b| blk: {
                 // Remove refs/heads/ prefix if present
@@ -465,7 +465,7 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
         });
     }
     
-    return worktrees.toOwnedSlice();
+    return worktrees.toOwnedSlice(allocator);
 }
 
 /// Create a new worktree
@@ -804,7 +804,7 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
     defer arena.deinit();
     const arena_allocator = arena.allocator();
     
-    var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
+    var worktrees_list = std.ArrayList(WorktreeWithTime).empty;
     errdefer {
         for (worktrees_list.items) |wt| {
             allocator.free(wt.worktree.path);
@@ -812,7 +812,7 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
             allocator.free(wt.worktree.commit);
             allocator.free(wt.display_name);
         }
-        worktrees_list.deinit();
+        worktrees_list.deinit(allocator);
     }
     
     for (worktrees) |wt| {
@@ -850,11 +850,11 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
             .display_name = display_name,
         };
         
-        try worktrees_list.append(wt_item);
+        try worktrees_list.append(allocator, wt_item);
     }
     
     // Sort by modification time (most recent first)
-    const items = try worktrees_list.toOwnedSlice();
+    const items = try worktrees_list.toOwnedSlice(allocator);
     std.mem.sort(WorktreeWithTime, items, {}, struct {
         fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
             return a.mod_time > b.mod_time;
@@ -872,8 +872,8 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
     defer arena.deinit();
     const arena_allocator = arena.allocator();
     
-    var worktrees_list = std.ArrayList(WorktreeWithTime).init(allocator);
-    defer worktrees_list.deinit();
+    var worktrees_list = std.ArrayList(WorktreeWithTime).empty;
+    defer worktrees_list.deinit(allocator);
     
     // Get modification times for each worktree
     for (worktrees) |wt| {
@@ -921,7 +921,7 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
         };
         
         // Add to list - if this fails, the errdefers above will clean up
-        try worktrees_list.append(wt_item);
+        try worktrees_list.append(allocator, wt_item);
     }
     
     const result = try worktrees_list.toOwnedSlice();
@@ -964,7 +964,7 @@ test "parseWorktreeList porcelain output" {
     // Test helper function to parse porcelain output
     const parseOutput = struct {
         fn parse(alloc: std.mem.Allocator, output: []const u8, cwd: []const u8) ![]Worktree {
-            var worktrees = std.ArrayList(Worktree).init(alloc);
+            var worktrees = std.ArrayList(Worktree).empty;
             var lines = std.mem.tokenizeScalar(u8, output, '\n');
             
             var current_path: ?[]const u8 = null;
@@ -981,7 +981,7 @@ test "parseWorktreeList porcelain output" {
                              cwd.len > path.len and 
                              cwd[path.len] == '/');
                         
-                        try worktrees.append(.{
+                        try worktrees.append(allocator, .{
                             .path = try alloc.dupe(u8, path),
                             .branch = if (current_branch) |b| blk: {
                                 if (std.mem.startsWith(u8, b, "refs/heads/")) {
@@ -1018,7 +1018,7 @@ test "parseWorktreeList porcelain output" {
                      cwd.len > path.len and 
                      cwd[path.len] == '/');
                 
-                try worktrees.append(.{
+                try worktrees.append(allocator, .{
                     .path = try alloc.dupe(u8, path),
                     .branch = if (current_branch) |b| blk: {
                         if (std.mem.startsWith(u8, b, "refs/heads/")) {
@@ -1033,7 +1033,7 @@ test "parseWorktreeList porcelain output" {
                 });
             }
             
-            return worktrees.toOwnedSlice();
+            return worktrees.toOwnedSlice(allocator);
         }
     }.parse;
     

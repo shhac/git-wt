@@ -86,8 +86,8 @@ test "integration: time formatting with color output" {
         try testing.expect(std.mem.indexOf(u8, duration, tc.expected_contains) != null);
         
         // Test: Integration with color output (should not crash)
-        var buffer = std.ArrayList(u8).init(allocator);
-        defer buffer.deinit();
+        var buffer = std.ArrayList(u8).empty;
+        defer buffer.deinit(allocator);
         const writer = buffer.writer();
         
         try colors.printInfo(writer, "Last modified: {s} ago", .{duration});

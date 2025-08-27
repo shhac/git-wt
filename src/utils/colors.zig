@@ -1,4 +1,3 @@
-const std = @import("std");
 
 // ANSI escape codes
 pub const reset = "\x1b[0m";
@@ -18,6 +17,8 @@ pub const warning_prefix = bold ++ yellow;
 pub const path_color = cyan;
 
 // Formatted print helpers
+const std = @import("std");
+const io = @import("io.zig");
 pub fn printError(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
     try writer.print("{s}Error:{s} ", .{ error_prefix, reset });
     try writer.print(fmt, args);
@@ -60,8 +61,9 @@ test "color constants" {
 
 test "color print functions" {
     // Test that the print functions work with a buffer
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
-    defer buffer.deinit();
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).empty;
+    defer buffer.deinit(allocator);
     const writer = buffer.writer();
     
     // Test printError

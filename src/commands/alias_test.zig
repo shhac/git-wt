@@ -23,16 +23,16 @@ test "shell string escaping" {
     // Note: We can't directly test the private escapeShellString function,
     // but we can verify the concepts
     for (test_cases) |tc| {
-        var result = std.ArrayList(u8).init(allocator);
-        defer result.deinit();
+        var result = std.ArrayList(u8).empty;
+        defer result.deinit(allocator);
         
         for (tc.input) |c| {
             switch (c) {
                 '"', '$', '`', '\\' => {
-                    try result.append('\\');
-                    try result.append(c);
+                    try result.append(allocator, '\\');
+                    try result.append(allocator, c);
                 },
-                else => try result.append(c),
+                else => try result.append(allocator, c),
             }
         }
         
@@ -53,7 +53,7 @@ test "flag parsing for alias command" {
     };
     
     var parsed = try args.parseArgs(allocator, &test_args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     // Verify parsing
     try testing.expectEqualStrings("gwt", parsed.getPositional(0).?);

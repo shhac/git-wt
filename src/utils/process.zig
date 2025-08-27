@@ -1,6 +1,7 @@
-const std = @import("std");
 
 /// Run a command and optionally return output
+const std = @import("std");
+const io = @import("io.zig");
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !std.process.Child.Term {
     const result = try std.process.Child.run(.{
         .allocator = allocator,
@@ -28,7 +29,7 @@ pub fn runWithOutput(allocator: std.mem.Allocator, argv: []const []const u8) !bo
     defer allocator.free(result.stderr);
     
     if (result.term.Exited == 0) {
-        const stdout = std.io.getStdOut().writer();
+        const stdout = io.getStdOut();
         try stdout.writeAll(result.stdout);
         return true;
     }

@@ -8,8 +8,9 @@ pub const ParsedArgs = struct {
     flags: std.StringHashMap(?[]const u8),
     allocator: std.mem.Allocator,
 
-    pub fn deinit(self: *ParsedArgs) void {
-        self.positional.deinit();
+    pub fn deinit(self: *ParsedArgs, allocator: std.mem.Allocator) void {
+        _ = allocator; // For API consistency, though we use the stored allocator
+        self.positional.deinit(self.allocator);
         self.flags.deinit();
     }
 
@@ -44,11 +45,11 @@ pub const ParsedArgs = struct {
 /// Parse command-line arguments into flags and positional arguments
 pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !ParsedArgs {
     var result = ParsedArgs{
-        .positional = std.ArrayList([]const u8).init(allocator),
+        .positional = std.ArrayList([]const u8).empty,
         .flags = std.StringHashMap(?[]const u8).init(allocator),
         .allocator = allocator,
     };
-    errdefer result.deinit();
+    errdefer result.deinit(allocator);
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -70,7 +71,7 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Parsed
             }
         } else {
             // It's a positional argument
-            try result.positional.append(arg);
+            try result.positional.append(allocator, arg);
         }
     }
 
@@ -83,7 +84,7 @@ test "parseArgs basic" {
     // Test basic parsing
     const args = [_][]const u8{ "branch-name", "--force", "--parent-dir", "/tmp/test" };
     var parsed = try parseArgs(allocator, &args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     // Check positional args
     try std.testing.expectEqualStrings("branch-name", parsed.getPositional(0).?);
@@ -100,7 +101,7 @@ test "parseArgs with aliases" {
     
     const args = [_][]const u8{ "-n", "-p", "/custom", "feature" };
     var parsed = try parseArgs(allocator, &args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     // Check using aliases
     try std.testing.expect(parsed.hasFlag(&.{ "--non-interactive", "-n" }));
@@ -114,13 +115,13 @@ test "parseArgs empty and edge cases" {
     // Empty args
     const empty_args = [_][]const u8{};
     var parsed1 = try parseArgs(allocator, &empty_args);
-    defer parsed1.deinit();
+    defer parsed1.deinit(allocator);
     try std.testing.expect(parsed1.positional.items.len == 0);
     
     // Only flags
     const flag_args = [_][]const u8{ "--force", "--debug" };
     var parsed2 = try parseArgs(allocator, &flag_args);
-    defer parsed2.deinit();
+    defer parsed2.deinit(allocator);
     try std.testing.expect(parsed2.positional.items.len == 0);
     try std.testing.expect(parsed2.hasFlag(&.{"--force"}));
     try std.testing.expect(parsed2.hasFlag(&.{"--debug"}));

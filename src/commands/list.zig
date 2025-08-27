@@ -1,10 +1,12 @@
+
+
 const std = @import("std");
 const process = std.process;
 const fs = std.fs;
 
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
-
+const io = @import("../utils/io.zig");
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
@@ -23,16 +25,16 @@ fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const secs = seconds % minute;
     
     // Build array of non-zero units
-    var units = std.ArrayList(struct { value: u64, unit: []const u8 }).init(allocator);
-    defer units.deinit();
+    var units = std.ArrayList(struct { value: u64, unit: []const u8 }).empty;
+    defer units.deinit(allocator);
     
-    if (years > 0) try units.append(.{ .value = years, .unit = "y" });
-    if (months > 0) try units.append(.{ .value = months, .unit = "mo" });
-    if (weeks > 0) try units.append(.{ .value = weeks, .unit = "w" });
-    if (days > 0) try units.append(.{ .value = days, .unit = "d" });
-    if (hours > 0) try units.append(.{ .value = hours, .unit = "h" });
-    if (minutes > 0) try units.append(.{ .value = minutes, .unit = "m" });
-    if (secs > 0 or units.items.len == 0) try units.append(.{ .value = secs, .unit = "s" });
+    if (years > 0) try units.append(allocator, .{ .value = years, .unit = "y" });
+    if (months > 0) try units.append(allocator, .{ .value = months, .unit = "mo" });
+    if (weeks > 0) try units.append(allocator, .{ .value = weeks, .unit = "w" });
+    if (days > 0) try units.append(allocator, .{ .value = days, .unit = "d" });
+    if (hours > 0) try units.append(allocator, .{ .value = hours, .unit = "h" });
+    if (minutes > 0) try units.append(allocator, .{ .value = minutes, .unit = "m" });
+    if (secs > 0 or units.items.len == 0) try units.append(allocator, .{ .value = secs, .unit = "s" });
     
     // Format the two most significant units
     if (units.items.len == 1) {
@@ -52,7 +54,7 @@ fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
 
 
 pub fn printHelp() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt list\n\n", .{});
     try stdout.print("List all git worktrees with their status information.\n\n", .{});
     try stdout.print("Options:\n", .{});
@@ -71,8 +73,8 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Get all worktrees using git worktree list
     const worktrees = try git.listWorktreesSmart(allocator, false); // false = not for interactive

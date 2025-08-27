@@ -14,8 +14,8 @@ const UNSAFE_CHARS = [_]struct { char: u8, replacement: []const u8 }{
 
 /// Sanitize branch name for filesystem path (URL encode unsafe characters)
 pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result = std.ArrayList(u8).empty;
+    defer result.deinit(allocator);
     
     var i: usize = 0;
     while (i < branch.len) {
@@ -26,7 +26,7 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             // This is a multi-byte UTF-8 sequence
             const len = std.unicode.utf8ByteSequenceLength(char) catch {
                 // Invalid UTF-8, encode as %XX
-                try result.writer().print("%{X:0>2}", .{char});
+                try result.writer(allocator).print("%{X:0>2}", .{char});
                 i += 1;
                 continue;
             };
@@ -34,7 +34,7 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             if (i + len > branch.len) {
                 // Incomplete UTF-8 sequence, encode remaining bytes
                 while (i < branch.len) : (i += 1) {
-                    try result.writer().print("%{X:0>2}", .{branch[i]});
+                    try result.writer(allocator).print("%{X:0>2}", .{branch[i]});
                 }
                 break;
             }
@@ -43,7 +43,7 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             const codepoint = std.unicode.utf8Decode(branch[i..i+len]) catch {
                 // Invalid UTF-8 sequence, encode each byte
                 for (branch[i..i+len]) |b| {
-                    try result.writer().print("%{X:0>2}", .{b});
+                    try result.writer(allocator).print("%{X:0>2}", .{b});
                 }
                 i += len;
                 continue;
@@ -53,11 +53,11 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             if (isProblematicUnicode(codepoint)) {
                 // Encode the entire sequence
                 for (branch[i..i+len]) |b| {
-                    try result.writer().print("%{X:0>2}", .{b});
+                    try result.writer(allocator).print("%{X:0>2}", .{b});
                 }
             } else {
                 // Safe Unicode character, append as-is
-                try result.appendSlice(branch[i..i+len]);
+                try result.appendSlice(allocator, branch[i..i+len]);
             }
             i += len;
         } else {
@@ -65,7 +65,7 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             var found = false;
             for (UNSAFE_CHARS) |unsafe| {
                 if (char == unsafe.char) {
-                    try result.appendSlice(unsafe.replacement);
+                    try result.appendSlice(allocator, unsafe.replacement);
                     found = true;
                     break;
                 }
@@ -73,16 +73,16 @@ pub fn sanitizeBranchPath(allocator: std.mem.Allocator, branch: []const u8) ![]u
             if (!found) {
                 // Also check for control characters
                 if (char < 0x20 or char == 0x7F) {
-                    try result.writer().print("%{X:0>2}", .{char});
+                    try result.writer(allocator).print("%{X:0>2}", .{char});
                 } else {
-                    try result.append(char);
+                    try result.append(allocator, char);
                 }
             }
             i += 1;
         }
     }
     
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 /// Check if a Unicode codepoint is problematic for filesystem paths
@@ -119,8 +119,8 @@ fn isProblematicUnicode(codepoint: u21) bool {
 
 /// Reverse sanitization for display (decode URL encoded characters)
 pub fn unsanitizeBranchPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result = std.ArrayList(u8).empty;
+    defer result.deinit(allocator);
     
     var i: usize = 0;
     while (i < path.len) {
@@ -129,23 +129,23 @@ pub fn unsanitizeBranchPath(allocator: std.mem.Allocator, path: []const u8) ![]u
             var found = false;
             for (UNSAFE_CHARS) |unsafe| {
                 if (std.mem.startsWith(u8, path[i..], unsafe.replacement)) {
-                    try result.append(unsafe.char);
+                    try result.append(allocator, unsafe.char);
                     i += unsafe.replacement.len;
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                try result.append(path[i]);
+                try result.append(allocator, path[i]);
                 i += 1;
             }
         } else {
-            try result.append(path[i]);
+            try result.append(allocator, path[i]);
             i += 1;
         }
     }
     
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 /// Configuration files to copy when creating a new worktree
@@ -239,17 +239,17 @@ fn copyDir(src: []const u8, dst: []const u8) !void {
     // Use a general purpose allocator for the walker
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const walker_allocator = gpa.allocator();
     
-    var walker = try src_dir.walk(allocator);
+    var walker = try src_dir.walk(walker_allocator);
     defer walker.deinit();
     
     while (try walker.next()) |entry| {
-        const src_path = try fs.path.join(allocator, &.{ src, entry.path });
-        defer allocator.free(src_path);
+        const src_path = try fs.path.join(walker_allocator, &.{ src, entry.path });
+        defer walker_allocator.free(src_path);
         
-        const dst_path = try fs.path.join(allocator, &.{ dst, entry.path });
-        defer allocator.free(dst_path);
+        const dst_path = try fs.path.join(walker_allocator, &.{ dst, entry.path });
+        defer walker_allocator.free(dst_path);
         
         switch (entry.kind) {
             .directory => try ensureDir(dst_path),
@@ -478,14 +478,14 @@ test "sanitizeBranchPath edge cases" {
     try std.testing.expectEqualStrings("%3A%3F%2A%7C%3C%3E", only_unsafe);
     
     // Test very long string with mixed characters
-    var long_branch = std.ArrayList(u8).init(allocator);
-    defer long_branch.deinit();
+    var long_branch = std.ArrayList(u8).empty;
+    defer long_branch.deinit(allocator);
     
     for (0..500) |i| {
         if (i % 10 == 0) {
-            try long_branch.append(':');
+            try long_branch.append(allocator, ':');
         } else {
-            try long_branch.append('a');
+            try long_branch.append(allocator, 'a');
         }
     }
     

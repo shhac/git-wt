@@ -8,6 +8,9 @@ const fs_utils = @import("utils/fs.zig");
 const colors = @import("utils/colors.zig");
 const debug = @import("utils/debug.zig");
 const args_parser = @import("utils/args.zig");
+const input = @import("utils/input.zig");
+const interactive = @import("utils/interactive.zig");
+const io = @import("utils/io.zig");
 
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
@@ -36,7 +39,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
     
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" });
     const branch_name = parsed.getPositional(0);
@@ -44,7 +47,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
     if (branch_name) |branch| {
         try cmd_new.execute(allocator, branch, non_interactive, parent_dir);
     } else {
-        const stderr = std.io.getStdErr().writer();
+        const stderr = io.getStdErr();
         try colors.printError(stderr, "Missing required arguments", .{});
         print("Usage: {s}\n", .{commands[0].usage});
         return error.MissingBranchName;
@@ -54,7 +57,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
 fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     const force = parsed.hasFlag(&.{ "--force", "-f" });
     const branch_names = parsed.getPositionals();
@@ -77,7 +80,7 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     const no_color = parsed.hasFlag(&.{"--no-color"});
     const plain = parsed.hasFlag(&.{"--plain"});
@@ -93,7 +96,7 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_inter
     
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
-    defer parsed.deinit();
+    defer parsed.deinit(allocator);
     
     const no_color = parsed.hasFlag(&.{"--no-color"});
     const plain = parsed.hasFlag(&.{"--plain"});
@@ -117,7 +120,7 @@ pub fn main() void {
             error.MissingBranchName,
             error.UnknownCommand => process.exit(1),
             else => {
-                const stderr = std.io.getStdErr().writer();
+                const stderr = io.getStdErr();
                 stderr.print("Error: {}\n", .{err}) catch {};
                 process.exit(1);
             }
@@ -133,8 +136,8 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     var non_interactive = false;
     var no_tty = false;
     var debug_mode = false;
-    var filtered_args = std.ArrayList([]const u8).init(allocator);
-    defer filtered_args.deinit();
+    var filtered_args = std.ArrayList([]const u8).empty;
+    defer filtered_args.deinit(allocator);
     
     // Check if this is the alias command (needs special handling)
     const is_alias_command = args.len >= 2 and std.mem.eql(u8, args[1], "alias");
@@ -144,23 +147,23 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
             non_interactive = true;
             // Pass through to alias command
             if (is_alias_command) {
-                try filtered_args.append(arg);
+                try filtered_args.append(allocator, arg);
             }
         } else if (std.mem.eql(u8, arg, "--no-tty")) {
             no_tty = true;
             // Pass through to alias command
             if (is_alias_command) {
-                try filtered_args.append(arg);
+                try filtered_args.append(allocator, arg);
             }
         } else if (std.mem.eql(u8, arg, "--debug")) {
             debug_mode = true;
             debug.setEnabled(true);
             // Pass through to alias command
             if (is_alias_command) {
-                try filtered_args.append(arg);
+                try filtered_args.append(allocator, arg);
             }
         } else {
-            try filtered_args.append(arg);
+            try filtered_args.append(allocator, arg);
         }
     }
     
@@ -176,8 +179,8 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
         debug.print("Current directory: {s}", .{cwd});
         
         // Command line arguments
-        debug.print("Arguments: {s}", .{args});
-        debug.print("Filtered args: {s}", .{final_args});
+        debug.print("Arguments: {any}", .{args});
+        debug.print("Filtered args: {any}", .{final_args});
         
         // Environment variables
         if (std.process.getEnvVarOwned(allocator, "NON_INTERACTIVE")) |v| {
@@ -256,7 +259,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
         if (std.mem.eql(u8, arg1, cmd.name)) {
             debug.printSection("Command Execution");
             debug.print("Command: {s}", .{cmd.name});
-            debug.print("Arguments: {s}", .{command_args});
+            debug.print("Arguments: {any}", .{command_args});
             // Check for help flag on the command
             if (command_args.len > 0 and (std.mem.eql(u8, command_args[0], "--help") or std.mem.eql(u8, command_args[0], "-h"))) {
                 try cmd.help();
@@ -264,7 +267,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
             }
             
             if (command_args.len < cmd.min_args) {
-                const stderr = std.io.getStdErr().writer();
+                const stderr = io.getStdErr();
                 try colors.printError(stderr, "Missing required arguments", .{});
                 print("Usage: {s}\n", .{cmd.usage});
                 return error.MissingRequiredArguments;
@@ -275,7 +278,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     }
     
     // Unknown command
-    const stderr = std.io.getStdErr().writer();
+    const stderr = io.getStdErr();
     try stderr.print("{s}Error:{s} Unknown command '{s}'\n", .{ colors.error_prefix, colors.reset, arg1 });
     printUsage();
     return error.UnknownCommand;

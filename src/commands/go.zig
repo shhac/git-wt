@@ -1,3 +1,6 @@
+
+
+
 const std = @import("std");
 const process = std.process;
 const fs = std.fs;
@@ -10,10 +13,9 @@ const fd = @import("../utils/fd.zig");
 const interactive = @import("../utils/interactive.zig");
 const time = @import("../utils/time.zig");
 const debug = @import("../utils/debug.zig");
-
-
+const io = @import("../utils/io.zig");
 pub fn printHelp() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt go [branch-name]\n\n", .{});
     try stdout.print("Navigate to a git worktree or the main repository.\n\n", .{});
     try stdout.print("Arguments:\n", .{});
@@ -45,8 +47,8 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Get all worktrees using git worktree list
     const worktrees = try git.listWorktrees(allocator);
@@ -224,8 +226,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         
         if (use_interactive) {
             // Build list of options for interactive selection
-            var options_list = std.ArrayList([]u8).init(allocator);
-            defer options_list.deinit();
+            var options_list = std.ArrayList([]u8).empty;
+            defer options_list.deinit(allocator);
             defer for (options_list.items) |item| allocator.free(item);
             
             for (worktrees_with_time) |wt_info| {
@@ -249,7 +251,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     duration_str,
                     colors.reset,
                 });
-                try options_list.append(option_text);
+                try options_list.append(allocator, option_text);
             }
             
             // Don't show header - the interactive UI will handle display
@@ -288,8 +290,22 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             const response = if (show_command) blk: {
                 // In show_command mode, handle prompt and input manually to avoid stdout pollution
                 try stderr.print("{s} ", .{prompt});
-                const stdin = std.io.getStdIn().reader();
-                break :blk try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
+                const stdin = io.getStdIn();
+                // Read input directly
+                var buf: [1024]u8 = undefined;
+                const bytes_read = try stdin.read(&buf);
+                
+                const line: ?[]u8 = if (bytes_read > 0) inner: {
+                    for (buf[0..bytes_read], 0..) |c, i| {
+                        if (c == '\n') {
+                            const result = try allocator.dupe(u8, buf[0..i]);
+                            break :inner result;
+                        }
+                    }
+                    const result = try allocator.dupe(u8, buf[0..bytes_read]);
+                    break :inner result;
+                } else null;
+                break :blk line;
             } else try input.readLine(allocator, prompt);
             
             if (response) |resp| {

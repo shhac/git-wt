@@ -1,17 +1,18 @@
+
+/// Global state for signal handling
 const std = @import("std");
 const posix = std.posix;
 const colors = @import("colors.zig");
 const git = @import("git.zig");
 const time = @import("time.zig");
-
-/// Global state for signal handling
+const io = @import("io.zig");
 var g_original_termios: ?posix.termios = null;
 var g_is_raw_mode = std.atomic.Value(bool).init(false);
 var g_signal_mutex = std.Thread.Mutex{};
 var g_needs_redraw = std.atomic.Value(bool).init(false);
 
 /// Signal handler for SIGINT
-fn handleSignal(_: i32) callconv(.C) void {
+fn handleSignal(_: i32) callconv(.c) void {
     // Check if we're in raw mode and get termios atomically
     var termios_copy: posix.termios = undefined;
     var should_restore = false;
@@ -28,7 +29,7 @@ fn handleSignal(_: i32) callconv(.C) void {
     
     // Restore terminal state outside of mutex lock
     if (should_restore) {
-        posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, termios_copy) catch {};
+        posix.tcsetattr(io.getStdIn().handle, .FLUSH, termios_copy) catch {};
         showCursor() catch {};
     }
     
@@ -37,19 +38,19 @@ fn handleSignal(_: i32) callconv(.C) void {
 }
 
 /// Signal handler for SIGWINCH (window size change)
-fn handleWinch(_: i32) callconv(.C) void {
+fn handleWinch(_: i32) callconv(.c) void {
     // Set flag to trigger redraw on next iteration
     g_needs_redraw.store(true, .release);
 }
 
 /// Check if stdin is a TTY (terminal)
 pub fn isStdinTty() bool {
-    return posix.isatty(std.io.getStdIn().handle);
+    return posix.isatty(io.getStdIn().handle);
 }
 
 /// Check if stdout is a TTY (terminal)
 pub fn isStdoutTty() bool {
-    return posix.isatty(std.io.getStdOut().handle);
+    return posix.isatty(io.getStdOut().file.handle);
 }
 
 /// Terminal control for raw mode
@@ -62,7 +63,7 @@ pub const RawMode = struct {
         if (self.is_raw.load(.acquire)) return;
         
         // Get current terminal settings
-        self.original_termios = try posix.tcgetattr(std.io.getStdIn().handle);
+        self.original_termios = try posix.tcgetattr(io.getStdIn().handle);
         
         // Create raw mode settings
         var raw = self.original_termios;
@@ -84,7 +85,7 @@ pub const RawMode = struct {
         raw.cc[@intFromEnum(posix.V.TIME)] = 1; // 0.1 second timeout
         raw.cc[@intFromEnum(posix.V.MIN)] = 0;   // Don't block
         
-        try posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, raw);
+        try posix.tcsetattr(io.getStdIn().handle, .FLUSH, raw);
         self.is_raw.store(true, .release);
         
         // Register for signal handling
@@ -107,7 +108,7 @@ pub const RawMode = struct {
         }
         
         // Restore terminal settings outside of mutex lock
-        posix.tcsetattr(std.io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
+        posix.tcsetattr(io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
         self.is_raw.store(false, .release);
     }
 };
@@ -125,7 +126,7 @@ pub const Key = enum {
 
 /// Read a key press in raw mode
 pub fn readKey() !struct { key: Key, char: u8 } {
-    const stdin = std.io.getStdIn().reader();
+    const stdin = io.getStdIn();
     var buf: [3]u8 = undefined;
     
     // Try to read first byte
@@ -167,33 +168,33 @@ pub fn readKey() !struct { key: Key, char: u8 } {
 
 /// Clear current line and move cursor to start
 pub fn clearLine() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("\r\x1b[2K", .{});
 }
 
 /// Move cursor up n lines
 pub fn moveCursorUp(n: usize) !void {
     if (n == 0) return;
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("\x1b[{d}A", .{n});
 }
 
 /// Move cursor down n lines  
 pub fn moveCursorDown(n: usize) !void {
     if (n == 0) return;
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("\x1b[{d}B", .{n});
 }
 
 /// Hide cursor
 pub fn hideCursor() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("\x1b[?25l", .{});
 }
 
 /// Show cursor
 pub fn showCursor() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("\x1b[?25h", .{});
 }
 
@@ -342,22 +343,22 @@ pub fn selectFromListUnified(
         return SelectionResult.cancelled;
     }
     
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     var current: usize = 0;
     
     // Selection state - only used in multi mode
     var selected: ?std.ArrayList(bool) = null;
-    defer if (selected) |*sel| sel.deinit();
+    defer if (selected) |*sel| sel.deinit(allocator);
     
     if (options.mode == .multi) {
-        selected = std.ArrayList(bool).init(allocator);
-        try selected.?.appendNTimes(false, items.len);
+        selected = std.ArrayList(bool).empty;
+        try selected.?.appendNTimes(allocator, false, items.len);
     }
     
     // Install signal handlers
     var sigaction = posix.Sigaction{
         .handler = .{ .handler = handleSignal },
-        .mask = posix.empty_sigset,
+        .mask = std.mem.zeroes(posix.sigset_t),
         .flags = 0,
     };
     var old_sigaction: posix.Sigaction = undefined;
@@ -366,7 +367,7 @@ pub fn selectFromListUnified(
     
     var winch_action = posix.Sigaction{
         .handler = .{ .handler = handleWinch },
-        .mask = posix.empty_sigset,
+        .mask = std.mem.zeroes(posix.sigset_t),
         .flags = 0,
     };
     var old_winch_action: posix.Sigaction = undefined;
@@ -532,14 +533,14 @@ pub fn selectFromListUnified(
                             }
                             
                             // Build result array
-                            var result = std.ArrayList(usize).init(allocator);
+                            var result = std.ArrayList(usize).empty;
                             for (sel.items, 0..) |is_selected_item, i| {
                                 if (is_selected_item) {
-                                    try result.append(i);
+                                    try result.append(allocator, i);
                                 }
                             }
                             
-                            return SelectionResult{ .multiple = try result.toOwnedSlice() };
+                            return SelectionResult{ .multiple = try result.toOwnedSlice(allocator) };
                         }
                     },
                 }

@@ -9,9 +9,10 @@ const input = @import("../utils/input.zig");
 const proc = @import("../utils/process.zig");
 const validation = @import("../utils/validation.zig");
 const lock = @import("../utils/lock.zig");
+const io = @import("../utils/io.zig");
 
 pub fn printHelp() !void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt new <branch-name>\n\n", .{});
     try stdout.print("Create a new git worktree with the specified branch name.\n\n", .{});
     try stdout.print("Arguments:\n", .{});
@@ -31,15 +32,14 @@ pub fn printHelp() !void {
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. Create a new worktree in ../repo-trees/branch-name\n", .{});
     try stdout.print("  2. Create and checkout the new branch\n", .{});
-    try stdout.print("  3. Copy configuration files (.env, .claude, etc.)\n", .{});
-    try stdout.print("  4. Optionally start claude (interactive mode only)\n\n", .{});
+    try stdout.print("  3. Copy configuration files (.env, .claude, etc.)\n\n", .{});
     try stdout.print("Note: Parent directory must exist, be writable, and not be inside\n", .{});
     try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, parent_dir: ?[]const u8) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8) !void {
+    const stdout = io.getStdOut();
+    const stderr = io.getStdErr();
     
     // Validate branch name
     validation.validateBranchName(branch_name) catch |err| {
@@ -243,30 +243,4 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     // Change to the new worktree directory
     try process.changeCurDir(worktree_path);
     try colors.printDisplayPath(stdout, "📁 Changed to worktree:", worktree_path, allocator);
-    
-    // Ask if user wants to run claude (skip in non-interactive mode)
-    if (!non_interactive) {
-        if (try input.confirm("\nWould you like to start claude?", true)) {
-            try colors.printSuccess(stdout, "🚀 Starting claude...", .{});
-            
-            // Start claude directly without shell (safe from command injection)
-            var claude_process = std.process.Child.init(&.{"claude"}, allocator);
-            claude_process.stdin_behavior = .Ignore;
-            claude_process.stdout_behavior = .Ignore;
-            claude_process.stderr_behavior = .Ignore;
-            
-            // Spawn the process and let it run independently
-            claude_process.spawn() catch |err| {
-                try colors.printError(stderr, "Failed to start claude: {}", .{err});
-                // Don't fail the whole command if claude can't start (graceful degradation)
-                return;
-            };
-            
-            // Don't wait for the child - let it continue running independently
-            // The child process will be automatically cleaned up by the OS
-            // This approach follows DESIGN principle: Safety by Default
-        } else {
-            try colors.printInfo(stdout, "Skipped starting claude", .{});
-        }
-    }
 }
