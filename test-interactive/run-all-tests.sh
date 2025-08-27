@@ -51,6 +51,18 @@ else
 fi
 
 echo ""
+
+# Run prunable worktree tests
+echo ">>> Running prunable worktree tests..."
+if ./test-prunable.exp > /dev/null 2>&1; then
+    PASSED_TESTS+=("Prunable")
+    echo "✅ Prunable worktree tests passed"
+else
+    FAILED_TESTS+=("Prunable")
+    echo "❌ Prunable worktree tests failed"
+fi
+
+echo ""
 echo "================================"
 echo "Test Summary"
 echo "================================"

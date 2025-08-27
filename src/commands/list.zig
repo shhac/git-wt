@@ -104,20 +104,30 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     
     // Get modification times and prepare display names
     for (worktrees, 0..) |wt, i| {
-        const stat = try fs.cwd().statFile(wt.path);
+        // Try to get modification time, use 0 if path doesn't exist
+        const mod_time = blk: {
+            const stat = fs.cwd().statFile(wt.path) catch |err| switch (err) {
+                error.FileNotFound => {
+                    // Worktree directory doesn't exist (prunable)
+                    break :blk 0;
+                },
+                else => return err,
+            };
+            break :blk stat.mtime;
+        };
         
         // Determine display name
         const display_name = if (i == 0) // First worktree is always main
             try allocator.dupe(u8, "[main]")
-        else blk: {
+        else blk2: {
             // Extract relative path from worktree path
             const basename = fs.path.basename(wt.path);
-            break :blk try allocator.dupe(u8, basename);
+            break :blk2 try allocator.dupe(u8, basename);
         };
         
         worktrees_with_time[i] = .{
             .worktree = wt,
-            .mod_time = stat.mtime,
+            .mod_time = mod_time,
             .display_name = display_name,
         };
         allocated_count = i + 1;
@@ -142,9 +152,15 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
     // Display worktrees
     for (worktrees_with_time) |wt_info| {
         const wt = wt_info.worktree;
-        const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-        const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
-        const duration_str = try formatDuration(allocator, time_ago_seconds);
+        
+        // Handle time display for missing worktrees
+        const duration_str = if (wt_info.mod_time == 0)
+            try allocator.dupe(u8, "unknown")
+        else blk: {
+            const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
+            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+            break :blk try formatDuration(allocator, time_ago_seconds);
+        };
         defer allocator.free(duration_str);
         
         if (plain) {
@@ -193,6 +209,20 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
                     colors.yellow,
                     colors.reset,
                 });
+            }
+            
+            // Show if worktree is missing (prunable)
+            if (wt_info.mod_time == 0) {
+                if (no_color) {
+                    try stdout.print("    Status: missing (prunable)\n", .{});
+                } else {
+                    try stdout.print("    {s}Status:{s} {s}missing (prunable){s}\n", .{
+                        colors.yellow,
+                        colors.reset,
+                        colors.red,
+                        colors.reset,
+                    });
+                }
             }
         }
     }
