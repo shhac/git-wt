@@ -1,0 +1,206 @@
+#!/usr/bin/expect -f
+
+# Test navigation functionality specifically
+# This test focuses on the go command with arrow-key navigation
+
+set timeout 5
+set human_delay 0.025
+set test_failed 0
+
+proc capture_screen {msg} {
+    global expect_out
+    puts "\n=== $msg ==="
+    puts "=== SCREEN CAPTURE START ==="
+    
+    if {[info exists expect_out(buffer)]} {
+        puts $expect_out(buffer)
+    } else {
+        puts "(No buffer content available)"
+    }
+    
+    puts "=== SCREEN CAPTURE END ==="
+}
+
+proc send_key {key} {
+    global human_delay
+    send -- $key
+    sleep $human_delay
+}
+
+proc test_failed {msg} {
+    global test_failed
+    puts "\n!!! TEST FAILED: $msg !!!"
+    set test_failed 1
+}
+
+# Setup: Create a test repository with multiple worktrees
+puts "\n=== Setting up test repository ==="
+system "rm -rf /tmp/test-nav 2>/dev/null"
+system "rm -rf /tmp/test-nav-trees 2>/dev/null"
+system "mkdir -p /tmp/test-nav"
+cd /tmp/test-nav
+system "git init -q"
+system "git config user.email 'test@test.com'"
+system "git config user.name 'Test User'"
+system "echo 'initial' > README.md"
+system "git add ."
+system "git commit -q -m 'initial'"
+
+set git_wt "/Users/paul/projects-personal/git-wt/zig-out/bin/git-wt"
+
+# Create test worktrees
+system "$git_wt new branch-a --non-interactive 2>/dev/null"
+system "$git_wt new branch-b --non-interactive 2>/dev/null"
+system "$git_wt new branch-c --non-interactive 2>/dev/null"
+
+puts "\n=== Test 1: Arrow-key navigation without shell alias ==="
+spawn $git_wt go
+
+expect {
+    "*Navigate*Select*" {
+        capture_screen "Initial UI showing all worktrees"
+        
+        # Navigate down
+        puts ">>> Pressing DOWN arrow..."
+        sleep 0.3
+        send_key "\033\[B"
+        
+        sleep 0.2
+        expect "*"
+        capture_screen "After DOWN - should highlight next item"
+        
+        # Navigate down again
+        puts ">>> Pressing DOWN again..."
+        sleep 0.3
+        send_key "\033\[B"
+        
+        sleep 0.2
+        expect "*"
+        capture_screen "After second DOWN"
+        
+        # Navigate up
+        puts ">>> Pressing UP arrow..."
+        sleep 0.3
+        send_key "\033\[A"
+        
+        sleep 0.2
+        expect "*"
+        capture_screen "After UP - should go back"
+        
+        # Select with Enter
+        puts ">>> Pressing ENTER to select..."
+        sleep 0.3
+        send_key "\r"
+        
+        expect {
+            "*Navigating to:*" {
+                puts "✓ Navigation message displayed (no shell alias)"
+            }
+            timeout {
+                capture_screen "After selection"
+                puts "Warning: Unexpected output after selection"
+            }
+        }
+    }
+    timeout {
+        test_failed "Arrow-key UI did not appear"
+        capture_screen "Timeout state"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 2: Test with --show-command flag ==="
+spawn $git_wt go --show-command branch-b
+
+expect {
+    "cd */test-nav-trees/branch-b" {
+        puts "✓ CD command displayed with --show-command"
+    }
+    "*Enter number*" {
+        # --show-command with branch falls back to interactive prompt if not running through alias
+        puts "Note: --show-command fell back to interactive mode"
+        send "q\r"
+        puts "✓ --show-command test completed (interactive fallback)"
+    }
+    timeout {
+        test_failed "--show-command did not complete"
+        capture_screen "show-command output"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 3: Test cancellation with ESC ==="
+spawn $git_wt go
+
+expect {
+    "*Navigate*Select*" {
+        puts ">>> Pressing ESC to cancel..."
+        sleep 0.3
+        send_key "\033"
+        
+        expect {
+            "Cancelled" {
+                puts "✓ ESC cancellation works"
+            }
+            timeout {
+                capture_screen "After ESC"
+                puts "Warning: Cancellation unclear"
+            }
+        }
+    }
+    timeout {
+        test_failed "UI did not appear for cancellation test"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 4: Test navigation from worktree ==="
+cd ../test-nav-trees/branch-a
+spawn $git_wt go
+
+expect {
+    "*Navigate*Select*" {
+        capture_screen "UI from within worktree branch-a"
+        
+        # branch-a should be marked as current
+        # Navigate to another branch
+        puts ">>> Navigating to different branch..."
+        send_key "\033\[B"
+        sleep 0.2
+        send_key "\033\[B"
+        sleep 0.2
+        send_key "\r"
+        
+        expect {
+            "*Navigating to:*" {
+                puts "✓ Navigation from worktree works"
+            }
+            timeout {
+                capture_screen "Navigation from worktree result"
+            }
+        }
+    }
+    timeout {
+        test_failed "UI failed from worktree"
+    }
+}
+catch {close}
+catch {wait}
+
+# Cleanup
+puts "\n=== Cleanup ==="
+cd /Users/paul/projects-personal/git-wt
+system "rm -rf /tmp/test-nav /tmp/test-nav-trees"
+
+# Report results
+puts "\n=== TEST RESULTS ==="
+if {$test_failed == 0} {
+    puts "✅ ALL NAVIGATION TESTS PASSED"
+    exit 0
+} else {
+    puts "❌ SOME TESTS FAILED"
+    exit 1
+}

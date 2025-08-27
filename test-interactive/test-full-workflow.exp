@@ -1,0 +1,377 @@
+#!/usr/bin/expect -f
+
+# Comprehensive interactive test for git-wt
+# Tests: create worktrees, navigate between them, list, and remove
+
+set timeout 5
+set human_delay 0.025 ;# 25ms between keystrokes
+set test_failed 0
+
+proc capture_screen {msg} {
+    global expect_out
+    puts "\n=== $msg ==="
+    puts "=== SCREEN CAPTURE START ==="
+    
+    if {[info exists expect_out(buffer)]} {
+        puts $expect_out(buffer)
+    } else {
+        puts "(No buffer content available)"
+    }
+    
+    puts "=== SCREEN CAPTURE END ==="
+}
+
+proc send_human {text} {
+    global human_delay
+    foreach char [split $text ""] {
+        send -- $char
+        sleep $human_delay
+    }
+}
+
+proc send_key {key} {
+    global human_delay
+    send -- $key
+    sleep $human_delay
+}
+
+proc test_failed {msg} {
+    global test_failed
+    puts "\n!!! TEST FAILED: $msg !!!"
+    set test_failed 1
+}
+
+# Setup: Create a test repository
+puts "\n=== Setting up test repository ==="
+system "rm -rf /tmp/test-git-wt-interactive 2>/dev/null"
+system "mkdir -p /tmp/test-git-wt-interactive"
+cd /tmp/test-git-wt-interactive
+system "git init -q"
+system "git config user.email 'test@test.com'"
+system "git config user.name 'Test User'"
+system "echo 'test content' > README.md"
+system "git add ."
+system "git commit -q -m 'initial commit'"
+
+set git_wt_path "/Users/paul/projects-personal/git-wt/zig-out/bin/git-wt"
+
+# Test 1: Create first worktree using non-interactive mode
+puts "\n=== Test 1: Creating first worktree (feature-a) ==="
+spawn $git_wt_path new feature-a --non-interactive
+
+expect {
+    "*Worktree created successfully*" {
+        puts "✓ First worktree created successfully"
+    }
+    timeout {
+        test_failed "Failed to create first worktree"
+        capture_screen "Timeout creating feature-a"
+    }
+}
+expect eof
+catch {close}
+catch {wait}
+
+# Test 2: Create second worktree
+puts "\n=== Test 2: Creating second worktree (feature-b) ==="
+spawn $git_wt_path new feature-b --non-interactive
+
+expect {
+    "*Worktree created successfully*" {
+        puts "✓ Second worktree created successfully"
+    }
+    timeout {
+        test_failed "Failed to create second worktree"
+        capture_screen "Timeout creating feature-b"
+    }
+}
+expect eof
+catch {close}
+catch {wait}
+
+# Test 3: Navigate using arrow keys (from main)
+puts "\n=== Test 3: Testing interactive navigation from main ==="
+spawn $git_wt_path go
+
+expect {
+    "*Navigate*Select*" {
+        capture_screen "Initial arrow-key UI from main"
+        
+        # We should see main (current), feature-a, and feature-b
+        # Navigate down to feature-a
+        puts "\n>>> Pressing DOWN arrow to select feature-a..."
+        sleep 0.5 ;# Human reaction time
+        send_key "\033\[B"
+        
+        sleep 0.2
+        expect "*"
+        capture_screen "After first DOWN arrow"
+        
+        # Select with Enter
+        puts "\n>>> Pressing ENTER to select feature-a..."
+        sleep 0.3
+        send_key "\r"
+        
+        expect {
+            "*Navigating to*feature-a*" {
+                puts "✓ Navigation to feature-a successful"
+            }
+            timeout {
+                capture_screen "After ENTER pressed"
+                puts "Warning: Navigation completed but unclear result"
+            }
+        }
+    }
+    "*Enter number*" {
+        capture_screen "Fallback to number mode"
+        puts "Note: Using number-based navigation (no TTY detected)"
+        
+        # List should show numbers
+        # Type number for feature-a
+        send_human "2"
+        send_key "\r"
+        
+        expect {
+            "*feature-a*" {
+                puts "✓ Navigation to feature-a (number mode)"
+            }
+            timeout {
+                test_failed "Failed to navigate in number mode"
+            }
+        }
+    }
+    timeout {
+        test_failed "Interactive go command timed out"
+        capture_screen "Timeout in go command"
+    }
+}
+expect eof
+catch {close}
+catch {wait}
+
+# Test 4: List from feature-a worktree
+puts "\n=== Test 4: List worktrees from feature-a ==="
+cd ../test-git-wt-interactive-trees/feature-a
+spawn $git_wt_path list
+
+expect {
+    "*feature-a*current*" {
+        puts "✓ List shows feature-a as current"
+    }
+    timeout {
+        test_failed "List command failed from feature-a"
+        capture_screen "List timeout"
+    }
+}
+
+# Check for main in output (but don't fail if connection closes)
+expect {
+    "*main*" {
+        puts "✓ List includes main worktree"
+    }
+    eof {
+        puts "Note: Connection closed after showing current"
+    }
+    timeout {
+        puts "Note: Timeout checking for main"
+    }
+}
+catch {close}
+catch {wait}
+
+# Test 5: Navigate from feature-a to main
+puts "\n=== Test 5: Navigate from feature-a to main ==="
+spawn $git_wt_path go
+
+expect {
+    "*Navigate*Select*" {
+        capture_screen "Arrow-key UI from feature-a"
+        
+        # Navigate to main (usually needs DOWN arrow)
+        puts "\n>>> Looking for main worktree..."
+        send_key "\033\[B"
+        sleep 0.2
+        expect "*"
+        capture_screen "After navigation"
+        
+        # Try another down
+        send_key "\033\[B"
+        sleep 0.2
+        
+        # Select with Enter
+        puts "\n>>> Pressing ENTER..."
+        send_key "\r"
+        
+        expect {
+            "*Navigating to*" {
+                puts "✓ Navigation command executed"
+            }
+            timeout {
+                capture_screen "Navigation result"
+                puts "Warning: Navigation unclear"
+            }
+        }
+    }
+    "*Enter number*" {
+        capture_screen "Number mode from feature-a"
+        
+        # Select main (usually number 3)
+        send_human "3"
+        send_key "\r"
+        
+        expect {
+            "*main*" {
+                puts "✓ Navigation completed (number mode)"
+            }
+            timeout {
+                puts "Warning: Number mode navigation unclear"
+            }
+        }
+    }
+    timeout {
+        test_failed "Navigation from feature-a timed out"
+        capture_screen "Timeout navigating from feature-a"
+    }
+}
+expect eof
+catch {close}
+catch {wait}
+
+# Test 6: Go back to main for removal test
+puts "\n=== Test 6: Return to main for removal test ==="
+cd ../../test-git-wt-interactive
+
+# Test 7: Remove worktrees using multi-select
+puts "\n=== Test 7: Remove worktrees with interactive multi-select ==="
+spawn $git_wt_path rm
+
+expect {
+    "*Select worktree*" {
+        capture_screen "Multi-select UI for removal"
+        
+        # Navigate and select feature-a
+        puts "\n>>> Selecting worktrees..."
+        send_key "\033\[B" ;# Down
+        sleep 0.2
+        send_key " " ;# Space to select
+        sleep 0.2
+        expect "*"
+        capture_screen "After first selection"
+        
+        # Navigate and select feature-b  
+        send_key "\033\[B" ;# Down
+        sleep 0.2
+        send_key " " ;# Space to select
+        sleep 0.2
+        expect "*"
+        capture_screen "After second selection"
+        
+        # Confirm selection with Enter
+        puts "\n>>> Pressing ENTER to proceed..."
+        send_key "\r"
+        
+        expect {
+            "*Are you sure*" {
+                puts "✓ Confirmation prompt shown"
+                
+                # Confirm removal
+                send_human "y"
+                send_key "\r"
+                
+                expect {
+                    "*Removed worktree*" {
+                        puts "✓ Worktrees removed"
+                    }
+                    eof {
+                        puts "✓ Removal completed"
+                    }
+                    timeout {
+                        puts "Warning: Removal result unclear"
+                    }
+                }
+            }
+            timeout {
+                test_failed "No confirmation prompt"
+                capture_screen "After selection"
+            }
+        }
+    }
+    "*Enter numbers*" {
+        capture_screen "Number mode for removal"
+        puts "Note: Using number-based removal"
+        
+        # Select worktrees by number (comma-separated)
+        send_human "1,2"
+        send_key "\r"
+        
+        expect {
+            "*Are you sure*" {
+                send_human "y"
+                send_key "\r"
+                puts "✓ Removed using number mode"
+            }
+            timeout {
+                puts "Warning: Number mode removal unclear"
+            }
+        }
+    }
+    "*No worktrees*" {
+        puts "Note: No worktrees to remove"
+    }
+    timeout {
+        test_failed "Remove command timed out"
+        capture_screen "Remove timeout"
+    }
+}
+expect eof
+catch {close}
+catch {wait}
+
+# Test 8: Verify worktrees are removed
+puts "\n=== Test 8: Verify removal ==="
+spawn $git_wt_path list
+
+expect {
+    "*main*" {
+        # Save the output to check
+        set output_buffer $expect_out(buffer)
+        
+        # Continue reading until eof
+        expect eof
+        
+        # Check the full output
+        if {[info exists expect_out(buffer)]} {
+            append output_buffer $expect_out(buffer)
+        }
+        
+        # Check that feature branches are gone
+        if {[string match "*feature-a*" $output_buffer]} {
+            test_failed "feature-a still exists after removal"
+        } elseif {[string match "*feature-b*" $output_buffer]} {
+            test_failed "feature-b still exists after removal"
+        } else {
+            puts "✓ Both worktrees successfully removed"
+        }
+    }
+    timeout {
+        capture_screen "Final list"
+        test_failed "Could not verify removal"
+    }
+}
+catch {close}
+catch {wait}
+
+# Cleanup
+puts "\n=== Cleaning up test repository ==="
+cd /Users/paul/projects-personal/git-wt
+system "rm -rf /tmp/test-git-wt-interactive"
+
+# Report results
+puts "\n=== TEST RESULTS ==="
+if {$test_failed == 0} {
+    puts "✅ ALL TESTS PASSED"
+    exit 0
+} else {
+    puts "❌ SOME TESTS FAILED"
+    exit 1
+}

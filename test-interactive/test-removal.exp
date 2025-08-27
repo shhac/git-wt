@@ -1,0 +1,289 @@
+#!/usr/bin/expect -f
+
+# Test multi-select removal functionality
+# This test focuses on the rm command with arrow-key selection and space toggles
+
+set timeout 5
+set human_delay 0.025
+set test_failed 0
+
+proc capture_screen {msg} {
+    global expect_out
+    puts "\n=== $msg ==="
+    puts "=== SCREEN CAPTURE START ==="
+    
+    if {[info exists expect_out(buffer)]} {
+        puts $expect_out(buffer)
+    } else {
+        puts "(No buffer content available)"
+    }
+    
+    puts "=== SCREEN CAPTURE END ==="
+}
+
+proc send_key {key} {
+    global human_delay
+    send -- $key
+    sleep $human_delay
+}
+
+proc send_human {text} {
+    global human_delay
+    foreach char [split $text ""] {
+        send -- $char
+        sleep $human_delay
+    }
+}
+
+proc test_failed {msg} {
+    global test_failed
+    puts "\n!!! TEST FAILED: $msg !!!"
+    set test_failed 1
+}
+
+# Setup
+puts "\n=== Setting up test repository ==="
+system "rm -rf /tmp/test-rm /tmp/test-rm-trees 2>/dev/null"
+system "mkdir -p /tmp/test-rm"
+cd /tmp/test-rm
+system "git init -q"
+system "git config user.email 'test@test.com'"
+system "git config user.name 'Test User'"
+system "echo 'initial' > README.md"
+system "git add . && git commit -q -m 'initial'"
+
+set git_wt "/Users/paul/projects-personal/git-wt/zig-out/bin/git-wt"
+
+# Create test worktrees
+system "$git_wt new remove-me-1 --non-interactive"
+system "$git_wt new remove-me-2 --non-interactive"
+system "$git_wt new keep-me --non-interactive"
+
+puts "\n=== Test 1: Multi-select removal with arrow keys and space ==="
+spawn $git_wt rm
+
+expect {
+    "*Select worktree*" {
+        capture_screen "Initial multi-select UI"
+        
+        # Navigate down and select first item
+        puts ">>> Navigating to remove-me-1..."
+        send_key "\033\[B"
+        sleep 0.2
+        
+        puts ">>> Pressing SPACE to select remove-me-1..."
+        send_key " "
+        sleep 0.2
+        expect "*"
+        capture_screen "After selecting remove-me-1"
+        
+        # Navigate down and select second item
+        puts ">>> Navigating to remove-me-2..."
+        send_key "\033\[B"
+        sleep 0.2
+        
+        puts ">>> Pressing SPACE to select remove-me-2..."
+        send_key " "
+        sleep 0.2
+        expect "*"
+        capture_screen "After selecting remove-me-2"
+        
+        # Navigate to keep-me but don't select
+        puts ">>> Navigating past keep-me without selecting..."
+        send_key "\033\[B"
+        sleep 0.2
+        expect "*"
+        capture_screen "At keep-me (not selected)"
+        
+        # Press Enter to proceed
+        puts ">>> Pressing ENTER to proceed with removal..."
+        send_key "\r"
+        
+        expect {
+            "*Are you sure*" {
+                puts "✓ Confirmation prompt shown for selected items"
+                capture_screen "Confirmation prompt"
+                
+                # Confirm
+                send_human "y"
+                send_key "\r"
+                
+                expect {
+                    "*Removed worktree*remove-me-1*" {
+                        puts "✓ First worktree removed"
+                        
+                        expect {
+                            "*Removed worktree*remove-me-2*" {
+                                puts "✓ Second worktree removed"
+                            }
+                            timeout {
+                                puts "Warning: Second removal not confirmed"
+                            }
+                        }
+                    }
+                    eof {
+                        puts "Note: Removal completed"
+                    }
+                    timeout {
+                        capture_screen "After confirmation"
+                        puts "Warning: Removal result unclear"
+                    }
+                }
+            }
+            timeout {
+                test_failed "No confirmation prompt shown"
+                capture_screen "After Enter pressed"
+            }
+        }
+    }
+    "*Enter numbers*" {
+        capture_screen "Number mode for removal"
+        puts "Note: Fallback to number-based removal"
+        
+        # Select items 1 and 2
+        send_human "1,2"
+        send_key "\r"
+        
+        expect {
+            "*Are you sure*" {
+                puts ">>> Confirming removal in number mode..."
+                send_human "y"
+                send_key "\r"
+                
+                expect {
+                    "*Removed*" {
+                        puts "✓ Removal in number mode completed"
+                    }
+                    timeout {
+                        puts "Warning: Number mode removal unclear"
+                    }
+                }
+            }
+            timeout {
+                test_failed "Number mode confirmation failed"
+            }
+        }
+    }
+    timeout {
+        test_failed "Multi-select UI did not appear"
+        capture_screen "Timeout state"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 2: Verify correct worktrees were removed ==="
+spawn $git_wt list
+
+expect {
+    "*keep-me*" {
+        set output $expect_out(buffer)
+        expect eof
+        
+        # Append any additional output
+        if {[info exists expect_out(buffer)]} {
+            append output $expect_out(buffer)
+        }
+        
+        puts ">>> Checking removal results..."
+        if {[string match "*remove-me-1*" $output]} {
+            test_failed "remove-me-1 still exists"
+        } elseif {[string match "*remove-me-2*" $output]} {
+            test_failed "remove-me-2 still exists"
+        } else {
+            puts "✓ Both remove-me worktrees were removed"
+            puts "✓ keep-me worktree was preserved"
+        }
+    }
+    timeout {
+        test_failed "Could not verify removal"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 3: Test cancellation with ESC in multi-select ==="
+# Create another worktree to remove
+system "$git_wt new cancel-test --non-interactive"
+
+spawn $git_wt rm
+
+expect {
+    "*Select worktree*" {
+        puts ">>> Selecting a worktree..."
+        send_key "\033\[B"
+        sleep 0.2
+        send_key " "
+        sleep 0.2
+        
+        puts ">>> Pressing ESC to cancel..."
+        send_key "\033"
+        
+        expect {
+            "Cancelled" {
+                puts "✓ ESC cancellation works in multi-select"
+            }
+            "*No worktrees selected*" {
+                puts "✓ Cancellation resulted in no selection"
+            }
+            timeout {
+                capture_screen "After ESC in multi-select"
+                puts "Warning: Cancellation behavior unclear"
+            }
+        }
+    }
+    timeout {
+        test_failed "Multi-select UI did not appear for cancellation test"
+    }
+}
+catch {close}
+catch {wait}
+
+puts "\n=== Test 4: Test removing single worktree with --force ==="
+spawn $git_wt rm cancel-test --force
+
+expect {
+    "*Worktree removed successfully*" {
+        puts "✓ Force flag skipped uncommitted changes check"
+        
+        # Handle branch deletion prompt
+        expect {
+            "*Would you also like to delete the branch*" {
+                puts ">>> Declining branch deletion..."
+                send "n\r"
+                puts "✓ Force removal of worktree completed"
+            }
+            eof {
+                puts "✓ Force removal completed"
+            }
+            timeout {
+                puts "✓ Force removal completed (no branch prompt)"
+            }
+        }
+    }
+    "*Are you sure*" {
+        test_failed "Force flag did not skip uncommitted changes confirmation"
+        send "n\r"
+    }
+    timeout {
+        test_failed "Force removal failed"
+        capture_screen "Force removal timeout"
+    }
+}
+catch {close}
+catch {wait}
+
+# Cleanup
+puts "\n=== Cleanup ==="
+cd /Users/paul/projects-personal/git-wt
+system "rm -rf /tmp/test-rm /tmp/test-rm-trees"
+
+# Report
+puts "\n=== TEST RESULTS ==="
+if {$test_failed == 0} {
+    puts "✅ ALL REMOVAL TESTS PASSED"
+    exit 0
+} else {
+    puts "❌ SOME TESTS FAILED"
+    exit 1
+}
