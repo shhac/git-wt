@@ -2,13 +2,6 @@
 
 ## Features
 
-### Support specifying worktree parent directory with command line flag
-- Add `--parent-dir` or `-p` flag to `git-wt new` command
-- Allow users to override the default `../repo-trees/` location
-- Example: `git-wt new feature-branch --parent-dir ~/worktrees`
-- Should validate the parent directory exists and is writable
-- Update help documentation to explain this option
-
 ### Add `clean` command
 - Remove all worktrees for deleted branches
 - List worktrees that would be removed before confirmation
