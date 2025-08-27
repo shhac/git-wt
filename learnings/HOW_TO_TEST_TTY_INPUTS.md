@@ -47,7 +47,9 @@ EOF
 - Still doesn't provide a real TTY
 - Limited to simple input
 
-### 3. Expect Scripts
+### 3. Expect Scripts (RECOMMENDED)
+
+**Update**: After extensive testing, expect proved to be the most effective solution. See [TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md](./TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md) for comprehensive guide.
 
 ```expect
 #!/usr/bin/expect -f
@@ -59,14 +61,16 @@ expect eof
 ```
 
 **Pros:**
-- Provides a pseudo-TTY
-- Can send complex sequences (arrow keys, etc.)
-- Can react to output
+- Provides a real pseudo-TTY
+- Can send complex sequences (arrow keys, ESC, space)
+- Can react to output dynamically
+- Screen capture capability with `expect_out(buffer)`
+- Human-like timing simulation possible
 
 **Cons:**
 - Requires expect to be installed
-- More complex to write
-- Platform differences (macOS vs Linux)
+- Initial learning curve
+- Timing may need platform-specific adjustment
 
 ### 4. Script Command
 
