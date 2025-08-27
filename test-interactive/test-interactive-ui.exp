@@ -1,0 +1,65 @@
+#!/usr/bin/expect -f
+
+# Test interactive UI for git-wt go command
+set timeout 5
+
+# Start the git-wt go command (interactive mode)
+spawn ./zig-out/bin/git-wt go
+
+# Wait for the worktree list to appear
+expect {
+    "*Enter number to navigate to*" {
+        puts "\n=== Interactive UI displayed successfully ==="
+        
+        # Send '1' to select first option
+        send "1\r"
+        
+        expect {
+            "cd *" {
+                puts "=== Navigation command output successfully ==="
+            }
+            timeout {
+                puts "=== Timeout waiting for cd command ==="
+            }
+        }
+    }
+    "*Error:*" {
+        puts "\n=== Error occurred: ==="
+        expect eof
+        puts $expect_out(buffer)
+    }
+    timeout {
+        puts "\n=== Timeout waiting for interactive UI ==="
+    }
+}
+
+# Test git-wt rm interactive mode
+puts "\n=== Testing rm interactive mode ==="
+spawn ./zig-out/bin/git-wt rm
+
+expect {
+    "*Select worktrees to remove*" {
+        puts "=== Multi-select UI displayed ==="
+        
+        # Send space to select, then Enter to confirm
+        send " \r"
+        
+        expect {
+            "*Are you sure*" {
+                puts "=== Confirmation prompt shown ==="
+                send "n\r"
+            }
+            timeout {
+                puts "=== Timeout waiting for confirmation ==="
+            }
+        }
+    }
+    "*No worktrees available*" {
+        puts "=== No worktrees to remove ==="
+    }
+    timeout {
+        puts "=== Timeout in rm command ==="
+    }
+}
+
+puts "\n=== Test complete ==="

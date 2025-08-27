@@ -2,6 +2,35 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.2.0] - 2025-08-27
+
+### Changed
+- **BREAKING**: Upgraded to Zig 0.15.1 (from 0.14.x)
+  - Complete API migration for ArrayList, I/O, and Thread APIs
+  - Updated build system for Zig 0.15 compatibility
+- **BREAKING**: Removed Claude assistant integration from `new` command
+  - Removed `--claude` flag and related configuration prompts
+  - Simplified CLI to focus on core git worktree management
+
+### Fixed
+- Fixed `gwt list` error when encountering prunable/missing worktrees
+  - Gracefully handles worktree directories that have been deleted
+  - Shows "missing (prunable)" status for worktrees with missing directories
+  - Displays "unknown" for modification time when directory doesn't exist
+- Prunable worktrees can now be removed with `gwt rm`
+
+### Added
+- Comprehensive interactive testing suite using expect
+  - Tests for arrow-key navigation, multi-select, and cancellation
+  - Human-like timing simulation (25ms between keystrokes)
+  - Screen capture capability for debugging
+  - Test coverage for prunable worktree scenarios
+
+### Developer Notes
+- Added `test-interactive/` directory with expect-based test scripts
+- Migration guide for Zig 0.15 API changes documented in codebase
+- Improved error handling for file system operations
+
 ## [0.1.1] - 2025-01-24
 
 ### Fixed
