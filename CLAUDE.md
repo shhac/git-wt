@@ -308,114 +308,29 @@ This ensures the TODO list stays current and reflects actual work remaining.
 
 ## Testing Interactive CLI Features
 
-### Testing Interactive UIs with Claude
+For comprehensive guidance on testing interactive CLI features, see:
+- **[learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md](learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md)** - Complete guide to testing with expect
+- **[test-interactive/](test-interactive/)** - Actual test suite with examples
 
-Claude can test interactive CLI features using `expect` for automated interaction and shell scripts for verification. While Claude cannot directly view real-time terminal UIs, these approaches work well:
+### Quick Summary
 
-#### 1. Using expect for Automated Interaction (WORKS!)
+**Best approach**: Use `expect` with screen capture and human-like timing (25ms between keystrokes).
+
 ```bash
-# Install expect if not available
-# macOS: brew install expect
-# Linux: apt-get install expect
+# Run all interactive tests
+./test-interactive/run-all-tests.sh
 
-# Create expect script for testing - Claude can create and run these!
-cat > test-interactive.exp <<'EOF'
-#!/usr/bin/expect -f
-set timeout 2
-set human_delay 0.025 ;# 25ms between keystrokes for human-like timing
-
-# Capture screen content on timeout or at any point
-proc capture_screen {msg} {
-    global expect_out
-    puts "\n=== $msg ==="
-    if {[info exists expect_out(buffer)]} {
-        puts $expect_out(buffer)
-    }
-}
-
-spawn ./zig-out/bin/git-wt go
-
-expect {
-    "*Navigate*Select*" {
-        capture_screen "UI State"
-        
-        # Send arrow key with human timing
-        sleep 0.5
-        send "\033\[B"  ;# Down arrow
-        sleep 0.025
-        
-        expect "*"
-        capture_screen "After navigation"
-        
-        send "\r"        ;# Enter
-    }
-    timeout {
-        capture_screen "Timeout - shows where stuck"
-    }
-}
-EOF
-chmod +x test-interactive.exp
-./test-interactive.exp
+# Test specific features
+./test-interactive/test-navigation.exp   # Arrow-key navigation
+./test-interactive/test-removal.exp      # Multi-select removal
+./test-interactive/test-prunable.exp     # Prunable worktree handling
 ```
 
-This approach allows Claude to:
-- Send keyboard input including arrow keys
-- Add human-like delays between keystrokes
-- Capture and view the screen state at any point
-- See exactly where the UI gets stuck on timeout
-- Verify UI updates in response to input
+The project supports two interactive modes:
+1. **Arrow-key navigation** (default with TTY) - Uses ANSI escape codes
+2. **Number-based selection** (`--no-tty` or fallback) - Works everywhere
 
-#### 2. Using Shell Scripts with Piped Input
-```bash
-# Test with predetermined input
-echo "1" | ./zig-out/bin/git-wt go
-echo "q" | ./zig-out/bin/git-wt rm
-
-# Test with timeout to prevent hanging
-echo "q" | timeout 2 ./zig-out/bin/git-wt go 2>&1 | head -20
-```
-
-#### 3. Non-Interactive Mode Testing
-The CLI supports `--non-interactive` flag for automated testing:
-```bash
-./zig-out/bin/git-wt --non-interactive go main
-./zig-out/bin/git-wt --non-interactive rm test-branch
-```
-
-#### 4. Verifying UI Display (Visual Testing)
-To verify that interactive UIs display correctly without interaction:
-```bash
-# Use timeout with no input to see the UI
-timeout 1 ./zig-out/bin/git-wt go 2>&1 || true
-timeout 1 ./zig-out/bin/git-wt rm 2>&1 || true
-```
-
-#### 5. Creating Test Scripts
-For comprehensive testing, create a test script that covers all modes:
-```bash
-./test-interactive.sh  # Tests all interactive features
-./test-non-interactive.sh  # Tests CLI in automation mode
-```
-
-### Interactive UI Implementation Notes
-
-The project uses two different interactive modes:
-
-1. **Number-based selection** (`--no-tty` mode or fallback):
-   - Simple numbered list with text input
-   - Works in all environments
-   - Example: "Enter number to navigate to (or 'q' to quit):"
-
-2. **Arrow-key navigation** (default when TTY detected):
-   - Uses ANSI escape codes for cursor movement
-   - Provides visual feedback with highlighting
-   - Requires proper terminal support
-   - Falls back to number mode if terminal doesn't support it
-
-To force number-based mode for testing:
-```bash
-./zig-out/bin/git-wt --no-tty go
-```
+For non-interactive testing: `./zig-out/bin/git-wt --non-interactive [command]`
 
 ## Future Improvements
 
