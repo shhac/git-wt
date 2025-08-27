@@ -26,14 +26,12 @@ pub const Worktree = struct {
     is_current: bool = false,
 };
 
-/// Helper to trim trailing newlines
-fn trimNewline(str: []const u8) []const u8 {
+/// Helper to trim trailing newlines (made public for use in commands)
+pub fn trimNewline(str: []const u8) []const u8 {
     return std.mem.trimRight(u8, str, "\n");
 }
 
-// Thread-local storage for last git error - to be removed after refactoring
-threadlocal var last_git_error: ?[]u8 = null;
-threadlocal var last_git_error_allocator: ?std.mem.Allocator = null;
+// No more threadlocal storage - using GitResult instead
 
 // Result type for git commands that can fail with error output
 pub const GitResult = union(enum) {
@@ -53,6 +51,18 @@ pub const GitResult = union(enum) {
 
 /// Execute a git command and return the output
 pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
+    const git_result = try execWithResult(allocator, args);
+    switch (git_result) {
+        .success => |output| return output,
+        .failure => |err| {
+            allocator.free(err.stderr);
+            return GitError.CommandFailed;
+        },
+    }
+}
+
+/// Execute a git command and return GitResult with error details
+pub fn execWithResult(allocator: std.mem.Allocator, args: []const []const u8) !GitResult {
     var argv = std.ArrayList([]const u8).empty;
     defer argv.deinit(allocator);
     
@@ -65,50 +75,29 @@ pub fn exec(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     });
     
     if (result.term.Exited != 0) {
-        // Store the error output for later retrieval
-        if (last_git_error) |err| {
-            if (last_git_error_allocator) |alloc| {
-                alloc.free(err);
-            }
-        }
-        last_git_error = result.stderr;
-        last_git_error_allocator = allocator;
-        
         allocator.free(result.stdout);
-        return GitError.CommandFailed;
+        return GitResult{ .failure = .{
+            .exit_code = result.term.Exited,
+            .stderr = result.stderr,
+        }};
     }
     
     allocator.free(result.stderr);
-    return result.stdout;
+    return GitResult{ .success = result.stdout };
 }
 
-/// Get the last git error output (if any) and clear the stored error
-pub fn getLastErrorOutput(allocator: std.mem.Allocator) !?[]u8 {
-    if (last_git_error) |err| {
-        const trimmed = trimNewline(err);
-        const result = try allocator.dupe(u8, trimmed);
-        
-        // Clear the stored error to prevent memory leak
-        if (last_git_error_allocator) |alloc| {
-            alloc.free(err);
-        }
-        last_git_error = null;
-        last_git_error_allocator = null;
-        
-        return result;
+/// Execute git command and format error message if it fails (unused - kept for future use)
+pub fn execWithError(allocator: std.mem.Allocator, args: []const []const u8) !struct { output: []u8, err_msg: ?[]u8 } {
+    const git_result = try execWithResult(allocator, args);
+    switch (git_result) {
+        .success => |output| return .{ .output = output, .err_msg = null },
+        .failure => |err| {
+            const trimmed = trimNewline(err.stderr);
+            _ = trimmed; // Will be used in future
+            allocator.free(err.stderr);
+            return error.CommandFailed;
+        },
     }
-    return null;
-}
-
-/// Clean up thread-local error storage (call at program exit if needed)
-pub fn cleanupErrorStorage() void {
-    if (last_git_error) |err| {
-        if (last_git_error_allocator) |alloc| {
-            alloc.free(err);
-        }
-    }
-    last_git_error = null;
-    last_git_error_allocator = null;
 }
 
 /// Execute a git command and return trimmed output
@@ -469,9 +458,8 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
 }
 
 /// Create a new worktree
-pub fn createWorktree(allocator: std.mem.Allocator, path: []const u8, branch: []const u8) !void {
-    const result = try exec(allocator, &.{ "worktree", "add", path, "-b", branch });
-    defer allocator.free(result);
+pub fn createWorktree(allocator: std.mem.Allocator, path: []const u8, branch: []const u8) !GitResult {
+    return try execWithResult(allocator, &.{ "worktree", "add", path, "-b", branch });
 }
 
 /// Remove a worktree

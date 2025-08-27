@@ -215,20 +215,22 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     // Create the worktree
     try colors.printDisplayPath(stdout, "Creating worktree for branch:", worktree_path, allocator);
     
-    git.createWorktree(allocator, worktree_path, branch_name) catch |err| {
-        const err_output = git.getLastErrorOutput(allocator) catch null;
-        defer if (err_output) |output| allocator.free(output);
-        
-        try colors.printError(stderr, "Failed to create worktree", .{});
-        if (err_output) |output| {
-            try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
-        }
-        try stderr.print("{s}Possible causes:{s}\n", .{ colors.info_prefix, colors.reset });
-        try stderr.print("  - The branch name may contain invalid characters\n", .{});
-        try stderr.print("  - The worktree path may not be accessible\n", .{});
-        try stderr.print("  - You may not have write permissions\n", .{});
-        return err;
-    };
+    const create_result = try git.createWorktree(allocator, worktree_path, branch_name);
+    defer create_result.deinit(allocator);
+    
+    switch (create_result) {
+        .success => {},
+        .failure => |err| {
+            const trimmed_err = git.trimNewline(err.stderr);
+            try colors.printError(stderr, "Failed to create worktree", .{});
+            try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, trimmed_err });
+            try stderr.print("{s}Possible causes:{s}\n", .{ colors.info_prefix, colors.reset });
+            try stderr.print("  - The branch name may contain invalid characters\n", .{});
+            try stderr.print("  - The worktree path may not be accessible\n", .{});
+            try stderr.print("  - You may not have write permissions\n", .{});
+            return error.CreateWorktreeFailed;
+        },
+    }
     worktree_created = true;
     
     try colors.printSuccess(stdout, "Worktree created successfully", .{});

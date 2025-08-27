@@ -201,46 +201,46 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
     try colors.printInfo(stdout, "Removing worktree...", .{});
     
     if (force) {
-        _ = git.exec(allocator, &.{ "worktree", "remove", "--force", confirmed_worktree_path }) catch |err| {
-            if (err == git.GitError.CommandFailed) {
-                const err_output = git.getLastErrorOutput(allocator) catch null;
-                defer if (err_output) |output| allocator.free(output);
-                
+        const result = try git.execWithResult(allocator, &.{ "worktree", "remove", "--force", confirmed_worktree_path });
+        defer result.deinit(allocator);
+        
+        switch (result) {
+            .success => {},
+            .failure => |err| {
+                const trimmed_err = git.trimNewline(err.stderr);
                 try colors.printError(stderr, "Failed to remove worktree", .{});
-                if (err_output) |output| {
-                    try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
-                }
-            }
-            return err;
-        };
+                try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, trimmed_err });
+                return error.RemoveWorktreeFailed;
+            },
+        }
     } else {
-        _ = git.exec(allocator, &.{ "worktree", "remove", confirmed_worktree_path }) catch |err| {
-            if (err == git.GitError.CommandFailed) {
-                const err_output = git.getLastErrorOutput(allocator) catch null;
-                defer if (err_output) |output| allocator.free(output);
-                
+        const result = try git.execWithResult(allocator, &.{ "worktree", "remove", confirmed_worktree_path });
+        defer result.deinit(allocator);
+        
+        switch (result) {
+            .success => {},
+            .failure => |err| {
+                const trimmed_err = git.trimNewline(err.stderr);
                 try colors.printError(stderr, "Failed to remove worktree", .{});
-                if (err_output) |output| {
-                    try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, output });
+                try stderr.print("{s}Git error:{s} {s}\n", .{ colors.yellow, colors.reset, trimmed_err });
                     
                     // Check for common error patterns
-                    if (std.mem.indexOf(u8, output, "contains modified or untracked files") != null) {
+                    if (std.mem.indexOf(u8, err.stderr, "contains modified or untracked files") != null) {
                         try stderr.print("{s}Tip:{s} Use -f/--force to remove worktrees with uncommitted changes\n", .{
                             colors.info_prefix, colors.reset
                         });
                         try stderr.print("{s}Warning:{s} This will discard all uncommitted changes!\n", .{
                             colors.warning_prefix, colors.reset
                         });
-                    } else if (std.mem.indexOf(u8, output, "is a current working directory") != null) {
+                    } else if (std.mem.indexOf(u8, err.stderr, "is a current working directory") != null) {
                         try stderr.print("{s}Tip:{s} You cannot remove the worktree you're currently in\n", .{
                             colors.info_prefix, colors.reset
                         });
                         try stderr.print("      Navigate to a different worktree first with 'git-wt go'\n", .{});
                     }
-                }
-            }
-            return err;
-        };
+                return error.RemoveWorktreeFailed;
+            },
+        }
     }
     
     try colors.printSuccess(stdout, "✓ Worktree removed successfully", .{});
