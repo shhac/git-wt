@@ -64,7 +64,7 @@ test "color print functions" {
     const allocator = std.testing.allocator;
     var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(allocator);
-    const writer = buffer.writer();
+    const writer = buffer.writer(allocator);
     
     // Test printError
     try printError(writer, "test error", .{});

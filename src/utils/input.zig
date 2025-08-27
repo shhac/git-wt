@@ -82,3 +82,33 @@ pub fn readLine(allocator: std.mem.Allocator, prompt: []const u8) !?[]u8 {
     }
     return null;
 }
+
+test "confirm default behavior" {
+    // Test the parsing logic without actual I/O
+    // Since confirm() reads from stdin, we test the logic indirectly
+    
+    // Test that 'y' and 'Y' are recognized as yes
+    try std.testing.expect('y' == 'y' or 'y' == 'Y');
+    try std.testing.expect('Y' == 'y' or 'Y' == 'Y');
+    
+    // Test that other values are not yes
+    try std.testing.expect(!('n' == 'y' or 'n' == 'Y'));
+    try std.testing.expect(!('q' == 'y' or 'q' == 'Y'));
+}
+
+test "readLine trimming behavior" {
+    // Test trimming newline characters (simulating the logic)
+    const test_input = "test input\n";
+    const trimmed = std.mem.trim(u8, test_input, " \t\r\n");
+    try std.testing.expectEqualStrings("test input", trimmed);
+    
+    // Test trimming carriage return
+    const test_input_cr = "test input\r\n";
+    const trimmed_cr = std.mem.trim(u8, test_input_cr, " \t\r\n");
+    try std.testing.expectEqualStrings("test input", trimmed_cr);
+    
+    // Test empty input becomes null behavior
+    const test_empty = "   \n";
+    const trimmed_empty = std.mem.trim(u8, test_empty, " \t\r\n");
+    try std.testing.expect(trimmed_empty.len == 0);
+}

@@ -29,3 +29,51 @@ pub fn getStdErr() FileWriter {
 pub fn getStdIn() std.fs.File {
     return std.fs.File.stdin();
 }
+
+test "FileWriter print functionality" {
+    // Test that FileWriter.print works correctly
+    const allocator = std.testing.allocator;
+    
+    // Create a temporary file
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const file = try tmp_dir.dir.createFile("test_output.txt", .{ .read = true });
+    defer file.close();
+    
+    const writer = FileWriter{ .file = file };
+    
+    // Test print with formatting
+    try writer.print("Hello {s}, number: {d}\n", .{ "World", 42 });
+    
+    // Read back and verify
+    try file.seekTo(0);
+    const content = try file.readToEndAlloc(allocator, 1024);
+    defer allocator.free(content);
+    
+    try std.testing.expectEqualStrings("Hello World, number: 42\n", content);
+}
+
+test "FileWriter writeAll functionality" {
+    // Test that FileWriter.writeAll works correctly
+    const allocator = std.testing.allocator;
+    
+    // Create a temporary file
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    
+    const file = try tmp_dir.dir.createFile("test_write.txt", .{ .read = true });
+    defer file.close();
+    
+    const writer = FileWriter{ .file = file };
+    
+    // Test writeAll
+    try writer.writeAll("Direct write test\n");
+    
+    // Read back and verify
+    try file.seekTo(0);
+    const content = try file.readToEndAlloc(allocator, 1024);
+    defer allocator.free(content);
+    
+    try std.testing.expectEqualStrings("Direct write test\n", content);
+}
