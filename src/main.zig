@@ -11,6 +11,7 @@ const args_parser = @import("utils/args.zig");
 const input = @import("utils/input.zig");
 const interactive = @import("utils/interactive.zig");
 const io = @import("utils/io.zig");
+const config = @import("utils/config.zig");
 
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
@@ -23,7 +24,7 @@ const Command = struct {
     name: []const u8,
     min_args: usize,
     usage: []const u8,
-    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) anyerror!void,
+    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) anyerror!void,
     help: *const fn () anyerror!void,
 };
 
@@ -36,16 +37,17 @@ const commands = [_]Command{
     .{ .name = "clean", .min_args = 0, .usage = "git-wt clean [options]", .execute = executeClean, .help = cmd_clean.printHelp },
 };
 
-fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
     _ = no_tty; // Not used in new command yet
-    
+
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
-    
-    const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" });
+
+    // Command-line flag overrides config
+    const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" }) orelse cfg.parent_dir;
     const branch_name = parsed.getPositional(0);
-    
+
     if (branch_name) |branch| {
         try cmd_new.execute(allocator, branch, non_interactive, parent_dir);
     } else {
@@ -56,14 +58,16 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_intera
     }
 }
 
-fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+    _ = cfg; // Config not used yet in remove command
+
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
-    
+
     const force = parsed.hasFlag(&.{ "--force", "-f" });
     const branch_names = parsed.getPositionals();
-    
+
     if (branch_names.len > 0) {
         // Multiple branch removal mode
         if (branch_names.len == 1) {
@@ -79,20 +83,21 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, non_int
     }
 }
 
-fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
-    
-    const no_color = parsed.hasFlag(&.{"--no-color"});
-    const plain = parsed.hasFlag(&.{"--plain"});
+
+    // Command-line flags override config
+    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else cfg.no_color;
+    const plain = if (parsed.hasFlag(&.{"--plain"})) true else cfg.plain_output;
     const show_command = parsed.hasFlag(&.{"--show-command"});
     const branch = parsed.getPositional(0);
-    
+
     try cmd_go.execute(allocator, branch, non_interactive, no_tty, no_color, plain, show_command);
 }
 
-fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
     _ = non_interactive; // List doesn't use this flag
     _ = no_tty; // List doesn't use this flag
 
@@ -100,18 +105,20 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_inter
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
-    const no_color = parsed.hasFlag(&.{"--no-color"});
-    const plain = parsed.hasFlag(&.{"--plain"});
-    const json = parsed.hasFlag(&.{ "--json", "-j" });
+    // Command-line flags override config
+    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else cfg.no_color;
+    const plain = if (parsed.hasFlag(&.{"--plain"})) true else cfg.plain_output;
+    const json = if (parsed.hasFlag(&.{ "--json", "-j" })) true else cfg.json_output;
 
     try cmd_list.execute(allocator, no_color, plain, json);
 }
 
-fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+    _ = cfg; // Config not used yet in alias command
     try cmd_alias.execute(allocator, args, non_interactive, no_tty);
 }
 
-fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
     _ = non_interactive; // Clean doesn't use this flag
     _ = no_tty; // Clean doesn't use this flag
 
@@ -120,7 +127,8 @@ fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, non_inte
     defer parsed.deinit(allocator);
 
     const dry_run = parsed.hasFlag(&.{ "--dry-run", "-n" });
-    const force = parsed.hasFlag(&.{ "--force", "-f" });
+    // Command-line flag overrides config
+    const force = if (parsed.hasFlag(&.{ "--force", "-f" })) true else cfg.auto_confirm;
 
     try cmd_clean.execute(allocator, dry_run, force);
 }
@@ -149,13 +157,17 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     const args = try process.argsAlloc(allocator);
     defer process.argsFree(allocator, args);
 
-    // Parse global flags
-    var non_interactive = false;
-    var no_tty = false;
+    // Load configuration from files (user config + project config)
+    var cfg = config.loadConfig(allocator) catch config.Config{};
+    defer cfg.deinit(allocator);
+
+    // Parse global flags (override config)
+    var non_interactive = cfg.non_interactive;
+    var no_tty = cfg.no_tty;
     var debug_mode = false;
     var filtered_args = std.ArrayList([]const u8).empty;
     defer filtered_args.deinit(allocator);
-    
+
     // Check if this is the alias command (needs special handling)
     const is_alias_command = args.len >= 2 and std.mem.eql(u8, args[1], "alias");
     
@@ -289,7 +301,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
                 print("Usage: {s}\n", .{cmd.usage});
                 return error.MissingRequiredArguments;
             }
-            try cmd.execute(allocator, command_args, non_interactive, no_tty);
+            try cmd.execute(allocator, command_args, &cfg, non_interactive, no_tty);
             return;
         }
     }
