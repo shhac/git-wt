@@ -127,7 +127,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
                 validation.ParentDirError.InvalidPath => {
                     try colors.printError(stderr, "Invalid parent directory path", .{});
                 },
-                else => try colors.printError(stderr, "Error: {s}", .{@errorName(err)}),
+                else => try colors.printError(stderr, "{s}", .{@errorName(err)}),
             }
             return err;
         };

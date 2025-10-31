@@ -235,7 +235,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
         }
     }
     
-    try colors.printSuccess(stdout, "✓ Worktree removed successfully", .{});
+    try colors.printSuccess(stdout, "Worktree removed successfully", .{});
     
     // Ask about deleting the branch
     if (!non_interactive) {
@@ -253,7 +253,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
                 return err;
             };
             
-            try colors.printSuccess(stdout, "✓ Branch deleted successfully", .{});
+            try colors.printSuccess(stdout, "Branch deleted successfully", .{});
         } else {
             try stdout.print("{s}Branch '{s}' was kept{s}\n", .{ colors.info_prefix, branch_name, colors.reset });
         }
@@ -304,15 +304,15 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
         };
         
         success_count += 1;
-        try colors.printSuccess(stdout, "✓ Removed worktree for '{s}'", .{branch});
+        try colors.printSuccess(stdout, "Removed worktree for '{s}'", .{branch});
     }
-    
+
     // Summary
     try stdout.print("\n{s}=== SUMMARY ==={s}\n", .{ colors.yellow, colors.reset });
-    try colors.printSuccess(stdout, "✓ Successfully removed: {d} worktree{s}", .{ success_count, if (success_count == 1) "" else "s" });
-    
+    try colors.printSuccess(stdout, "Successfully removed: {d} worktree{s}", .{ success_count, if (success_count == 1) "" else "s" });
+
     if (failed_count > 0) {
-        try colors.printError(stderr, "✗ Failed to remove: {d} worktree{s}", .{ failed_count, if (failed_count == 1) "" else "s" });
+        try colors.printError(stderr, "Failed to remove: {d} worktree{s}", .{ failed_count, if (failed_count == 1) "" else "s" });
         try stderr.print("{s}Failed branches:{s}\n", .{ colors.yellow, colors.reset });
         for (failed_branches.items) |branch| {
             try stderr.print("  - {s}\n", .{branch});
