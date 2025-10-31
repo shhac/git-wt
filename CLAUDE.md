@@ -526,21 +526,162 @@ The `debugging/` directory contains helpful scripts:
 
 See **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** for comprehensive troubleshooting guide.
 
+## Release Process
+
+### Overview
+git-wt uses GitHub Actions for automated testing, builds, and releases. The release process is streamlined with CI/CD.
+
+### Release Dependencies
+
+Before creating a release, ensure these files are updated:
+
+1. **`CHANGELOG.md`** (REQUIRED)
+   - Add new version section at the top
+   - Document all changes in categories: Added, Fixed, Changed, Developer Notes
+   - Use format: `## [X.Y.Z] - YYYY-MM-DD`
+   - The release workflow extracts this section for GitHub release notes
+
+2. **`build.zig`** (REQUIRED)
+   - Update default version string
+   - Line 20: `const version_option = b.option([]const u8, "version", "Version string") orelse "X.Y.Z";`
+
+3. **Tests** (REQUIRED)
+   - All tests must pass: `zig test src/main.zig`
+   - Run integration tests: `zig test src/integration_tests.zig`
+
+### Release Steps
+
+#### 1. Prepare the Release
+
+```bash
+# 1. Update CHANGELOG.md with new version section
+# 2. Update version in build.zig
+# 3. Run tests
+zig test src/main.zig
+zig test src/integration_tests.zig
+
+# 4. Build and verify
+zig build -Doptimize=ReleaseFast
+./zig-out/bin/git-wt --version  # Should show new version
+
+# 5. Commit changes
+git add CHANGELOG.md build.zig
+git commit -m "chore[release]: bump version to X.Y.Z"
+```
+
+#### 2. Create and Push Tag
+
+```bash
+# Create annotated tag
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+
+# Push commit and tag
+git push origin main
+git push origin vX.Y.Z
+```
+
+#### 3. Automated Release Process
+
+Once the tag is pushed, GitHub Actions automatically:
+
+1. **Builds for all platforms:**
+   - macOS Universal (Intel + ARM combined)
+   - macOS x86_64
+   - macOS ARM64
+   - Linux x86_64
+   - Linux ARM64
+
+2. **Creates GitHub Release:**
+   - Extracts changelog section for release notes
+   - Attaches all platform tarballs
+   - Publishes release (not draft)
+
+3. **Timeline:** ~10-15 minutes for full release
+
+#### 4. Verify Release
+
+```bash
+# Check release on GitHub
+gh release view vX.Y.Z
+
+# Download and test a platform binary
+curl -L https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-macos-universal.tar.gz | tar xz
+./git-wt --version
+```
+
+### Manual Builds (Optional)
+
+For testing or custom builds, use the manual build artifacts workflow:
+
+1. Go to GitHub Actions → "Build Artifacts"
+2. Click "Run workflow"
+3. Select branch to build from
+4. Download artifacts from workflow run (30-day retention)
+
+### Hotfix Releases
+
+For urgent fixes:
+
+```bash
+# 1. Create hotfix branch from main
+git checkout -b hotfix/X.Y.Z
+
+# 2. Make fix, update CHANGELOG.md and build.zig
+# 3. Test thoroughly
+# 4. Merge to main
+git checkout main
+git merge hotfix/X.Y.Z
+
+# 5. Tag and push
+git tag vX.Y.Z
+git push origin main vX.Y.Z
+```
+
+### Version Numbering
+
+Follow semantic versioning (semver):
+- **Major (X.0.0)**: Breaking changes
+- **Minor (0.X.0)**: New features, backward compatible
+- **Patch (0.0.X)**: Bug fixes, backward compatible
+
+Examples:
+- `v0.4.2` → Bug fixes and small improvements
+- `v0.5.0` → New features (config files, new commands)
+- `v1.0.0` → Stable API, production ready
+
+### Troubleshooting Releases
+
+**Release workflow failed:**
+- Check GitHub Actions logs for build errors
+- Verify CHANGELOG.md has correct format
+- Ensure all tests pass locally first
+
+**Missing platform in release:**
+- Check workflow run for specific platform failure
+- May need to rerun failed jobs in GitHub Actions
+
+**Changelog extraction failed:**
+- Verify CHANGELOG.md format matches: `## [X.Y.Z] - YYYY-MM-DD`
+- Ensure there's content between version headers
+
 ## Future Improvements
 
 See `TODO.md` for the current list of planned features and enhancements. Major items include:
-- Additional commands (clean, sync, prune)
-- Configuration file support (.git-wt.toml)
+- Additional commands (sync, prune)
 - Better error recovery for interrupted operations
+- Implement extra_files and exclude_files config syncing
 
 Recently completed features:
+- ✅ Configuration file support (.git-wt.toml and ~/.config/git-wt/config) - v0.4.2
+- ✅ GitHub Actions CI/CD (testing, builds, releases) - v0.4.2
+- ✅ Clean command to remove worktrees for deleted branches - v0.4.0
 - ✅ Support for branch names with slashes (creating subdirectory structures)
 - ✅ List command to show all worktrees with current indicator
 - ✅ Force flag for rm command (skip uncommitted changes check)
 - ✅ Custom worktree parent directory via --parent-dir flag
-- ✅ Upgraded to Zig 0.15.1 (from 0.13.0 minimum)
-- ✅ Removed Claude integration from new command
-- ✅ Comprehensive test suite (13 tests + interactive expect tests)
+- ✅ Upgraded to Zig 0.15.1 (from 0.13.0 minimum) - v0.2.0
+- ✅ Removed Claude integration from new command - v0.2.0
+- ✅ Comprehensive test suite (70 tests + interactive expect tests)
 - ✅ File-based locking for concurrent operations
 - ✅ Repository state validation (merge, rebase, bisect detection)
 - ✅ Interactive multi-select removal
