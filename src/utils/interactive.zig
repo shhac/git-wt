@@ -573,10 +573,12 @@ pub fn selectFromListUnified(
 
             // Redraw instructions
             if (options.show_instructions) {
+                // Move to start of line and clear before printing
+                try stdout.print("\r", .{});
                 try clearLine();
                 switch (options.mode) {
                     .single => {
-                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
@@ -586,7 +588,7 @@ pub fn selectFromListUnified(
                         });
                     },
                     .multi => {
-                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
