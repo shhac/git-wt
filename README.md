@@ -23,7 +23,7 @@ zig build -Doptimize=ReleaseFast
 cp zig-out/bin/git-wt ~/.local/bin/
 ```
 
-**Requirements**: Zig 0.14.1+, Git  
+**Requirements**: Zig 0.15.1+, Git  
 **Windows users**: Use WSL2 with the Linux build
 
 ### Shell Integration Setup
@@ -72,7 +72,8 @@ git-wt list
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed build and install instructions
-- **[Usage Guide](docs/USAGE.md)** - Complete command reference and examples  
+- **[Usage Guide](docs/USAGE.md)** - Complete command reference and examples
+- **[Configuration](docs/CONFIGURATION.md)** - Config file setup and options
 - **[Shell Integration](docs/SHELL-INTEGRATION.md)** - Setup and troubleshooting shell aliases
 - **[Testing](docs/TESTING.md)** - Running tests and development workflows
 - **[Advanced Features](docs/ADVANCED.md)** - Configuration copying, locking, performance
