@@ -79,7 +79,7 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
 
     // Report findings
     if (to_clean.items.len == 0) {
-        try colors.printSuccess(stdout, "✓ No worktrees need cleaning", .{});
+        try colors.printSuccess(stdout, "No worktrees need cleaning", .{});
         try stdout.print("All worktree branches still exist.\n", .{});
         return;
     }
@@ -135,7 +135,7 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
 
         switch (remove_result) {
             .success => {
-                try colors.printSuccess(stdout, "✓ Removed {s}", .{wt.branch});
+                try colors.printSuccess(stdout, "Removed {s}", .{wt.branch});
                 removed_count += 1;
             },
             .failure => |err| {
