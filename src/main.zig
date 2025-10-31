@@ -17,6 +17,7 @@ const cmd_remove = @import("commands/remove.zig");
 const cmd_go = @import("commands/go.zig");
 const cmd_list = @import("commands/list.zig");
 const cmd_alias = @import("commands/alias.zig");
+const cmd_clean = @import("commands/clean.zig");
 
 const Command = struct {
     name: []const u8,
@@ -32,6 +33,7 @@ const commands = [_]Command{
     .{ .name = "go", .min_args = 0, .usage = "git-wt go [branch]", .execute = executeGo, .help = cmd_go.printHelp },
     .{ .name = "list", .min_args = 0, .usage = "git-wt list", .execute = executeList, .help = cmd_list.printHelp },
     .{ .name = "alias", .min_args = 1, .usage = "git-wt alias <name> [options]", .execute = executeAlias, .help = cmd_alias.printHelp },
+    .{ .name = "clean", .min_args = 0, .usage = "git-wt clean [options]", .execute = executeClean, .help = cmd_clean.printHelp },
 };
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
@@ -106,6 +108,20 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_inter
 
 fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     try cmd_alias.execute(allocator, args, non_interactive, no_tty);
+}
+
+fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
+    _ = non_interactive; // Clean doesn't use this flag
+    _ = no_tty; // Clean doesn't use this flag
+
+    // Parse arguments using the new parser
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit(allocator);
+
+    const dry_run = parsed.hasFlag(&.{ "--dry-run", "-n" });
+    const force = parsed.hasFlag(&.{ "--force", "-f" });
+
+    try cmd_clean.execute(allocator, dry_run, force);
 }
 
 pub fn main() void {
