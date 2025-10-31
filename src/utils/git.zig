@@ -786,12 +786,12 @@ pub const WorktreeWithTime = struct {
 pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current: bool, for_interactive: bool) ![]WorktreeWithTime {
     const worktrees = try listWorktreesSmart(allocator, for_interactive);
     defer freeWorktrees(allocator, worktrees);
-    
+
     // Use arena allocator for easier cleanup
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
-    
+
     var worktrees_list = std.ArrayList(WorktreeWithTime).empty;
     errdefer {
         for (worktrees_list.items) |wt| {
@@ -802,17 +802,32 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
         }
         worktrees_list.deinit(allocator);
     }
-    
+
+    // Get repository root to identify main worktree
+    const repo_info = getRepoInfo(allocator) catch null;
+    const main_repo_path = if (repo_info) |info| blk: {
+        defer allocator.free(info.root);
+        defer if (info.main_repo_root) |root| allocator.free(root);
+        // Use main_repo_root if in a worktree, otherwise use root
+        const main_path = info.main_repo_root orelse info.root;
+        break :blk try arena_allocator.dupe(u8, main_path);
+    } else null;
+
     for (worktrees) |wt| {
         if (exclude_current and wt.is_current) {
             continue;
         }
-        
+
         // Get modification time (0 if unavailable)
         const mod_time = getPathModTime(arena_allocator, wt.path) catch 0;
-        
-        // Create display name
-        const display_name = try fs_utils.extractDisplayPath(allocator, wt.path);
+
+        // Create display name: check if this is the main repository by comparing paths
+        const display_name = if (main_repo_path != null and std.mem.eql(u8, wt.path, main_repo_path.?))
+            try allocator.dupe(u8, "[main]")
+        else blk: {
+            const basename = std.fs.path.basename(wt.path);
+            break :blk try allocator.dupe(u8, basename);
+        };
         errdefer allocator.free(display_name);
         
         const path = try allocator.dupe(u8, wt.path);
@@ -854,27 +869,37 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
 pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool) ![]WorktreeWithTime {
     const worktrees = try listWorktrees(allocator);
     defer freeWorktrees(allocator, worktrees);
-    
+
     // Use arena allocator for easier cleanup
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
-    
+
     var worktrees_list = std.ArrayList(WorktreeWithTime).empty;
     defer worktrees_list.deinit(allocator);
-    
+
+    // Get repository root to identify main worktree
+    const repo_info = getRepoInfo(allocator) catch null;
+    const main_repo_path = if (repo_info) |info| blk: {
+        defer allocator.free(info.root);
+        defer if (info.main_repo_root) |root| allocator.free(root);
+        // Use main_repo_root if in a worktree, otherwise use root
+        const main_path = info.main_repo_root orelse info.root;
+        break :blk try arena_allocator.dupe(u8, main_path);
+    } else null;
+
     // Get modification times for each worktree
     for (worktrees) |wt| {
         // Skip current worktree if requested
         if (exclude_current and wt.is_current) continue;
-        
+
         const stat = std.fs.cwd().statFile(wt.path) catch continue;
-        
+
         // Build worktree item using arena for temporary allocations
         var wt_item: WorktreeWithTime = undefined;
-        
-        // Determine display name (allocated from arena temporarily)
-        const temp_display_name = if (std.mem.indexOf(u8, wt.path, "-trees") == null)
+
+        // Determine display name: check if this is the main repository by comparing paths
+        const temp_display_name = if (main_repo_path != null and std.mem.eql(u8, wt.path, main_repo_path.?))
             try arena_allocator.dupe(u8, "[main]")
         else blk: {
             const basename = std.fs.path.basename(wt.path);

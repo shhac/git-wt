@@ -290,11 +290,16 @@ pub fn pathExists(path: []const u8) bool {
 /// Returns the branch name (basename) for display purposes, making output consistent
 /// For the main repository, detects it and returns "[main]"
 pub fn extractDisplayPath(allocator: std.mem.Allocator, worktree_path: []const u8) ![]u8 {
+    // DEPRECATED: This function uses a flawed heuristic (checking for "-trees" in path)
+    // For correct behavior, use path comparison with repository root instead
+    // See listWorktreesWithTimeSmart and listWorktreesWithTime in git.zig for proper implementation
+
     // Check if this appears to be a main repository (not in a -trees directory)
+    // Note: This is unreliable as worktrees don't have to be in a "-trees" directory
     if (std.mem.indexOf(u8, worktree_path, "-trees") == null) {
         return try allocator.dupe(u8, "[main]");
     }
-    
+
     // For worktrees, return the basename (branch name)
     const basename = fs.path.basename(worktree_path);
     return try allocator.dupe(u8, basename);
