@@ -2,7 +2,7 @@
 
 All notable changes to git-wt will be documented in this file.
 
-## [Unreleased]
+## [0.4.0] - 2025-10-31
 
 ### Added
 - **New `clean` Command**
