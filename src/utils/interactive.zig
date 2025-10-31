@@ -236,12 +236,12 @@ fn renderItem(
                     // Current item: highlighted background with green brackets
                     try writer.print("  {s}[{s}{s}{s}{s}]{s} {s}{s}{s}\n", .{
                         colors.green,      // green [
-                        "\x1b[7m",        // reverse video for highlight
+                        colors.reverse,    // reverse video for highlight
                         bracket_content,
                         colors.reset,     // reset reverse video
                         colors.green,     // green ]
                         colors.reset,     // reset color
-                        "\x1b[1m",       // bold text
+                        colors.bold,      // bold text
                         item_text,
                         colors.reset,     // final reset
                     });
@@ -249,14 +249,14 @@ fn renderItem(
                     // Selected but not current: green [*]
                     try writer.print("  {s}[{s}*{s}] {s}\n", .{
                         colors.green,
-                        "\x1b[1m\x1b[92m", // bright green + bold for *
+                        colors.bold_bright_green, // bright green + bold for *
                         colors.reset,
                         item_text,
                     });
                 } else {
                     // Unselected: dim [ ]
                     try writer.print("  {s}[ ]{s} {s}\n", .{
-                        "\x1b[2m", // dim
+                        colors.dim,
                         colors.reset,
                         item_text,
                     });
@@ -267,20 +267,20 @@ fn renderItem(
                 if (is_current) {
                     // Current item: green brackets with bright green asterisk and bold text
                     try writer.print("  {s}[{s}{s}*{s}{s}]{s} {s}{s}{s}\n", .{
-                        colors.green,          // green [
-                        colors.reset,          // reset to remove any inherited formatting
-                        "\x1b[1m\x1b[92m",    // bright green + bold for *
-                        colors.reset,          // reset to clear bold
-                        colors.green,          // back to green for ]
-                        colors.reset,          // reset before text
-                        "\x1b[1m",            // bold for text
+                        colors.green,                // green [
+                        colors.reset,                // reset to remove any inherited formatting
+                        colors.bold_bright_green,    // bright green + bold for *
+                        colors.reset,                // reset to clear bold
+                        colors.green,                // back to green for ]
+                        colors.reset,                // reset before text
+                        colors.bold,                 // bold for text
                         item_text,
-                        colors.reset,          // final reset
+                        colors.reset,                // final reset
                     });
                 } else {
                     // Non-current item: dim [ ] with normal text
                     try writer.print("  {s}[ ]{s} {s}\n", .{
-                        "\x1b[2m", // dim
+                        colors.dim,     // dim
                         colors.reset,
                         item_text,
                     });

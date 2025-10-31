@@ -1,13 +1,25 @@
 
-// ANSI escape codes
+// ANSI escape codes - Basic attributes
 pub const reset = "\x1b[0m";
 pub const bold = "\x1b[1m";
+pub const bold_off = "\x1b[22m";  // Explicit bold disable
+pub const dim = "\x1b[2m";
+pub const reverse = "\x1b[7m";     // Reverse video (swap fg/bg)
+pub const reverse_off = "\x1b[27m"; // Explicitly disable reverse video
+
+// ANSI escape codes - Standard colors (30-37)
 pub const red = "\x1b[31m";
 pub const green = "\x1b[32m";
 pub const yellow = "\x1b[33m";
 pub const blue = "\x1b[34m";
 pub const magenta = "\x1b[35m";
 pub const cyan = "\x1b[36m";
+
+// ANSI escape codes - Bright colors (90-97)
+pub const bright_green = "\x1b[92m";
+
+// Common combinations
+pub const bold_bright_green = bold ++ bright_green;
 
 // Common color combinations
 pub const error_prefix = bold ++ red;
