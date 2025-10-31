@@ -2,6 +2,36 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.3.0] - 2025-10-31
+
+### Fixed
+- **Interactive UI Rendering Improvements**
+  - Fixed ghost menu items appearing after selection by simplifying exit cleanup
+  - Fixed output flicker and progressive rendering by adding proper flush operations
+  - Fixed instruction line redrawing issues during navigation
+  - Improved window resize handling to preserve terminal context above menu
+
+### Added
+- **Terminal Compatibility Enhancements**
+  - Added centralized terminal capability detection system (`terminal.zig`)
+  - UTF-8 detection with automatic fallback to ASCII alternatives
+  - Arrow key instructions now show "Up/Down" on non-UTF-8 terminals
+  - Checkmark emoji (✓) now shows "[OK]" fallback on non-UTF-8 terminals
+  - Support for NO_COLOR environment variable
+
+### Changed
+- **Code Quality Improvements**
+  - Replaced inline ANSI escape codes with named constants from `colors.zig`
+  - Simplified complex ANSI nesting by breaking into separate print statements
+  - Refactored git module to use `GitResult` for better error handling
+  - Added comprehensive rendering issue test suite in `debugging/` directory
+
+### Developer Notes
+- Added `src/utils/terminal.zig` for terminal capability detection
+- New ANSI constants: `bold_off`, `dim`, `reverse`, `reverse_off`, `bright_green`
+- Test scripts for rendering issues: `debugging/test-all-rendering.sh`
+- Documentation updates to reflect accurate architecture
+
 ## [0.2.0] - 2025-08-27
 
 ### Changed
