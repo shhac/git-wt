@@ -53,6 +53,35 @@ pub fn isStdoutTty() bool {
     return posix.isatty(io.getStdOut().file.handle);
 }
 
+/// Check if terminal supports UTF-8 encoding
+/// Checks LANG and LC_CTYPE environment variables for UTF-8 markers
+fn supportsUtf8() bool {
+    // Check LC_CTYPE first (more specific)
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "LC_CTYPE")) |lc_ctype| {
+        defer std.heap.page_allocator.free(lc_ctype);
+        if (std.mem.indexOf(u8, lc_ctype, "UTF-8") != null or std.mem.indexOf(u8, lc_ctype, "utf8") != null) {
+            return true;
+        }
+    } else |_| {}
+
+    // Fall back to LANG
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "LANG")) |lang| {
+        defer std.heap.page_allocator.free(lang);
+        if (std.mem.indexOf(u8, lang, "UTF-8") != null or std.mem.indexOf(u8, lang, "utf8") != null) {
+            return true;
+        }
+    } else |_| {}
+
+    // Default to false if no UTF-8 indicators found
+    return false;
+}
+
+/// Get navigation text based on terminal capabilities
+/// Returns UTF-8 arrows if supported, otherwise ASCII fallback
+fn getNavigationText() []const u8 {
+    return if (supportsUtf8()) "↑/↓" else "Up/Down";
+}
+
 /// Terminal control for raw mode
 pub const RawMode = struct {
     original_termios: posix.termios,
@@ -405,10 +434,12 @@ pub fn selectFromListUnified(
 
     // Show instructions
     if (options.show_instructions) {
+        const nav_text = getNavigationText();
         switch (options.mode) {
             .single => {
-                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                try stdout.print("\n{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
                     if (options.use_colors) colors.yellow else "",
+                    nav_text,
                     if (options.use_colors) colors.reset else "",
                     if (options.use_colors) colors.yellow else "",
                     if (options.use_colors) colors.reset else "",
@@ -417,8 +448,9 @@ pub fn selectFromListUnified(
                 });
             },
             .multi => {
-                try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                try stdout.print("\n{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                     if (options.use_colors) colors.yellow else "",
+                    nav_text,
                     if (options.use_colors) colors.reset else "",
                     if (options.use_colors) colors.yellow else "",
                     if (options.use_colors) colors.reset else "",
@@ -448,11 +480,13 @@ pub fn selectFromListUnified(
             try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
 
             if (options.show_instructions) {
+                const nav_text = getNavigationText();
                 try stdout.print("\n", .{});
                 switch (options.mode) {
                     .single => {
-                        try stdout.print("{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
+                            nav_text,
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
@@ -461,8 +495,9 @@ pub fn selectFromListUnified(
                         });
                     },
                     .multi => {
-                        try stdout.print("{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
+                            nav_text,
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
@@ -579,13 +614,15 @@ pub fn selectFromListUnified(
 
             // Redraw instructions
             if (options.show_instructions) {
+                const nav_text = getNavigationText();
                 // Move to start of line and clear before printing
                 try stdout.print("\r", .{});
                 try clearLine();
                 switch (options.mode) {
                     .single => {
-                        try stdout.print("{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
+                            nav_text,
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
@@ -594,8 +631,9 @@ pub fn selectFromListUnified(
                         });
                     },
                     .multi => {
-                        try stdout.print("{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
+                            nav_text,
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
