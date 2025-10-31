@@ -4,6 +4,14 @@ All notable changes to git-wt will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **New `clean` Command**
+  - Removes all worktrees for deleted branches
+  - Lists worktrees to be removed before confirmation
+  - Supports `--dry-run` flag to show what would be cleaned without removing
+  - Supports `--force` flag to skip confirmation prompt
+  - Properly handles memory management and error cases
+
 ### Changed
 - **Code Quality Improvements (Phase 1)**
   - Refactored `selectFromListUnified` function in interactive.zig (reduced from 291 to 212 lines, 27% reduction)

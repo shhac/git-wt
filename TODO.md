@@ -1,13 +1,5 @@
 # TODO
 
-## Features
-
-### Add `clean` command
-- Remove all worktrees for deleted branches
-- List worktrees that would be removed before confirmation
-- Support `--dry-run` to show what would be cleaned without doing it
-- Support `--force` to skip confirmation
-
 ## Future Enhancements
 
 ### Additional ideas for consideration
