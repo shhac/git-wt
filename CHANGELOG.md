@@ -11,6 +11,11 @@ All notable changes to git-wt will be documented in this file.
   - Supports `--dry-run` flag to show what would be cleaned without removing
   - Supports `--force` flag to skip confirmation prompt
   - Properly handles memory management and error cases
+- **JSON Output Format**
+  - Added `--json` (or `-j`) flag to `list` command
+  - Outputs structured JSON with branch, path, display_name, is_current, and last_modified fields
+  - Properly escapes JSON strings for safe output
+  - Returns empty array `[]` when no worktrees found
 
 ### Changed
 - **Code Quality Improvements (Phase 1)**
