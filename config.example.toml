@@ -1,0 +1,50 @@
+# Example git-wt configuration file
+# Copy to ~/.config/git-wt/config for user-level config
+# Or place as .git-wt.toml in repository root for project-level config
+
+[worktree]
+# Default parent directory for worktrees
+# {repo} is replaced with repository name
+# Relative paths are resolved from repository root
+# Absolute paths and ~ (home) expansion supported
+parent_dir = "../{repo}-trees"
+
+# Other examples:
+# parent_dir = "~/code/worktrees/{repo}"  # Absolute with home expansion
+# parent_dir = "/tmp/worktrees"           # Absolute path
+# parent_dir = "worktrees"                # Relative to repo root
+
+[behavior]
+# Skip confirmation prompts (like -f/--force flag)
+auto_confirm = false
+
+# Always use non-interactive mode (like -n flag)
+non_interactive = false
+
+# Always use plain output (no colors, like --plain flag)
+plain_output = false
+
+# Default to JSON output for 'list' command (like --json flag)
+json_output = false
+
+[ui]
+# Disable colors even when TTY is detected (like --no-color flag)
+no_color = false
+
+# Force number selection instead of arrow keys (like --no-tty flag)
+no_tty = false
+
+[sync]
+# Additional files/directories to copy when creating worktrees
+# (beyond the built-in: .env*, .claude, CLAUDE.local.md, .ai-cache)
+extra_files = [
+    ".vscode/settings.json",
+    ".idea/",
+    "docker-compose.override.yml"
+]
+
+# Skip syncing specific files (useful for secrets)
+exclude_files = [
+    ".env.production",
+    ".env.secrets"
+]
