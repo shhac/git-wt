@@ -7,6 +7,26 @@ const fs = std.fs;
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 const io = @import("../utils/io.zig");
+
+/// Escape a string for JSON output
+fn escapeJson(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
+    var result = std.ArrayList(u8).empty;
+    defer result.deinit(allocator);
+
+    for (str) |c| {
+        switch (c) {
+            '"' => try result.appendSlice(allocator, "\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            else => try result.append(allocator, c),
+        }
+    }
+
+    return try result.toOwnedSlice(allocator);
+}
+
 fn formatDuration(allocator: std.mem.Allocator, seconds: u64) ![]u8 {
     const minute = 60;
     const hour = minute * 60;
@@ -72,16 +92,20 @@ pub fn printHelp() !void {
     try stdout.print("  4. Sort by modification time (newest first)\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: bool) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
-    
+
     // Get all worktrees using git worktree list
     const worktrees = try git.listWorktreesSmart(allocator, false); // false = not for interactive
     defer git.freeWorktrees(allocator, worktrees);
-    
+
     if (worktrees.len == 0) {
-        try stderr.print("{s}Warning:{s} No worktrees found\n", .{ colors.warning_prefix, colors.reset });
+        if (json) {
+            try stdout.print("[]\n", .{});
+        } else {
+            try stderr.print("{s}Warning:{s} No worktrees found\n", .{ colors.warning_prefix, colors.reset });
+        }
         return;
     }
     
@@ -140,6 +164,48 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
         }
     }.lessThan);
     
+    // JSON output
+    if (json) {
+        try stdout.print("[\n", .{});
+        for (worktrees_with_time, 0..) |wt_info, i| {
+            const wt = wt_info.worktree;
+
+            // Handle time display for missing worktrees
+            const duration_str = if (wt_info.mod_time == 0)
+                try allocator.dupe(u8, "unknown")
+            else blk: {
+                const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
+                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                break :blk try formatDuration(allocator, time_ago_seconds);
+            };
+            defer allocator.free(duration_str);
+
+            // Escape JSON strings
+            const escaped_branch = try escapeJson(allocator, wt.branch);
+            defer allocator.free(escaped_branch);
+            const escaped_path = try escapeJson(allocator, wt.path);
+            defer allocator.free(escaped_path);
+            const escaped_display = try escapeJson(allocator, wt_info.display_name);
+            defer allocator.free(escaped_display);
+            const escaped_duration = try escapeJson(allocator, duration_str);
+            defer allocator.free(escaped_duration);
+
+            try stdout.print("  {{\n", .{});
+            try stdout.print("    \"branch\": \"{s}\",\n", .{escaped_branch});
+            try stdout.print("    \"path\": \"{s}\",\n", .{escaped_path});
+            try stdout.print("    \"display_name\": \"{s}\",\n", .{escaped_display});
+            try stdout.print("    \"is_current\": {},\n", .{wt.is_current});
+            try stdout.print("    \"last_modified\": \"{s}\"\n", .{escaped_duration});
+            if (i < worktrees_with_time.len - 1) {
+                try stdout.print("  }},\n", .{});
+            } else {
+                try stdout.print("  }}\n", .{});
+            }
+        }
+        try stdout.print("]\n", .{});
+        return;
+    }
+
     // Display header
     if (!plain) {
         if (no_color) {
@@ -148,7 +214,7 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool) !void 
             try colors.printInfo(stdout, "Git worktrees (sorted by last modified):\n", .{});
         }
     }
-    
+
     // Display worktrees
     for (worktrees_with_time) |wt_info| {
         const wt = wt_info.worktree;

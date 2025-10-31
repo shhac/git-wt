@@ -95,15 +95,16 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, non_interac
 fn executeList(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
     _ = non_interactive; // List doesn't use this flag
     _ = no_tty; // List doesn't use this flag
-    
+
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
-    
+
     const no_color = parsed.hasFlag(&.{"--no-color"});
     const plain = parsed.hasFlag(&.{"--plain"});
-    
-    try cmd_list.execute(allocator, no_color, plain);
+    const json = parsed.hasFlag(&.{ "--json", "-j" });
+
+    try cmd_list.execute(allocator, no_color, plain, json);
 }
 
 fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, non_interactive: bool, no_tty: bool) !void {
