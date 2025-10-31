@@ -86,20 +86,6 @@ pub fn execWithResult(allocator: std.mem.Allocator, args: []const []const u8) !G
     return GitResult{ .success = result.stdout };
 }
 
-/// Execute git command and format error message if it fails (unused - kept for future use)
-pub fn execWithError(allocator: std.mem.Allocator, args: []const []const u8) !struct { output: []u8, err_msg: ?[]u8 } {
-    const git_result = try execWithResult(allocator, args);
-    switch (git_result) {
-        .success => |output| return .{ .output = output, .err_msg = null },
-        .failure => |err| {
-            const trimmed = trimNewline(err.stderr);
-            _ = trimmed; // Will be used in future
-            allocator.free(err.stderr);
-            return error.CommandFailed;
-        },
-    }
-}
-
 /// Execute a git command and return trimmed output
 pub fn execTrimmed(allocator: std.mem.Allocator, args: []const []const u8) ![]u8 {
     const output = try exec(allocator, args);

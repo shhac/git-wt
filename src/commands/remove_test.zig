@@ -41,7 +41,7 @@ test "sanitized branch name matching" {
     for (test_cases) |tc| {
         if (tc.should_match) {
             // Both forms should match
-            const sanitized = std.mem.replaceOwned(u8, testing.allocator, tc.worktree_branch, "/", "-") catch unreachable;
+            const sanitized = try std.mem.replaceOwned(u8, testing.allocator, tc.worktree_branch, "/", "-");
             defer testing.allocator.free(sanitized);
             try testing.expect(std.mem.eql(u8, tc.input, tc.worktree_branch) or
                                std.mem.eql(u8, tc.input, sanitized));
