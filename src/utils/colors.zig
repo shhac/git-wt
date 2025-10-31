@@ -31,6 +31,13 @@ pub const path_color = cyan;
 // Formatted print helpers
 const std = @import("std");
 const io = @import("io.zig");
+const terminal = @import("terminal.zig");
+
+/// Get success symbol based on terminal capabilities
+/// Returns checkmark emoji if UTF-8 is supported, otherwise ASCII fallback
+fn getSuccessSymbol() []const u8 {
+    return if (terminal.supportsUtf8()) "✓" else "[OK]";
+}
 pub fn printError(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
     try writer.print("{s}Error:{s} ", .{ error_prefix, reset });
     try writer.print(fmt, args);
@@ -38,7 +45,8 @@ pub fn printError(writer: anytype, comptime fmt: []const u8, args: anytype) !voi
 }
 
 pub fn printSuccess(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
-    try writer.print("{s}✓ ", .{success_prefix});
+    const success_symbol = getSuccessSymbol();
+    try writer.print("{s}{s} ", .{ success_prefix, success_symbol });
     try writer.print(fmt, args);
     try writer.print("{s}\n", .{reset});
 }
@@ -86,7 +94,10 @@ test "color print functions" {
     // Test printSuccess
     buffer.clearRetainingCapacity();
     try printSuccess(writer, "test success", .{});
-    try std.testing.expect(std.mem.indexOf(u8, buffer.items, "✓") != null);
+    // Check for either checkmark or [OK] depending on UTF-8 support
+    const has_checkmark = std.mem.indexOf(u8, buffer.items, "✓") != null;
+    const has_ok = std.mem.indexOf(u8, buffer.items, "[OK]") != null;
+    try std.testing.expect(has_checkmark or has_ok);
     try std.testing.expect(std.mem.indexOf(u8, buffer.items, "test success") != null);
     
     // Test printInfo
