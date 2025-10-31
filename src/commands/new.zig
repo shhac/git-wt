@@ -64,17 +64,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     
     // Clean up any stale locks first
     try worktree_lock.cleanStale();
-    
+
     // Try to acquire lock with 30 second timeout
-    worktree_lock.acquire(30000) catch |err| {
-        if (err == lock.LockError.LockTimeout) {
-            try colors.printError(stderr, "Another git-wt operation is in progress", .{});
-            try stderr.print("{s}Tip:{s} Wait for the other operation to complete or check for stale locks\n", .{
-                colors.info_prefix, colors.reset
-            });
-        }
-        return err;
-    };
+    try worktree_lock.acquireWithUserFeedback(30000, stderr);
     
     // Check if branch already exists
     if (try git.branchExists(allocator, branch_name)) {

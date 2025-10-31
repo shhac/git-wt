@@ -162,7 +162,22 @@ pub const Lock = struct {
         
         return true;
     }
-    
+
+    /// Acquire lock with user-friendly error feedback
+    /// This consolidates the common pattern of acquiring a lock and printing
+    /// helpful error messages when acquisition fails due to timeout.
+    pub fn acquireWithUserFeedback(self: *Lock, timeout_ms: u64, stderr: anytype) !void {
+        self.acquire(timeout_ms) catch |err| {
+            if (err == LockError.LockTimeout) {
+                try colors.printError(stderr, "Another git-wt operation is in progress", .{});
+                try stderr.print("{s}Tip:{s} Wait for the other operation to complete or check for stale locks\n", .{
+                    colors.info_prefix, colors.reset
+                });
+            }
+            return err;
+        };
+    }
+
     /// Deinit (ensures lock is released)
     pub fn deinit(self: *Lock) void {
         self.release();
@@ -172,6 +187,7 @@ pub const Lock = struct {
 /// Helper to run a function with a lock
 const std = @import("std");
 const fs = std.fs;
+const colors = @import("colors.zig");
 const io = @import("io.zig");
 pub fn withLock(allocator: std.mem.Allocator, lock_path: []const u8, timeout_ms: u64, comptime func: anytype, args: anytype) !@typeInfo(@TypeOf(func)).Fn.return_type.? {
     var lock = Lock.init(allocator, lock_path);
