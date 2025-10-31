@@ -6,11 +6,44 @@ A Zig CLI tool for managing git worktrees with enhanced features like automatic 
 
 This is a Zig implementation of the git-wt shell script, providing:
 - `git-wt new <branch>` - Create a new worktree with automated setup
-- `git-wt rm <branch>` - Remove worktree by branch name with safety checks
-- `git-wt go [branch]` - Navigate between worktrees
+- `git-wt rm [branch...]` - Remove worktree(s) by branch name with safety checks
+- `git-wt go [branch]` - Navigate between worktrees (interactive or direct)
 - `git-wt list` - List all worktrees with current indicator
+- `git-wt alias <name>` - Generate shell function wrapper for directory navigation
 
 See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
+See [docs/](docs/) for comprehensive user guides and advanced documentation.
+
+### Global Flags
+All commands support these global flags:
+- `-n, --non-interactive` - Run without prompts (for testing/scripting)
+- `--no-tty` - Force number-based selection (disable arrow keys)
+- `--no-color` - Disable colored output
+- `--plain` - Plain output format (no colors, minimal formatting)
+- `--debug` - Show diagnostic information
+- `-h, --help` - Show help message for command
+- `-v, --version` - Show version information
+
+## Documentation
+
+Comprehensive guides available in the `docs/` directory:
+- **[INSTALLATION.md](docs/INSTALLATION.md)** - Installation and setup instructions
+- **[USAGE.md](docs/USAGE.md)** - Basic usage guide with examples
+- **[ADVANCED.md](docs/ADVANCED.md)** - Advanced features and workflows
+- **[SHELL-INTEGRATION.md](docs/SHELL-INTEGRATION.md)** - Shell integration setup (gwt alias)
+- **[TESTING.md](docs/TESTING.md)** - Testing guide for developers
+- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+Additional learning resources in `learnings/`:
+- **[TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md](learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md)** - Guide to testing interactive CLIs
+- **[NAVIGATION_AND_FD3.md](learnings/NAVIGATION_AND_FD3.md)** - Technical details on fd3 mechanism
+- **[HOW_TO_TEST_TTY_INPUTS.md](learnings/HOW_TO_TEST_TTY_INPUTS.md)** - Testing TTY interactions
+
+See also:
+- **[DESIGN.md](DESIGN.md)** - Design principles and patterns
+- **[BUGS.md](BUGS.md)** - Known bugs and edge cases (currently all resolved!)
+- **[TODO.md](TODO.md)** - Planned features and improvements
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
 
 ## Development Guidelines
 
@@ -34,13 +67,24 @@ src/
 ├── commands/
 │   ├── new.zig       # Create worktree with setup (config copy)
 │   ├── remove.zig    # Remove worktree with safety checks
-│   └── go.zig        # Navigate between worktrees (interactive/direct)
+│   ├── go.zig        # Navigate between worktrees (interactive/direct)
+│   ├── list.zig      # List all worktrees
+│   └── alias.zig     # Generate shell function wrappers
 └── utils/
-    ├── git.zig       # Git command wrapper, repository info
-    ├── fs.zig        # File operations, config copying
+    ├── args.zig      # Command-line argument parsing
     ├── colors.zig    # ANSI color codes and formatted printing
+    ├── debug.zig     # Debug logging functionality
+    ├── env.zig       # Environment variable utilities
+    ├── fd.zig        # File descriptor 3 (fd3) shell integration
+    ├── fs.zig        # File operations, config copying
+    ├── git.zig       # Git command wrapper, repository info
     ├── input.zig     # User input utilities (confirmations, line reading)
-    └── process.zig   # External command execution helpers
+    ├── interactive.zig # Interactive terminal control (arrow keys, raw mode)
+    ├── io.zig        # File I/O wrappers (Zig 0.15+ compatibility)
+    ├── lock.zig      # File locking for concurrent operations
+    ├── process.zig   # External command execution helpers
+    ├── time.zig      # Time formatting utilities
+    └── validation.zig # Branch name validation
 
 ### Typical Development Workflow
 
@@ -63,17 +107,21 @@ zig build
 
 ### Testing
 ```bash
-# Run all tests (Note: zig build test may hang due to --listen=- issue)
-# Instead, run tests directly:
-zig test src/main.zig              # Run unit tests
-zig test src/integration_tests.zig # Run integration tests
+# Recommended: Use the build system
+zig build test              # Run unit tests
+zig build test-integration  # Run integration tests
+zig build test-all          # Run all tests (unit + integration)
 
-# Or run both in sequence:
-zig test src/main.zig && zig test src/integration_tests.zig
+# Alternative: Direct test commands (bypasses build options)
+zig test src/main.zig              # Run unit tests directly
+zig test src/integration_tests.zig # Run integration tests directly
 
-# Individual test files can also be run:
+# Individual module tests
 zig test src/utils/validation.zig  # Test specific module
 zig test src/utils/lock.zig        # Test lock functionality
+
+# Note: `zig build test` may hang due to a known Zig issue with `--listen=-`
+# If this occurs, use the direct `zig test` commands above
 ```
 
 ### Installation
@@ -91,7 +139,7 @@ Originally planned to use external libraries but simplified:
 ## Implementation Notes
 
 ### Zig Version
-- Requires Zig 0.14.1 or later
+- Requires Zig 0.13.0 or later (actively developed and tested with 0.15.1)
 - Uses modern build.zig.zon for dependency management
 
 ### Design Philosophy
@@ -162,6 +210,25 @@ Originally planned to use external libraries but simplified:
 - Enables commands like `gwt go branch` to actually change directories
 - Setup: `eval "$(git-wt --alias gwt)"` in .zshrc or .bashrc
 
+### File Descriptor 3 (fd3) Integration
+The shell integration uses a clever fd3 mechanism to enable directory changes:
+
+- **fd3 mechanism** enables the CLI subprocess to communicate directory changes back to the parent shell
+- Environment variable `GWT_USE_FD3=1` signals that fd3 is available and should be used
+- Commands write shell commands (like `cd /path`) to file descriptor 3
+- The shell wrapper evaluates captured commands to change directories
+- Implementation documented in: `src/utils/fd.zig` with detailed technical explanation
+
+**How it works:**
+1. Shell function opens fd3 for writing: `3>&1`
+2. Sets environment variable: `GWT_USE_FD3=1`
+3. Runs git-wt binary with fd3 available
+4. Binary writes `cd /path` to fd3
+5. Shell evaluates the captured command
+6. Parent shell's directory changes
+
+This mechanism is necessary because subprocess commands cannot change the parent shell's working directory.
+
 ### Worktree Management
 - Creates worktrees in `../repo-trees/branch-name` structure
 - Automatic branch creation with `-b` flag
@@ -211,17 +278,28 @@ git-wt -n go feature-branch       # Output: cd /path/to/worktree
 ```
 
 ### End-to-End Testing
-Created `test-non-interactive.sh` for automated testing:
+
+**Interactive tests** using expect:
 ```bash
-./test-non-interactive.sh
+# Run all interactive tests
+./test-interactive/run-all-tests.sh
+
+# Run specific test
+./test-interactive/test-navigation.exp   # Arrow-key navigation
+./test-interactive/test-removal.exp      # Multi-select removal
+./test-interactive/test-prunable.exp     # Prunable worktree handling
 ```
 
-The test script:
-- Builds the binary
-- Creates a temporary git repository
-- Tests all commands in non-interactive mode
-- Validates worktree creation/removal
-- Cleans up automatically
+**Shell integration tests:**
+```bash
+# Test shell integration and fd3 mechanism
+./scripts/test-shell-integration.sh
+```
+
+**Debugging scripts** (in `debugging/` directory):
+- `debug-interactive-fd3.sh` - Debug fd3 mechanism interactively
+- `test-claude-script.sh` - Scratch script for quick testing
+- `test-user-fd3.sh` - Test user's actual shell setup
 
 ### Manual Testing
 ```bash
@@ -332,6 +410,122 @@ The project supports two interactive modes:
 
 For non-interactive testing: `./zig-out/bin/git-wt --non-interactive [command]`
 
+## Terminal Compatibility
+
+### Supported Terminals
+
+**Full Support (colors + UTF-8 + interactive):**
+- macOS Terminal.app
+- iTerm2
+- GNOME Terminal
+- Konsole
+- Windows Terminal
+- xterm (modern)
+
+**Partial Support (colors + ANSI, limited UTF-8):**
+- Linux console (Ctrl+Alt+F2)
+- Older xterm versions
+- tmux/screen multiplexers
+
+**Minimal Support (basic text only):**
+- Non-TTY output (pipes, redirects)
+- TERM=dumb
+- Very old terminals
+
+### Fallback Modes
+
+The tool automatically detects terminal capabilities and adjusts:
+
+**Interactive Mode:**
+- **Arrow-key navigation** - Default with full TTY support
+- **Number selection** - Automatic fallback with `--no-tty` or when arrow keys unavailable
+
+**Visual Elements:**
+- **Colors** - Disabled with `--no-color` or when TERM=dumb
+- **UTF-8 symbols** - Fallback to ASCII on terminals without UTF-8 support
+- **Emojis** - Display when UTF-8 available, use text alternatives otherwise
+
+### Environment Variables
+
+- `TERM` - Terminal type detection (xterm-256color, dumb, etc.)
+- `LANG` / `LC_CTYPE` - UTF-8 support detection
+- `GWT_USE_FD3` - Enable fd3 shell integration mechanism (set automatically by alias)
+
+### Testing Terminal Compatibility
+
+```bash
+# Test with minimal terminal
+TERM=dumb ./zig-out/bin/git-wt list
+
+# Test without UTF-8
+LANG=C ./zig-out/bin/git-wt go
+
+# Test with explicit flags
+./zig-out/bin/git-wt --no-color --no-tty go
+```
+
+## Debugging
+
+### Debug Mode
+
+Enable debug output with the `--debug` flag:
+```bash
+# See fd3 mechanism details
+./zig-out/bin/git-wt --debug go
+
+# See git command execution
+./zig-out/bin/git-wt --debug new feature-branch
+
+# Combine with other flags
+./zig-out/bin/git-wt --debug --show-command go
+```
+
+### Debugging Scripts
+
+The `debugging/` directory contains helpful scripts:
+
+**Interactive debugging:**
+```bash
+# Debug fd3 mechanism with your actual shell setup
+./debugging/test-user-fd3.sh
+
+# Debug interactive selection
+./debugging/debug-interactive-fd3.sh
+
+# Check user's alias configuration
+./debugging/check-user-alias.sh
+```
+
+**Scratch testing:**
+```bash
+# Edit this script for quick experimentation
+./debugging/test-claude-script.sh
+```
+
+### Common Issues
+
+**Arrow keys not working:**
+- Check if `--no-tty` flag is set (forces number selection)
+- Verify terminal supports raw mode input
+- Try explicit TTY mode by running directly (not via pipe)
+
+**Colors not showing:**
+- Check `TERM` environment variable is set
+- Use `--debug` to see capability detection
+- Try explicit color mode with `--color` (when implemented)
+
+**fd3 mechanism not working:**
+- Ensure using the shell alias: `eval "$(git-wt --alias gwt)"`
+- Check `GWT_USE_FD3` is set when running via alias
+- Run `./debugging/test-user-fd3.sh` to diagnose
+
+**Performance issues:**
+- Check repository size (very large repos may be slow)
+- Use `--debug` to see which operations take time
+- Consider using direct branch name instead of interactive selection
+
+See **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** for comprehensive troubleshooting guide.
+
 ## Future Improvements
 
 See `TODO.md` for the current list of planned features and enhancements. Major items include:
@@ -344,5 +538,10 @@ Recently completed features:
 - ✅ List command to show all worktrees with current indicator
 - ✅ Force flag for rm command (skip uncommitted changes check)
 - ✅ Custom worktree parent directory via --parent-dir flag
-- ✅ Upgraded to Zig 0.15.1
+- ✅ Upgraded to Zig 0.15.1 (from 0.13.0 minimum)
 - ✅ Removed Claude integration from new command
+- ✅ Comprehensive test suite (13 tests + interactive expect tests)
+- ✅ File-based locking for concurrent operations
+- ✅ Repository state validation (merge, rebase, bisect detection)
+- ✅ Interactive multi-select removal
+- ✅ Arrow-key navigation with fallback to number selection
