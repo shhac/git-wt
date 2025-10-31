@@ -402,7 +402,7 @@ pub fn selectFromListUnified(
     // Initial render
     try stdout.print("\n", .{});
     try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
-    
+
     // Show instructions
     if (options.show_instructions) {
         switch (options.mode) {
@@ -430,7 +430,10 @@ pub fn selectFromListUnified(
             },
         }
     }
-    
+
+    // Flush to ensure entire menu renders atomically
+    stdout.flush();
+
     // Input loop
     while (true) {
         // Check if terminal was resized
@@ -582,10 +585,10 @@ pub fn selectFromListUnified(
         if (needs_redraw) {
             const redraw_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
             try moveCursorUp(redraw_lines);
-            
+
             // Redraw all items
             try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
-            
+
             // Redraw instructions
             if (options.show_instructions) {
                 try clearLine();
@@ -614,6 +617,9 @@ pub fn selectFromListUnified(
                     },
                 }
             }
+
+            // Flush to ensure redraw is atomic
+            stdout.flush();
         }
     }
 }

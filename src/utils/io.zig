@@ -3,15 +3,24 @@ const std = @import("std");
 /// Wrapper struct for File to add print functionality for Zig 0.15+
 pub const FileWriter = struct {
     file: std.fs.File,
-    
+
     pub fn print(self: FileWriter, comptime fmt: []const u8, args: anytype) !void {
         var buffer: [4096]u8 = undefined;
         const message = try std.fmt.bufPrint(&buffer, fmt, args);
         try self.file.writeAll(message);
     }
-    
+
     pub fn writeAll(self: FileWriter, bytes: []const u8) !void {
         try self.file.writeAll(bytes);
+    }
+
+    /// Flush buffered output to ensure immediate rendering
+    /// This is critical for interactive UI updates to prevent flicker and delays
+    pub fn flush(self: FileWriter) void {
+        // For TTY devices, sync ensures kernel buffers are flushed to the terminal
+        // This makes ANSI escape sequences apply immediately and atomically
+        // Errors are intentionally ignored as flush is best-effort
+        self.file.sync() catch {};
     }
 };
 
