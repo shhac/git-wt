@@ -326,6 +326,37 @@ pub fn selectFromList(
 
 /// Unified interactive selection function
 /// Handles both single and multi-select modes based on options.mode
+/// Helper to render instructions for interactive selection
+fn renderInstructions(writer: anytype, mode: SelectionMode, use_colors: bool) !void {
+    const nav_text = getNavigationText();
+    switch (mode) {
+        .single => {
+            try writer.print("\n{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                if (use_colors) colors.yellow else "",
+                nav_text,
+                if (use_colors) colors.reset else "",
+                if (use_colors) colors.yellow else "",
+                if (use_colors) colors.reset else "",
+                if (use_colors) colors.yellow else "",
+                if (use_colors) colors.reset else "",
+            });
+        },
+        .multi => {
+            try writer.print("\n{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                if (use_colors) colors.yellow else "",
+                nav_text,
+                if (use_colors) colors.reset else "",
+                if (use_colors) colors.yellow else "",
+                if (use_colors) colors.reset else "",
+                if (use_colors) colors.yellow else "",
+                if (use_colors) colors.reset else "",
+                if (use_colors) colors.yellow else "",
+                if (use_colors) colors.reset else "",
+            });
+        },
+    }
+}
+
 pub fn selectFromListUnified(
     allocator: std.mem.Allocator,
     items: []const []const u8,
@@ -400,33 +431,7 @@ pub fn selectFromListUnified(
 
     // Show instructions
     if (options.show_instructions) {
-        const nav_text = getNavigationText();
-        switch (options.mode) {
-            .single => {
-                try stdout.print("\n{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
-                    if (options.use_colors) colors.yellow else "",
-                    nav_text,
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                });
-            },
-            .multi => {
-                try stdout.print("\n{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
-                    if (options.use_colors) colors.yellow else "",
-                    nav_text,
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                    if (options.use_colors) colors.yellow else "",
-                    if (options.use_colors) colors.reset else "",
-                });
-            },
-        }
+        try renderInstructions(stdout, options.mode, options.use_colors);
     }
 
     // Flush to ensure entire menu renders atomically
@@ -446,34 +451,7 @@ pub fn selectFromListUnified(
             try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
 
             if (options.show_instructions) {
-                const nav_text = getNavigationText();
-                try stdout.print("\n", .{});
-                switch (options.mode) {
-                    .single => {
-                        try stdout.print("{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
-                            if (options.use_colors) colors.yellow else "",
-                            nav_text,
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                        });
-                    },
-                    .multi => {
-                        try stdout.print("{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
-                            if (options.use_colors) colors.yellow else "",
-                            nav_text,
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                        });
-                    },
-                }
+                try renderInstructions(stdout, options.mode, options.use_colors);
             }
 
             stdout.flush();
@@ -580,36 +558,10 @@ pub fn selectFromListUnified(
 
             // Redraw instructions
             if (options.show_instructions) {
-                const nav_text = getNavigationText();
                 // Move to start of line and clear before printing
                 try stdout.print("\r", .{});
                 try clearLine();
-                switch (options.mode) {
-                    .single => {
-                        try stdout.print("{s}{s}{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
-                            if (options.use_colors) colors.yellow else "",
-                            nav_text,
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                        });
-                    },
-                    .multi => {
-                        try stdout.print("{s}{s}{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
-                            if (options.use_colors) colors.yellow else "",
-                            nav_text,
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                            if (options.use_colors) colors.yellow else "",
-                            if (options.use_colors) colors.reset else "",
-                        });
-                    },
-                }
+                try renderInstructions(stdout, options.mode, options.use_colors);
             }
 
             // Flush to ensure redraw is atomic
