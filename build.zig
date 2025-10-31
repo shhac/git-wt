@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     exe.linkLibC();
     
     // Add version as build option
-    const version_option = b.option([]const u8, "version", "Version string") orelse "0.3.0";
+    const version_option = b.option([]const u8, "version", "Version string") orelse "0.3.1";
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "version", version_option);
     exe.root_module.addOptions("build_options", build_options);

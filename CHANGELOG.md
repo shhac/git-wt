@@ -2,6 +2,21 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.3.1] - 2025-10-31
+
+### Fixed
+- **Display Name Bug in Interactive Navigation**
+  - Fixed incorrect display names for worktrees in `gwt go` command
+  - Previously used flawed "-trees" path heuristic to identify main repository
+  - Now properly compares paths with repository root for accurate identification
+  - Worktrees outside standard "-trees" directory now display correctly
+
+### Technical Details
+- Updated `listWorktreesWithTime` and `listWorktreesWithTimeSmart` functions
+- Now use `getRepoInfo()` to get actual repository root path
+- Exact path comparison replaces unreliable substring matching
+- Deprecated `extractDisplayPath` function with documentation of limitations
+
 ## [0.3.0] - 2025-10-31
 
 ### Fixed
