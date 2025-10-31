@@ -241,17 +241,11 @@ fn renderItem(
                 const bracket_content = if (is_selected) "*" else " ";
                 if (is_current) {
                     // Current item: highlighted background with green brackets
-                    try writer.print("  {s}[{s}{s}{s}{s}]{s} {s}{s}{s}\n", .{
-                        colors.green,      // green [
-                        colors.reverse,    // reverse video for highlight
-                        bracket_content,
-                        colors.reset,     // reset reverse video
-                        colors.green,     // green ]
-                        colors.reset,     // reset color
-                        colors.bold,      // bold text
-                        item_text,
-                        colors.reset,     // final reset
-                    });
+                    // Break into separate prints for clarity
+                    try writer.print("  {s}[", .{colors.green});  // Green opening bracket
+                    try writer.print("{s}{s}{s}", .{ colors.reverse, bracket_content, colors.reset });  // Reverse video content
+                    try writer.print("{s}]{s} ", .{ colors.green, colors.reset });  // Green closing bracket and reset
+                    try writer.print("{s}{s}{s}\n", .{ colors.bold, item_text, colors.reset });  // Bold text
                 } else if (is_selected) {
                     // Selected but not current: green [*]
                     try writer.print("  {s}[{s}*{s}] {s}\n", .{
@@ -273,17 +267,11 @@ fn renderItem(
                 // Single-select mode: highlight current item only
                 if (is_current) {
                     // Current item: green brackets with bright green asterisk and bold text
-                    try writer.print("  {s}[{s}{s}*{s}{s}]{s} {s}{s}{s}\n", .{
-                        colors.green,                // green [
-                        colors.reset,                // reset to remove any inherited formatting
-                        colors.bold_bright_green,    // bright green + bold for *
-                        colors.reset,                // reset to clear bold
-                        colors.green,                // back to green for ]
-                        colors.reset,                // reset before text
-                        colors.bold,                 // bold for text
-                        item_text,
-                        colors.reset,                // final reset
-                    });
+                    // Break into separate prints for clarity
+                    try writer.print("  {s}[{s}", .{ colors.green, colors.reset });  // Green opening bracket with reset
+                    try writer.print("{s}*{s}", .{ colors.bold_bright_green, colors.reset });  // Bright green bold asterisk
+                    try writer.print("{s}]{s} ", .{ colors.green, colors.reset });  // Green closing bracket and reset
+                    try writer.print("{s}{s}{s}\n", .{ colors.bold, item_text, colors.reset });  // Bold text
                 } else {
                     // Non-current item: dim [ ] with normal text
                     try writer.print("  {s}[ ]{s} {s}\n", .{
