@@ -88,7 +88,7 @@ test "integration: time formatting with color output" {
         // Test: Integration with color output (should not crash)
         var buffer = std.ArrayList(u8).empty;
         defer buffer.deinit(allocator);
-        const writer = buffer.writer();
+        const writer = buffer.writer(allocator);
         
         try colors.printInfo(writer, "Last modified: {s} ago", .{duration});
         try testing.expect(buffer.items.len > 0);
