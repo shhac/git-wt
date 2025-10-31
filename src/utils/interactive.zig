@@ -504,17 +504,11 @@ pub fn selectFromListUnified(
                 }
             },
             .enter => {
-                // Clear display
+                // Clear display using simple clear-from-cursor-down
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines + 1);
-                try clearLine();
-                try stdout.print("\n", .{});
-                for (0..total_lines) |_| {
-                    try clearLine();
-                    try stdout.print("\n", .{});
-                }
-                try moveCursorUp(total_lines + 1);
-                
+                try moveCursorUp(total_lines);
+                try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
+
                 switch (options.mode) {
                     .single => {
                         return SelectionResult{ .single = current };
@@ -549,32 +543,20 @@ pub fn selectFromListUnified(
                 }
             },
             .escape => {
-                // Clear display
+                // Clear display using simple clear-from-cursor-down
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines + 1);
-                try clearLine();
-                try stdout.print("\n", .{});
-                for (0..total_lines) |_| {
-                    try clearLine();
-                    try stdout.print("\n", .{});
-                }
-                try moveCursorUp(total_lines + 1);
-                
+                try moveCursorUp(total_lines);
+                try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
+
                 return SelectionResult.cancelled;
             },
             .char => {
                 if (key_info.char == 'q' or key_info.char == 'Q') {
-                    // Clear display
+                    // Clear display using simple clear-from-cursor-down
                     const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                    try moveCursorUp(total_lines + 1);
-                    try clearLine();
-                    try stdout.print("\n", .{});
-                    for (0..total_lines) |_| {
-                        try clearLine();
-                        try stdout.print("\n", .{});
-                    }
-                    try moveCursorUp(total_lines + 1);
-                    
+                    try moveCursorUp(total_lines);
+                    try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
+
                     return SelectionResult.cancelled;
                 }
             },
