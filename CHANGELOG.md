@@ -2,6 +2,43 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.4.2] - 2025-10-31
+
+### Added
+- **GitHub Actions CI/CD**
+  - Automated testing workflow runs on every push and pull request
+  - Tests on Ubuntu and macOS with Zig 0.15.1
+  - Manual build artifacts workflow allows on-demand builds for all platforms
+  - Automated release workflow creates GitHub releases with platform binaries when version tags are pushed
+  - All workflows build for: macOS Universal, macOS x86_64, macOS ARM64, Linux x86_64, Linux ARM64
+- **Configuration File Support**
+  - User-level configuration: `~/.config/git-wt/config`
+  - Project-level configuration: `.git-wt.toml` in repository root
+  - TOML format with comprehensive options
+  - `[worktree]` section: `parent_dir` with `{repo}` substitution, relative/absolute path support
+  - `[behavior]` section: `auto_confirm`, `non_interactive`, `plain_output`, `json_output`
+  - `[ui]` section: `no_color`, `no_tty`
+  - `[sync]` section: `extra_files`, `exclude_files` (arrays)
+  - Precedence: CLI flags > environment variables > project config > user config > defaults
+  - Graceful fallback to defaults if config files are missing or invalid
+- **Documentation**
+  - New `docs/CONFIGURATION.md` with comprehensive configuration guide
+  - New `config.example.toml` with fully commented example configuration
+  - Common configuration scenarios for CI/CD, teams, and personal use
+
+### Fixed
+- Added missing test file for `clean` command (`src/commands/clean_test.zig`)
+- Updated README to correctly require Zig 0.15.1+ (was incorrectly showing 0.14.1+)
+
+### Changed
+- All command wrappers now accept configuration and merge with command-line flags
+- Command-line flags always override configuration file settings
+
+### Developer Notes
+- Test coverage increased from 62 to 70 tests (8 new tests)
+- Config module includes 5 unit tests for parsing and path resolution
+- Clean command now has 3 unit tests
+
 ## [0.4.1] - 2025-10-31
 
 ### Fixed
