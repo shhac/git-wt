@@ -438,16 +438,20 @@ pub fn selectFromListUnified(
     while (true) {
         // Check if terminal was resized
         if (g_needs_redraw.swap(false, .acq_rel)) {
-            try stdout.print("\x1b[2J\x1b[H", .{}); // Clear screen and move to home
-            
+            // Move to start of menu and clear from cursor down
+            // This preserves content above the menu (unlike \x1b[2J)
+            const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
+            try moveCursorUp(total_lines);
+            try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
+
             // Redraw everything
-            try stdout.print("\n", .{});
             try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
-            
+
             if (options.show_instructions) {
+                try stdout.print("\n", .{});
                 switch (options.mode) {
                     .single => {
-                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}↑/↓{s} Navigate  {s}Enter{s} Select  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
@@ -457,7 +461,7 @@ pub fn selectFromListUnified(
                         });
                     },
                     .multi => {
-                        try stdout.print("\n{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
+                        try stdout.print("{s}↑/↓{s} Navigate  {s}Space{s} Toggle  {s}Enter{s} Confirm  {s}ESC{s} Cancel\n", .{
                             if (options.use_colors) colors.yellow else "",
                             if (options.use_colors) colors.reset else "",
                             if (options.use_colors) colors.yellow else "",
@@ -470,6 +474,8 @@ pub fn selectFromListUnified(
                     },
                 }
             }
+
+            stdout.flush();
         }
         
         const key_info = try readKey();
