@@ -2,6 +2,15 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.4.1] - 2025-10-31
+
+### Fixed
+- **Duplicate Symbols in Output**
+  - Removed duplicate checkmarks in `clean` command output
+  - Fixed 5 instances of duplicate symbols in `remove` command
+  - Fixed duplicate "Error:" prefix in `new` command
+  - `printSuccess()` and `printError()` already add symbols/prefixes automatically
+
 ## [0.4.0] - 2025-10-31
 
 ### Added
