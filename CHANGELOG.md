@@ -2,6 +2,16 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Code Quality Improvements (Phase 1)**
+  - Refactored `selectFromListUnified` function in interactive.zig (reduced from 291 to 212 lines, 27% reduction)
+  - Extracted `renderInstructions` helper to eliminate code duplication
+  - Consolidated lock acquisition error handling with `acquireWithUserFeedback` helper
+  - Removed code smells: replaced `catch unreachable` with `try`, removed unused `execWithError` function
+  - Enhanced maintainability through better code organization
+
 ## [0.3.1] - 2025-10-31
 
 ### Fixed
