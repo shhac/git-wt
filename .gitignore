@@ -24,6 +24,12 @@ build/
 CLAUDE.local.md
 .ai-cache/
 
+# Claude Code directories (except project-specific skills, agents, commands)
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/commands/
+
 # Temporary files
 *.tmp
 *.temp

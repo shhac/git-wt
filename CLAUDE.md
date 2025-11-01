@@ -4,54 +4,53 @@ A Zig CLI tool for managing git worktrees with enhanced features like automatic 
 
 ## Project Overview
 
-This is a Zig implementation of the git-wt shell script, providing:
-- `git-wt new <branch>` - Create a new worktree with automated setup
-- `git-wt rm [branch...]` - Remove worktree(s) by branch name with safety checks
-- `git-wt go [branch]` - Navigate between worktrees (interactive or direct)
+This is a Zig implementation providing enhanced git worktree management:
+- `git-wt new <branch>` - Create worktree with automated setup
+- `git-wt rm [branch...]` - Remove worktree(s) with safety checks
+- `git-wt go [branch]` - Navigate between worktrees interactively
 - `git-wt list` - List all worktrees with current indicator
-- `git-wt alias <name>` - Generate shell function wrapper for directory navigation
+- `git-wt alias <name>` - Generate shell function wrapper
+- `git-wt clean` - Remove worktrees for deleted branches
 
-See [DESIGN.md](DESIGN.md) for the design principles and patterns used in this project.
-See [docs/](docs/) for comprehensive user guides and advanced documentation.
+**Version:** 0.4.2
+**Zig Version:** 0.15.1+
+**Platform Support:** macOS (Intel/ARM/Universal), Linux (x86_64/ARM64), Windows (via WSL2)
+
+## Quick Reference
 
 ### Global Flags
-All commands support these global flags:
 - `-n, --non-interactive` - Run without prompts (for testing/scripting)
 - `--no-tty` - Force number-based selection (disable arrow keys)
 - `--no-color` - Disable colored output
 - `--plain` - Plain output format (no colors, minimal formatting)
 - `--debug` - Show diagnostic information
-- `-h, --help` - Show help message for command
+- `-h, --help` - Show help message
 - `-v, --version` - Show version information
 
-## Documentation
+### Essential Documentation
 
-Comprehensive guides available in the `docs/` directory:
-- **[INSTALLATION.md](docs/INSTALLATION.md)** - Installation and setup instructions
-- **[USAGE.md](docs/USAGE.md)** - Basic usage guide with examples
-- **[ADVANCED.md](docs/ADVANCED.md)** - Advanced features and workflows
-- **[SHELL-INTEGRATION.md](docs/SHELL-INTEGRATION.md)** - Shell integration setup (gwt alias)
-- **[TESTING.md](docs/TESTING.md)** - Testing guide for developers
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+**User Guides** (`docs/` directory):
+- [INSTALLATION.md](docs/INSTALLATION.md) - Installation and setup
+- [USAGE.md](docs/USAGE.md) - Basic usage with examples
+- [CONFIGURATION.md](docs/CONFIGURATION.md) - Config file setup
+- [SHELL-INTEGRATION.md](docs/SHELL-INTEGRATION.md) - Shell alias setup
+- [ADVANCED.md](docs/ADVANCED.md) - Advanced features
+- [TESTING.md](docs/TESTING.MD) - Testing guide
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
 
-Additional learning resources in `learnings/`:
-- **[TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md](learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md)** - Guide to testing interactive CLIs
-- **[NAVIGATION_AND_FD3.md](learnings/NAVIGATION_AND_FD3.md)** - Technical details on fd3 mechanism
-- **[HOW_TO_TEST_TTY_INPUTS.md](learnings/HOW_TO_TEST_TTY_INPUTS.md)** - Testing TTY interactions
-
-See also:
-- **[DESIGN.md](DESIGN.md)** - Design principles and patterns
-- **[BUGS.md](BUGS.md)** - Known bugs and edge cases (currently all resolved!)
-- **[TODO.md](TODO.md)** - Planned features and improvements
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+**Project Files:**
+- [DESIGN.md](DESIGN.md) - Design principles and patterns
+- [BUGS.md](BUGS.md) - Bug tracking (currently all resolved!)
+- [TODO.md](TODO.md) - Planned features
+- [CHANGELOG.md](CHANGELOG.md) - Version history
 
 ## Development Guidelines
 
 ### Git Workflow
-- **Commit early and often** - Make commits as you complete logical units of work
-- Use conventional commits with `gm` (e.g., `gm feat cli "add argument parsing"`)
-- Don't wait until the end to commit - commit after each feature/fix is working
-- Run tests before committing to ensure changes don't break existing functionality
+- **Commit early and often** - Make commits as you complete logical units
+- Use conventional commits: `gm feat cli "add argument parsing"`
+- Run tests before committing: `zig test src/main.zig`
+- Follow the workflow in Paul's global CLAUDE.local.md
 
 ### Code Style
 - Use Zig standard library conventions
@@ -59,630 +58,207 @@ See also:
 - Keep functions focused and testable
 - Extract common patterns into utility modules
 
-### Architecture
+### Architecture Overview
 
 ```
 src/
-├── main.zig           # Entry point, command dispatch using command table pattern
-├── commands/
-│   ├── new.zig       # Create worktree with setup (config copy)
-│   ├── remove.zig    # Remove worktree with safety checks
-│   ├── go.zig        # Navigate between worktrees (interactive/direct)
-│   ├── list.zig      # List all worktrees
-│   └── alias.zig     # Generate shell function wrappers
-└── utils/
-    ├── args.zig      # Command-line argument parsing
-    ├── colors.zig    # ANSI color codes and formatted printing
-    ├── debug.zig     # Debug logging functionality
-    ├── env.zig       # Environment variable utilities
-    ├── fd.zig        # File descriptor 3 (fd3) shell integration
-    ├── fs.zig        # File operations, config copying
-    ├── git.zig       # Git command wrapper, repository info
-    ├── input.zig     # User input utilities (confirmations, line reading)
-    ├── interactive.zig # Interactive terminal control (arrow keys, raw mode)
-    ├── io.zig        # File I/O wrappers (Zig 0.15+ compatibility)
-    ├── lock.zig      # File locking for concurrent operations
-    ├── process.zig   # External command execution helpers
-    ├── time.zig      # Time formatting utilities
-    └── validation.zig # Branch name validation
-
-### Typical Development Workflow
-
-1. Make changes to the code
-2. Run `zig build` to check compilation
-3. Run `zig build test` to ensure tests pass
-4. Test manually with `./zig-out/bin/git-wt [command]`
-5. Commit with `gm [type] [scope] "description"`:
-   ```bash
-   gm feat new "add branch validation"
-   gm fix go "handle missing worktrees"
-   gm test utils "add tests for trimNewline"
-   gm refactor cli "simplify argument parsing"
-   ```
-
-### Building
-```bash
-zig build
+├── main.zig              # Entry point, command dispatch
+├── commands/             # Command implementations
+│   ├── new.zig          # Create worktree with config copy
+│   ├── remove.zig       # Remove worktrees with safety
+│   ├── go.zig           # Navigate interactively
+│   ├── list.zig         # List worktrees
+│   ├── alias.zig        # Generate shell wrapper
+│   └── clean.zig        # Clean deleted branches
+└── utils/               # 14 utility modules
+    ├── config.zig       # Configuration file support
+    ├── git.zig          # Git command wrapper
+    ├── interactive.zig  # Terminal UI (arrow keys, etc.)
+    ├── validation.zig   # Input validation
+    ├── lock.zig         # Concurrent operation locking
+    └── ... (9 more utilities)
 ```
 
-### Testing
+**For detailed architecture:** Use the `git-wt-architecture` skill or read inline code comments.
+
+### Design Principles
+
+From [DESIGN.md](DESIGN.md):
+
+1. **Separation of Concerns** - Each command in own module, focused utilities
+2. **Explicit Over Implicit** - All errors handled explicitly, memory management visible
+3. **User Experience First** - Colors, prompts, progress indicators
+4. **Safety by Default** - Confirmations, validation, comprehensive errors
+5. **Testability** - Pure functions, non-interactive mode, 70+ tests
+6. **Zero Runtime Dependencies** - Only git required, single binary
+
+## Common Development Tasks
+
+### Building and Testing
+
 ```bash
-# Recommended: Use the build system
-zig build test              # Run unit tests
-zig build test-integration  # Run integration tests
-zig build test-all          # Run all tests (unit + integration)
-
-# Alternative: Direct test commands (bypasses build options)
-zig test src/main.zig              # Run unit tests directly
-zig test src/integration_tests.zig # Run integration tests directly
-
-# Individual module tests
-zig test src/utils/validation.zig  # Test specific module
-zig test src/utils/lock.zig        # Test lock functionality
-
-# Note: `zig build test` may hang due to a known Zig issue with `--listen=-`
-# If this occurs, use the direct `zig test` commands above
-```
-
-### Installation
-```bash
+# Build
 zig build -Doptimize=ReleaseFast
-cp zig-out/bin/git-wt ~/.local/bin/
-```
 
-## Dependencies
+# Run tests
+zig test src/main.zig              # Unit tests (70+)
+zig test src/integration_tests.zig # Integration tests (38)
 
-Originally planned to use external libraries but simplified:
-- **zig-clap** - Added to build.zig.zon but not actively used (simplified to basic arg parsing)
-- **ansi_term** - Removed in favor of simple ANSI constants
-
-## Implementation Notes
-
-### Zig Version
-- Requires Zig 0.13.0 or later (actively developed and tested with 0.15.1)
-- Uses modern build.zig.zon for dependency management
-
-### Design Philosophy
-- Minimize custom code by using established libraries
-- Focus on clear, maintainable implementation
-- Match general features rather than exact shell script behavior
-
-## Implementation Learnings
-
-### Version Control Best Practices
-- Commit after each working feature, not at the end of the session
-- Use conventional commits to maintain clear history
-- Small, focused commits are easier to review and debug
-- Run tests before committing to catch issues early
-
-### Dependencies
-- Started with zig-clap for CLI parsing but simplified to basic arg parsing due to compatibility issues
-- Removed ansi_term dependency in favor of simple ANSI escape constants
-- Lesson: Sometimes simpler is better - don't over-engineer with dependencies
-
-### Code Organization
-- Extracted common utilities (colors, input, process) to reduce duplication
-- Used command table pattern in main.zig for cleaner command dispatch
-- Helper functions like `trimNewline` and `fileExists` eliminate repeated patterns
-
-### Zig-Specific Patterns
-- Use `defer` for cleanup consistently
-- Handle const-correctness carefully (e.g., `openDir` returns const Dir)
-- Arena allocators work well for CLI tools
-- Error unions and explicit error handling make code robust
-- Always free memory from exec() calls in git.zig
-- Watch for memory leaks with GeneralPurposeAllocator in debug mode
-
-### Testing
-- **Important**: `zig build test` may hang due to a known Zig issue with `--listen=-`
-- Use direct test commands instead (see Testing section above)
-- Manual testing in git repositories is essential
-- Consider edge cases like being in main repo vs worktree
-- All tests use temporary directories to avoid side effects
-
-## Robustness and Safety Features
-
-### Input Validation
-- **Branch name validation**: Rejects invalid characters, reserved names, and improper formatting
-- **Path validation**: Checks for existing worktree paths to prevent conflicts
-- **Branch existence checks**: Prevents creating worktrees for branches that already exist
-
-### Git State Validation
-- **Repository state checks**: Detects ongoing merges, rebases, cherry-picks, and bisects
-- **Uncommitted changes detection**: Warns when removing worktrees with uncommitted work
-- **Clean operation guarantees**: Ensures git operations happen in clean repository states
-
-### Error Handling
-- **Graceful failure modes**: All errors provide clear, actionable feedback to users
-- **Process isolation**: Claude spawning uses detached processes to prevent hangs
-- **Resource cleanup**: Proper memory management and file handle cleanup throughout
-
-### Testing and Verification
-- **Comprehensive test suite**: 13 automated tests covering normal and edge cases
-- **Outcome verification**: Tests actually verify that operations succeed (not just that commands run)
-- **Non-interactive mode**: Full CLI functionality available for scripting and automation
-
-## Key Features Implemented
-
-### Shell Integration
-- **--alias command** generates shell functions to handle directory changes
-- Since CLI tools can't change the parent shell's pwd, the alias wraps git-wt
-- Enables commands like `gwt go branch` to actually change directories
-- Setup: `eval "$(git-wt --alias gwt)"` in .zshrc or .bashrc
-
-### File Descriptor 3 (fd3) Integration
-The shell integration uses a clever fd3 mechanism to enable directory changes:
-
-- **fd3 mechanism** enables the CLI subprocess to communicate directory changes back to the parent shell
-- Environment variable `GWT_USE_FD3=1` signals that fd3 is available and should be used
-- Commands write shell commands (like `cd /path`) to file descriptor 3
-- The shell wrapper evaluates captured commands to change directories
-- Implementation documented in: `src/utils/fd.zig` with detailed technical explanation
-
-**How it works:**
-1. Shell function opens fd3 for writing: `3>&1`
-2. Sets environment variable: `GWT_USE_FD3=1`
-3. Runs git-wt binary with fd3 available
-4. Binary writes `cd /path` to fd3
-5. Shell evaluates the captured command
-6. Parent shell's directory changes
-
-This mechanism is necessary because subprocess commands cannot change the parent shell's working directory.
-
-### Worktree Management
-- Creates worktrees in `../repo-trees/branch-name` structure
-- Automatic branch creation with `-b` flag
-- Safe removal with confirmation prompts
-- Interactive navigation with modification time sorting
-
-### Configuration Copying
-When creating a new worktree, automatically copies:
-- `.claude` - Claude Code configuration
-- `.env*` - All environment files
-- `CLAUDE.local.md` - Local Claude instructions  
-- `.ai-cache` - AI cache directory
-
-
-### User Experience
-- **Colored output** for better visibility and status clarity
-- **Interactive prompts** with sensible defaults (Y/n patterns)
-- **Comprehensive help system** with per-command help (`git-wt new --help`)
-- **Clear error messages** with context and suggested actions
-- **Progress indicators** for long operations like yarn install
-
-## Testing Approach
-
-### Unit Tests
-All utility modules have comprehensive unit tests:
-```bash
-# Run all unit tests (avoiding zig build test hang issue)
-zig test src/main.zig
-
-# This runs tests for all modules imported by main.zig
-# which includes all utility modules via test_all.zig
-```
-
-### Non-Interactive Mode
-Added `--non-interactive` (or `-n`) flag for automated testing:
-- Skips all prompts and confirmations
-- Disables interactive selection in `go` command
-- Returns machine-readable output where appropriate
-- Essential for CI/CD and scripting
-
-```bash
-# Examples
-git-wt -n new feature-branch      # Create without prompts
-git-wt -n rm                      # Remove without confirmation
-git-wt -n go                      # List worktrees only
-git-wt -n go feature-branch       # Output: cd /path/to/worktree
-```
-
-### End-to-End Testing
-
-**Interactive tests** using expect:
-```bash
-# Run all interactive tests
-./test-interactive/run-all-tests.sh
-
-# Run specific test
-./test-interactive/test-navigation.exp   # Arrow-key navigation
-./test-interactive/test-removal.exp      # Multi-select removal
-./test-interactive/test-prunable.exp     # Prunable worktree handling
-```
-
-**Shell integration tests:**
-```bash
-# Test shell integration and fd3 mechanism
-./scripts/test-shell-integration.sh
-```
-
-**Debugging scripts** (in `debugging/` directory):
-- `debug-interactive-fd3.sh` - Debug fd3 mechanism interactively
-- `test-claude-script.sh` - Scratch script for quick testing
-- `test-user-fd3.sh` - Test user's actual shell setup
-
-### Manual Testing
-```bash
-# Build and test manually
-zig build
+# Manual testing
 ./zig-out/bin/git-wt new test-branch
-cd ../repo-trees/test-branch
-./zig-out/bin/git-wt go
-./zig-out/bin/git-wt rm test-branch
+./zig-out/bin/git-wt --debug list
 ```
 
-### Testing Shell Alias Function
-**Important**: The shell alias function does not persist across different `Bash` tool invocations. When testing the alias function, you must set it up in the same session:
+**For detailed testing:** Use the `git-wt-test` skill.
+
+### Debugging
 
 ```bash
-# WRONG - This won't work across multiple Bash tool calls:
-# First call: eval "$(./zig-out/bin/git-wt --alias gwt)"
-# Second call: gwt go  # This will fail - alias doesn't exist
-
-# CORRECT - Set up alias in the same session:
-eval "$(./zig-out/bin/git-wt --alias gwt)" && gwt go
-```
-
-This is a limitation of the Bash tool execution model where each tool call runs in a separate shell session.
-
-### Test Directory for Development
-The `.e2e-test` directory is gitignored and reserved for:
-- Creating test repositories during development
-- Testing edge cases and experimental features
-- Any temporary test data that might be in a broken state
-
-This directory should NEVER be tracked in git as it may contain:
-- Incomplete git repositories
-- Broken worktrees
-- Test data in various states of completion
-
-Use this directory freely for manual testing during development:
-```bash
-# Example: Testing branch with slashes
-cd .e2e-test
-git init test-repo
-cd test-repo
-git add . && git commit -m "initial"
-../../zig-out/bin/git-wt new feature/auth
-```
-
-## Bug Tracking
-
-We maintain a `BUGS.md` file that tracks known bugs, edge cases, and potential issues in the codebase. When reviewing code or encountering issues:
-
-1. **Check BUGS.md first** - The issue might already be documented
-2. **Add new bugs** - Document any new issues you find with:
-   - Clear description of the problem
-   - Impact on users or system
-   - Example scenarios that trigger the bug
-   - Suggested fix approach
-3. **Categorize appropriately** - Use categories like Critical Issues, Edge Cases, Usability Issues, etc.
-4. **Reference DESIGN.md** - When fixing bugs, ensure solutions conform to our design principles:
-   - Zero runtime dependencies
-   - Clear, maintainable code
-   - Proper error handling
-   - Cross-platform compatibility
-
-To create or update BUGS.md:
-```bash
-# Review code systematically
-grep -r "TODO\|FIXME\|XXX" src/
-# Look for error handling patterns
-grep -r "catch\|error\|panic" src/
-# Check for memory management
-grep -r "allocator\|free\|defer" src/
-```
-
-## TODO Management
-
-There is a `TODO.md` file that tracks planned features and improvements. When implementing items from the TODO:
-
-1. **Before starting**: Review the TODO.md to understand the full scope
-2. **During implementation**: Update the TODO item with progress notes if needed
-3. **After completion**: Remove the completed item from TODO.md
-4. **Important**: Always commit the TODO.md update as part of the feature implementation
-
-This ensures the TODO list stays current and reflects actual work remaining.
-
-## Testing Interactive CLI Features
-
-For comprehensive guidance on testing interactive CLI features, see:
-- **[learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md](learnings/TESTING_INTERACTIVE_CLIS_WITH_EXPECT.md)** - Complete guide to testing with expect
-- **[test-interactive/](test-interactive/)** - Actual test suite with examples
-
-### Quick Summary
-
-**Best approach**: Use `expect` with screen capture and human-like timing (25ms between keystrokes).
-
-```bash
-# Run all interactive tests
-./test-interactive/run-all-tests.sh
-
-# Test specific features
-./test-interactive/test-navigation.exp   # Arrow-key navigation
-./test-interactive/test-removal.exp      # Multi-select removal
-./test-interactive/test-prunable.exp     # Prunable worktree handling
-```
-
-The project supports two interactive modes:
-1. **Arrow-key navigation** (default with TTY) - Uses ANSI escape codes
-2. **Number-based selection** (`--no-tty` or fallback) - Works everywhere
-
-For non-interactive testing: `./zig-out/bin/git-wt --non-interactive [command]`
-
-## Terminal Compatibility
-
-### Supported Terminals
-
-**Full Support (colors + UTF-8 + interactive):**
-- macOS Terminal.app
-- iTerm2
-- GNOME Terminal
-- Konsole
-- Windows Terminal
-- xterm (modern)
-
-**Partial Support (colors + ANSI, limited UTF-8):**
-- Linux console (Ctrl+Alt+F2)
-- Older xterm versions
-- tmux/screen multiplexers
-
-**Minimal Support (basic text only):**
-- Non-TTY output (pipes, redirects)
-- TERM=dumb
-- Very old terminals
-
-### Fallback Modes
-
-The tool automatically detects terminal capabilities and adjusts:
-
-**Interactive Mode:**
-- **Arrow-key navigation** - Default with full TTY support
-- **Number selection** - Automatic fallback with `--no-tty` or when arrow keys unavailable
-
-**Visual Elements:**
-- **Colors** - Disabled with `--no-color` or when TERM=dumb
-- **UTF-8 symbols** - Fallback to ASCII on terminals without UTF-8 support
-- **Emojis** - Display when UTF-8 available, use text alternatives otherwise
-
-### Environment Variables
-
-- `TERM` - Terminal type detection (xterm-256color, dumb, etc.)
-- `LANG` / `LC_CTYPE` - UTF-8 support detection
-- `GWT_USE_FD3` - Enable fd3 shell integration mechanism (set automatically by alias)
-
-### Testing Terminal Compatibility
-
-```bash
-# Test with minimal terminal
-TERM=dumb ./zig-out/bin/git-wt list
-
-# Test without UTF-8
-LANG=C ./zig-out/bin/git-wt go
-
-# Test with explicit flags
-./zig-out/bin/git-wt --no-color --no-tty go
-```
-
-## Debugging
-
-### Debug Mode
-
-Enable debug output with the `--debug` flag:
-```bash
-# See fd3 mechanism details
+# Enable debug output
 ./zig-out/bin/git-wt --debug go
 
-# See git command execution
-./zig-out/bin/git-wt --debug new feature-branch
-
-# Combine with other flags
-./zig-out/bin/git-wt --debug --show-command go
-```
-
-### Debugging Scripts
-
-The `debugging/` directory contains helpful scripts:
-
-**Interactive debugging:**
-```bash
-# Debug fd3 mechanism with your actual shell setup
-./debugging/test-user-fd3.sh
-
-# Debug interactive selection
-./debugging/debug-interactive-fd3.sh
-
-# Check user's alias configuration
-./debugging/check-user-alias.sh
-```
-
-**Scratch testing:**
-```bash
-# Edit this script for quick experimentation
+# Test specific scenarios
 ./debugging/test-claude-script.sh
 ```
 
-### Common Issues
+**For debugging help:** Use the `git-wt-debug` skill.
 
-**Arrow keys not working:**
-- Check if `--no-tty` flag is set (forces number selection)
-- Verify terminal supports raw mode input
-- Try explicit TTY mode by running directly (not via pipe)
+### Creating Releases
 
-**Colors not showing:**
-- Check `TERM` environment variable is set
-- Use `--debug` to see capability detection
-- Try explicit color mode with `--color` (when implemented)
+**For release process:** Use the `git-wt-release` skill.
 
-**fd3 mechanism not working:**
-- Ensure using the shell alias: `eval "$(git-wt --alias gwt)"`
-- Check `GWT_USE_FD3` is set when running via alias
-- Run `./debugging/test-user-fd3.sh` to diagnose
+Quick reference:
+1. Update CHANGELOG.md with version section
+2. Update build.zig version
+3. Run all tests
+4. Commit: `gm chore release "bump version to X.Y.Z"`
+5. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+6. Push: `git push origin main vX.Y.Z`
+7. GitHub Actions automatically builds and publishes
 
-**Performance issues:**
-- Check repository size (very large repos may be slow)
-- Use `--debug` to see which operations take time
-- Consider using direct branch name instead of interactive selection
+## Specialized Skills Available
 
-See **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** for comprehensive troubleshooting guide.
+Claude has access to these git-wt-specific skills:
 
-## Release Process
+- **`git-wt-release`** - Complete release process automation
+- **`git-wt-test`** - Testing workflows and procedures
+- **`git-wt-debug`** - Debugging and troubleshooting
+- **`git-wt-architecture`** - Codebase navigation and understanding
+- **`git-wt-bugtrack`** - Bug tracking with BUGS.md
 
-### Overview
-git-wt uses GitHub Actions for automated testing, builds, and releases. The release process is streamlined with CI/CD.
+These skills are automatically invoked when relevant. You can also ask Claude to use them explicitly.
 
-### Release Dependencies
+## Key Features
 
-Before creating a release, ensure these files are updated:
+### Configuration File Support (v0.4.2)
+- User-level: `~/.config/git-wt/config`
+- Project-level: `.git-wt.toml`
+- Precedence: CLI flags > env vars > project > user > defaults
+- See [CONFIGURATION.md](docs/CONFIGURATION.md)
 
-1. **`CHANGELOG.md`** (REQUIRED)
-   - Add new version section at the top
-   - Document all changes in categories: Added, Fixed, Changed, Developer Notes
-   - Use format: `## [X.Y.Z] - YYYY-MM-DD`
-   - The release workflow extracts this section for GitHub release notes
+### GitHub Actions CI/CD (v0.4.2)
+- Automated testing on push/PR
+- Manual build artifacts workflow
+- Automated releases on version tags
+- All platforms built automatically
 
-2. **`build.zig`** (REQUIRED)
-   - Update default version string
-   - Line 20: `const version_option = b.option([]const u8, "version", "Version string") orelse "X.Y.Z";`
+### Shell Integration
+- fd3 mechanism for directory navigation
+- Generated shell function wrapper
+- Setup: `eval "$(git-wt alias gwt)"`
+- See [SHELL-INTEGRATION.md](docs/SHELL-INTEGRATION.md)
 
-3. **Tests** (REQUIRED)
-   - All tests must pass: `zig test src/main.zig`
-   - Run integration tests: `zig test src/integration_tests.zig`
+### Safety Features
+- Branch name validation
+- Uncommitted changes detection
+- File-based locking for concurrent operations
+- Repository state validation (merge, rebase, bisect)
+- Confirmation prompts with sensible defaults
 
-### Release Steps
+### Interactive Features
+- Arrow-key navigation (with number fallback)
+- Multi-select removal with Space/Enter
+- Smart sorting by modification time
+- Terminal resize handling
+- Graceful interrupt handling
 
-#### 1. Prepare the Release
+## Dependencies and Tools
 
-```bash
-# 1. Update CHANGELOG.md with new version section
-# 2. Update version in build.zig
-# 3. Run tests
-zig test src/main.zig
-zig test src/integration_tests.zig
+### Required
+- **Zig 0.15.1+** - Programming language
+- **Git** - Version control (intentional dependency)
 
-# 4. Build and verify
-zig build -Doptimize=ReleaseFast
-./zig-out/bin/git-wt --version  # Should show new version
+### Build System
+- `build.zig` - Zig build configuration
+- `build.zig.zon` - Dependency management
+- No external runtime dependencies
 
-# 5. Commit changes
-git add CHANGELOG.md build.zig
-git commit -m "chore[release]: bump version to X.Y.Z"
-```
+### CI/CD
+- GitHub Actions workflows in `.github/workflows/`
+- Automated testing, building, and releases
+- Multi-platform binary generation
 
-#### 2. Create and Push Tag
+## Implementation Notes
 
-```bash
-# Create annotated tag
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
+### Zig Version Compatibility
+- **Current:** Zig 0.15.1
+- **Minimum:** Zig 0.15.1 (uses modern APIs)
+- **Breaking Changes:** ArrayList.writer() now requires allocator parameter
 
-# Push commit and tag
-git push origin main
-git push origin vX.Y.Z
-```
+### Code Patterns
+- **Command Table:** Clean dispatch in main.zig
+- **GitResult Union:** Explicit success/failure handling
+- **Resource Management:** Consistent `defer` cleanup
+- **Error Context:** Meaningful error propagation
 
-#### 3. Automated Release Process
+### Testing Philosophy
+- **70 unit tests** covering all modules
+- **38 integration tests** for workflows
+- **Expect-based tests** for interactive features
+- **Non-interactive mode** for CI/CD
 
-Once the tag is pushed, GitHub Actions automatically:
+## Recent Changes
 
-1. **Builds for all platforms:**
-   - macOS Universal (Intel + ARM combined)
-   - macOS x86_64
-   - macOS ARM64
-   - Linux x86_64
-   - Linux ARM64
+### v0.4.2 (Current - 2025-10-31)
+- ✅ GitHub Actions CI/CD (testing, builds, releases)
+- ✅ Configuration file support (user + project level)
+- ✅ Added missing test file for clean command
+- ✅ Fixed Zig version requirement in README
 
-2. **Creates GitHub Release:**
-   - Extracts changelog section for release notes
-   - Attaches all platform tarballs
-   - Publishes release (not draft)
+### v0.4.0-0.4.1
+- ✅ Clean command for deleted branches
+- ✅ JSON output for list command
+- ✅ Bug fixes for duplicate symbols
 
-3. **Timeline:** ~10-15 minutes for full release
+See [CHANGELOG.md](CHANGELOG.md) for complete history.
 
-#### 4. Verify Release
+## Getting Help
 
-```bash
-# Check release on GitHub
-gh release view vX.Y.Z
+### For Development Issues
+1. **Check skills:** Ask Claude to use relevant skill (release, test, debug, etc.)
+2. **Check docs:** Comprehensive guides in `docs/` directory
+3. **Check BUGS.md:** Known issues and solutions
+4. **Enable debug:** Use `--debug` flag for diagnostics
 
-# Download and test a platform binary
-curl -L https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-macos-universal.tar.gz | tar xz
-./git-wt --version
-```
+### For User Issues
+- See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- Use `--debug` flag
+- Check GitHub Issues
 
-### Manual Builds (Optional)
+## Project Status
 
-For testing or custom builds, use the manual build artifacts workflow:
+**Production Ready:** ✅
+**Test Coverage:** 70 unit tests + 38 integration tests
+**Known Bugs:** 0 (46 fixed)
+**CI/CD:** Automated via GitHub Actions
+**Documentation:** Comprehensive (11 markdown files)
 
-1. Go to GitHub Actions → "Build Artifacts"
-2. Click "Run workflow"
-3. Select branch to build from
-4. Download artifacts from workflow run (30-day retention)
+**Active Features:**
+- All core commands fully functional
+- Configuration file support
+- Shell integration (fd3)
+- Multi-platform releases
+- Comprehensive error handling
+- Interactive UI with fallbacks
 
-### Hotfix Releases
-
-For urgent fixes:
-
-```bash
-# 1. Create hotfix branch from main
-git checkout -b hotfix/X.Y.Z
-
-# 2. Make fix, update CHANGELOG.md and build.zig
-# 3. Test thoroughly
-# 4. Merge to main
-git checkout main
-git merge hotfix/X.Y.Z
-
-# 5. Tag and push
-git tag vX.Y.Z
-git push origin main vX.Y.Z
-```
-
-### Version Numbering
-
-Follow semantic versioning (semver):
-- **Major (X.0.0)**: Breaking changes
-- **Minor (0.X.0)**: New features, backward compatible
-- **Patch (0.0.X)**: Bug fixes, backward compatible
-
-Examples:
-- `v0.4.2` → Bug fixes and small improvements
-- `v0.5.0` → New features (config files, new commands)
-- `v1.0.0` → Stable API, production ready
-
-### Troubleshooting Releases
-
-**Release workflow failed:**
-- Check GitHub Actions logs for build errors
-- Verify CHANGELOG.md has correct format
-- Ensure all tests pass locally first
-
-**Missing platform in release:**
-- Check workflow run for specific platform failure
-- May need to rerun failed jobs in GitHub Actions
-
-**Changelog extraction failed:**
-- Verify CHANGELOG.md format matches: `## [X.Y.Z] - YYYY-MM-DD`
-- Ensure there's content between version headers
-
-## Future Improvements
-
-See `TODO.md` for the current list of planned features and enhancements. Major items include:
-- Additional commands (sync, prune)
-- Better error recovery for interrupted operations
-- Implement extra_files and exclude_files config syncing
-
-Recently completed features:
-- ✅ Configuration file support (.git-wt.toml and ~/.config/git-wt/config) - v0.4.2
-- ✅ GitHub Actions CI/CD (testing, builds, releases) - v0.4.2
-- ✅ Clean command to remove worktrees for deleted branches - v0.4.0
-- ✅ Support for branch names with slashes (creating subdirectory structures)
-- ✅ List command to show all worktrees with current indicator
-- ✅ Force flag for rm command (skip uncommitted changes check)
-- ✅ Custom worktree parent directory via --parent-dir flag
-- ✅ Upgraded to Zig 0.15.1 (from 0.13.0 minimum) - v0.2.0
-- ✅ Removed Claude integration from new command - v0.2.0
-- ✅ Comprehensive test suite (70 tests + interactive expect tests)
-- ✅ File-based locking for concurrent operations
-- ✅ Repository state validation (merge, rebase, bisect detection)
-- ✅ Interactive multi-select removal
-- ✅ Arrow-key navigation with fallback to number selection
+**Planned Enhancements:** See [TODO.md](TODO.md)
