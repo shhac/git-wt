@@ -12,7 +12,7 @@ This is a Zig implementation providing enhanced git worktree management:
 - `git-wt alias <name>` - Generate shell function wrapper
 - `git-wt clean` - Remove worktrees for deleted branches
 
-**Version:** 0.4.2
+**Version:** 0.4.3
 **Zig Version:** 0.15.1+
 **Platform Support:** macOS (Intel/ARM/Universal), Linux (x86_64/ARM64), Windows (via WSL2)
 

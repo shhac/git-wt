@@ -2,6 +2,25 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.4.3] - 2025-11-01
+
+### Added
+- **Skill Validator** - New `git-wt-skill-validator` skill for maintaining documentation accuracy
+  - Validates that project skills match current codebase state
+  - Detects drift in architecture, test counts, command lists, and workflows
+  - Supports quick validation, deep validation, and auto-update modes
+  - Ensures documentation stays synchronized after refactoring
+
+### Fixed
+- **CI/CD Dependency Hash** - Updated `clap` dependency hash in `build.zig.zon` for version 0.11.0
+  - Fixes GitHub Actions build failures caused by outdated package hash
+  - All CI workflows now passing on Ubuntu and macOS
+
+### Developer Notes
+- Extracted detailed documentation from CLAUDE.md into specialized skills
+- Skills now provide progressive disclosure of information
+- Added `.gitignore` rules for `.claude/` directory with exceptions for skills/agents/commands
+
 ## [0.4.2] - 2025-10-31
 
 ### Added
