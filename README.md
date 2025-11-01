@@ -18,36 +18,21 @@ A fast, reliable CLI tool for managing git worktrees with enhanced features like
 
 ### Installation
 
-**Option 1: Download Pre-built Binary (Recommended)**
-
-Download the latest release for your platform from [Releases](https://github.com/shhac/git-wt/releases):
+**Download pre-built binary** from [Releases](https://github.com/shhac/git-wt/releases) or **build from source**:
 
 ```bash
-# macOS (Universal - works on both Intel and Apple Silicon)
+# Download (macOS/Linux)
 curl -L https://github.com/shhac/git-wt/releases/latest/download/git-wt-macos-universal.tar.gz | tar xz
-chmod +x git-wt
 mv git-wt ~/.local/bin/
 
-# Linux x86_64
-curl -L https://github.com/shhac/git-wt/releases/latest/download/git-wt-linux-x86_64.tar.gz | tar xz
-chmod +x git-wt
-mv git-wt ~/.local/bin/
-```
-
-**Option 2: Build from Source**
-
-```bash
-git clone https://github.com/shhac/git-wt.git
-cd git-wt
+# Build from source (requires Zig 0.15.1+)
+git clone https://github.com/shhac/git-wt.git && cd git-wt
 zig build -Doptimize=ReleaseFast
 cp zig-out/bin/git-wt ~/.local/bin/
 ```
 
-**Requirements**:
-- Runtime: Git only
-- Build from source: Zig 0.15.1+, Git
-
-**Windows users**: Use WSL2 with the Linux build
+**Requirements**: Git (Zig only needed for building from source)
+**Platforms**: macOS (Universal/x86_64/ARM64), Linux (x86_64/ARM64), Windows (via WSL2)
 
 ### Shell Integration Setup
 
