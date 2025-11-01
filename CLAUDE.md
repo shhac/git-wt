@@ -145,8 +145,11 @@ Claude has access to these git-wt-specific skills:
 - **`git-wt-debug`** - Debugging and troubleshooting
 - **`git-wt-architecture`** - Codebase navigation and understanding
 - **`git-wt-bugtrack`** - Bug tracking with BUGS.md
+- **`git-wt-skill-validator`** - Validate and update skills to match current codebase state
 
 These skills are automatically invoked when relevant. You can also ask Claude to use them explicitly.
+
+**Skill Maintenance:** Use `git-wt-skill-validator` after significant refactoring or architecture changes to ensure skills stay synchronized with the codebase.
 
 ## Key Features
 
