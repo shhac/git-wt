@@ -489,6 +489,28 @@ pub fn selectFromListUnified(
                 }
             },
             .enter => {
+                // For multi-select, require explicit Space selection
+                if (options.mode == .multi) {
+                    if (selected) |*sel| {
+                        var has_selection = false;
+                        for (sel.items) |is_selected_item| {
+                            if (is_selected_item) {
+                                has_selection = true;
+                                break;
+                            }
+                        }
+
+                        if (!has_selection and !options.allow_empty) {
+                            // Show hint without advancing to a new line so
+                            // existing cursor math stays valid on next redraw
+                            try stdout.print("\r  Use Space to select items first", .{});
+                            try stdout.print("\r", .{});
+                            stdout.flush();
+                            continue;
+                        }
+                    }
+                }
+
                 // Clear display using simple clear-from-cursor-down
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
                 try moveCursorUp(total_lines);
@@ -500,20 +522,6 @@ pub fn selectFromListUnified(
                     },
                     .multi => {
                         if (selected) |*sel| {
-                            // Check if anything is selected
-                            var has_selection = false;
-                            for (sel.items) |is_selected_item| {
-                                if (is_selected_item) {
-                                    has_selection = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (!has_selection and !options.allow_empty) {
-                                // Nothing selected, select current item
-                                sel.items[current] = true;
-                            }
-                            
                             // Build result array
                             var result = std.ArrayList(usize).empty;
                             for (sel.items, 0..) |is_selected_item, i| {
@@ -521,7 +529,7 @@ pub fn selectFromListUnified(
                                     try result.append(allocator, i);
                                 }
                             }
-                            
+
                             return SelectionResult{ .multiple = try result.toOwnedSlice(allocator) };
                         }
                     },

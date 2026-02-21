@@ -80,7 +80,8 @@ pub fn printHelp() !void {
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help       Show this help message\n", .{});
     try stdout.print("  --no-color       Disable colored output\n", .{});
-    try stdout.print("  --plain          Output plain format (branch<tab>path<tab>time)\n\n", .{});
+    try stdout.print("  --plain          Output plain format (branch<tab>path<tab>time)\n", .{});
+    try stdout.print("  -j, --json       Output in JSON format\n\n", .{});
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt list                    # List all worktrees with details\n", .{});
     try stdout.print("  git-wt list --plain            # Machine-readable output\n", .{});

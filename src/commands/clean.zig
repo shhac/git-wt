@@ -2,6 +2,7 @@ const std = @import("std");
 
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
+const env = @import("../utils/env.zig");
 const input = @import("../utils/input.zig");
 const lock = @import("../utils/lock.zig");
 const io = @import("../utils/io.zig");
@@ -29,9 +30,21 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
 
+    // Check NO_COLOR environment variable (standard convention)
+    const no_color = env.isNoColor();
+    const c_yellow = if (no_color) "" else colors.yellow;
+    const c_red = if (no_color) "" else colors.red;
+    const c_bright_green = if (no_color) "" else colors.bright_green;
+    const c_path = if (no_color) "" else colors.path_color;
+    const c_reset = if (no_color) "" else colors.reset;
+
     // Get repository info for lock path
     const repo_info = git.getRepoInfo(allocator) catch |err| {
-        try colors.printError(stderr, "Not in a git repository", .{});
+        if (no_color) {
+            try stderr.print("Error: Not in a git repository\n", .{});
+        } else {
+            try colors.printError(stderr, "Not in a git repository", .{});
+        }
         return err;
     };
     defer allocator.free(repo_info.root);
@@ -79,34 +92,38 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
 
     // Report findings
     if (to_clean.items.len == 0) {
-        try colors.printSuccess(stdout, "No worktrees need cleaning", .{});
+        if (no_color) {
+            try stdout.print("No worktrees need cleaning\n", .{});
+        } else {
+            try colors.printSuccess(stdout, "No worktrees need cleaning", .{});
+        }
         try stdout.print("All worktree branches still exist.\n", .{});
         return;
     }
 
     try stdout.print("\n{s}Found {d} worktree(s) with deleted branches:{s}\n\n", .{
-        colors.yellow,
+        c_yellow,
         to_clean.items.len,
-        colors.reset,
+        c_reset,
     });
 
     // List worktrees to be cleaned
     for (to_clean.items) |wt| {
         try stdout.print("  {s}{s}{s} @ {s}{s}{s}\n", .{
-            colors.red,
+            c_red,
             wt.branch,
-            colors.reset,
-            colors.path_color,
+            c_reset,
+            c_path,
             wt.path,
-            colors.reset,
+            c_reset,
         });
     }
 
     // In dry-run mode, just exit
     if (dry_run) {
         try stdout.print("\n{s}Dry run - no changes made{s}\n", .{
-            colors.yellow,
-            colors.reset,
+            c_yellow,
+            c_reset,
         });
         return;
     }
@@ -135,23 +152,34 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
 
         switch (remove_result) {
             .success => {
-                try colors.printSuccess(stdout, "Removed {s}", .{wt.branch});
+                if (no_color) {
+                    try stdout.print("Removed {s}\n", .{wt.branch});
+                } else {
+                    try colors.printSuccess(stdout, "Removed {s}", .{wt.branch});
+                }
                 removed_count += 1;
             },
             .failure => |err| {
-                try colors.printError(stderr, "Failed to remove {s}: {s}", .{
-                    wt.branch,
-                    git.trimNewline(err.stderr),
-                });
+                if (no_color) {
+                    try stderr.print("Error: Failed to remove {s}: {s}\n", .{
+                        wt.branch,
+                        git.trimNewline(err.stderr),
+                    });
+                } else {
+                    try colors.printError(stderr, "Failed to remove {s}: {s}", .{
+                        wt.branch,
+                        git.trimNewline(err.stderr),
+                    });
+                }
             },
         }
     }
 
     // Summary
     try stdout.print("\n{s}Removed {d}/{d} worktrees{s}\n", .{
-        if (removed_count == to_clean.items.len) colors.bright_green else colors.yellow,
+        if (removed_count == to_clean.items.len) c_bright_green else c_yellow,
         removed_count,
         to_clean.items.len,
-        colors.reset,
+        c_reset,
     });
 }
