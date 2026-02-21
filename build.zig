@@ -23,7 +23,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addOptions("build_options", build_options);
 
     // Add dependencies
-    // Note: We're not using clap anymore but keeping dependency for future use
 
     b.installArtifact(exe);
 
