@@ -2,6 +2,21 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.4.4] - 2026-02-21
+
+### Fixed
+- **Critical: `clean` command** — worktree removal was broken due to double "git" prefix in subprocess args (always failed silently)
+- **Critical: Signal termination** — accessing process exit code without checking termination type caused undefined behavior when git was killed by signal (SIGKILL, SIGPIPE)
+- **Critical: Shell navigation** — unquoted paths in fd3 `cd` commands broke `gwt go` for worktree paths containing spaces
+- **`-n` flag conflict** — global `--non-interactive` intercepted `-n` before `clean` could use it for `--dry-run`; changed dry-run shortcut to `-d`
+- **`findWorktreeByBranch`** — optimization path never matched because `refs/heads/` prefix wasn't stripped; function now works as intended
+- **Timestamp underflow** — future-dated file timestamps (clock skew, NFS) caused panic; now clamped to 0 across 8 locations
+- **Config boolean override** — project config couldn't override user config booleans back to `false`; config booleans now use three-state (`?bool`)
+- **TOML inline comments** — unquoted config values included trailing `# comment` text; now stripped correctly
+- **Memory leak** — `listWorktrees` missing errdefer for partial allocation cleanup on error
+- **Missing `clean` in help** — `printUsage()` now includes the `clean` command
+- **Dead code cleanup** — removed unused `withLock` function (had latent compile error), duplicate validation check
+
 ## [0.4.3] - 2025-11-01
 
 ### Added
