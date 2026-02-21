@@ -16,7 +16,10 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !std.process.
 /// Run a command and return true if successful
 pub fn runSilent(allocator: std.mem.Allocator, argv: []const []const u8) !bool {
     const term = try run(allocator, argv);
-    return term.Exited == 0;
+    return switch (term) {
+        .Exited => |code| code == 0,
+        else => false,
+    };
 }
 
 /// Run a command and print output if successful
@@ -28,7 +31,11 @@ pub fn runWithOutput(allocator: std.mem.Allocator, argv: []const []const u8) !bo
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
     
-    if (result.term.Exited == 0) {
+    const exited_ok = switch (result.term) {
+        .Exited => |code| code == 0,
+        else => false,
+    };
+    if (exited_ok) {
         const stdout = io.getStdOut();
         try stdout.writeAll(result.stdout);
         return true;
@@ -45,7 +52,10 @@ test "run command" {
         if (err == error.FileNotFound) return;
         return err;
     };
-    try std.testing.expectEqual(@as(u8, 0), term.Exited);
+    try std.testing.expectEqual(@as(u8, 0), switch (term) {
+        .Exited => |code| code,
+        else => @as(u8, 1),
+    });
 }
 
 test "runSilent" {

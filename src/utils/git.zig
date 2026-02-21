@@ -74,14 +74,26 @@ pub fn execWithResult(allocator: std.mem.Allocator, args: []const []const u8) !G
         .argv = argv.items,
     });
     
-    if (result.term.Exited != 0) {
-        allocator.free(result.stdout);
-        return GitResult{ .failure = .{
-            .exit_code = result.term.Exited,
-            .stderr = result.stderr,
-        }};
+    switch (result.term) {
+        .Exited => |code| {
+            if (code != 0) {
+                allocator.free(result.stdout);
+                return GitResult{ .failure = .{
+                    .exit_code = code,
+                    .stderr = result.stderr,
+                }};
+            }
+        },
+        else => {
+            // Signal, Stopped, or Unknown termination — treat as failure
+            allocator.free(result.stdout);
+            return GitResult{ .failure = .{
+                .exit_code = 1,
+                .stderr = result.stderr,
+            }};
+        },
     }
-    
+
     allocator.free(result.stderr);
     return GitResult{ .success = result.stdout };
 }
@@ -190,7 +202,13 @@ pub fn findWorktreeByBranch(allocator: std.mem.Allocator, target_branch: []const
             current_commit = null;
         } else if (std.mem.startsWith(u8, line, "branch ")) {
             if (line.len > 7) {
-                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+                const raw_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+                // Strip refs/heads/ prefix to match user-provided branch names
+                if (std.mem.startsWith(u8, raw_branch, "refs/heads/")) {
+                    current_branch = raw_branch[11..];
+                } else {
+                    current_branch = raw_branch;
+                }
             }
         } else if (std.mem.startsWith(u8, line, "HEAD ")) {
             if (line.len > 5) {
@@ -198,7 +216,7 @@ pub fn findWorktreeByBranch(allocator: std.mem.Allocator, target_branch: []const
             }
         }
     }
-    
+
     // Check final worktree
     if (current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
         return Worktree{
@@ -349,8 +367,16 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
     defer allocator.free(cwd_path);
     
     var worktrees = std.ArrayList(Worktree).empty;
+    errdefer {
+        for (worktrees.items) |wt| {
+            allocator.free(wt.path);
+            allocator.free(wt.branch);
+            allocator.free(wt.commit);
+        }
+        worktrees.deinit(allocator);
+    }
     var lines = std.mem.tokenizeScalar(u8, output, '\n');
-    
+
     var current_path: ?[]const u8 = null;
     var current_commit: ?[]const u8 = null;
     var current_branch: ?[]const u8 = null;
@@ -862,7 +888,15 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
     const arena_allocator = arena.allocator();
 
     var worktrees_list = std.ArrayList(WorktreeWithTime).empty;
-    defer worktrees_list.deinit(allocator);
+    errdefer {
+        for (worktrees_list.items) |wt| {
+            allocator.free(wt.worktree.path);
+            allocator.free(wt.worktree.branch);
+            allocator.free(wt.worktree.commit);
+            allocator.free(wt.display_name);
+        }
+        worktrees_list.deinit(allocator);
+    }
 
     // Get repository root to identify main worktree
     const repo_info = getRepoInfo(allocator) catch null;
@@ -923,18 +957,8 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
         try worktrees_list.append(allocator, wt_item);
     }
     
-    const result = try worktrees_list.toOwnedSlice();
-    errdefer {
-        // If toOwnedSlice succeeds but something after fails, clean up
-        for (result) |wt| {
-            allocator.free(wt.display_name);
-            allocator.free(wt.worktree.path);
-            allocator.free(wt.worktree.branch);
-            allocator.free(wt.worktree.commit);
-        }
-        allocator.free(result);
-    }
-    
+    const result = try worktrees_list.toOwnedSlice(allocator);
+
     // Sort by modification time (newest first)
     std.mem.sort(WorktreeWithTime, result, {}, struct {
         fn lessThan(_: void, a: WorktreeWithTime, b: WorktreeWithTime) bool {
@@ -1117,8 +1141,8 @@ test "findWorktreeByBranch parsing" {
     var current_commit: ?[]const u8 = null;
     var found_worktree: ?Worktree = null;
     
-    const target_branch = "refs/heads/feature-branch";
-    
+    const target_branch = "feature-branch";
+
     var lines = std.mem.tokenizeScalar(u8, mock_output, '\n');
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "worktree ")) {
@@ -1134,14 +1158,20 @@ test "findWorktreeByBranch parsing" {
                 };
                 break;
             }
-            
+
             const path = std.mem.trim(u8, line[9..], " \t\n\r");
             current_path = path;
             current_branch = null;
             current_commit = null;
         } else if (std.mem.startsWith(u8, line, "branch ")) {
             if (line.len > 7) {
-                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+                const raw_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+                // Strip refs/heads/ prefix to match user-provided branch names
+                if (std.mem.startsWith(u8, raw_branch, "refs/heads/")) {
+                    current_branch = raw_branch[11..];
+                } else {
+                    current_branch = raw_branch;
+                }
             }
         } else if (std.mem.startsWith(u8, line, "HEAD ")) {
             if (line.len > 5) {
@@ -1149,7 +1179,7 @@ test "findWorktreeByBranch parsing" {
             }
         }
     }
-    
+
     // Check final worktree too
     if (found_worktree == null and current_branch != null and std.mem.eql(u8, current_branch.?, target_branch)) {
         found_worktree = Worktree{
@@ -1161,20 +1191,20 @@ test "findWorktreeByBranch parsing" {
             .is_current = false,
         };
     }
-    
+
     try std.testing.expect(found_worktree != null);
     if (found_worktree) |wt| {
         defer allocator.free(wt.path);
         defer allocator.free(wt.branch);
         defer allocator.free(wt.commit);
-        
+
         try std.testing.expectEqualStrings("/home/user/project-trees/feature-branch", wt.path);
-        try std.testing.expectEqualStrings("refs/heads/feature-branch", wt.branch);
+        try std.testing.expectEqualStrings("feature-branch", wt.branch);
         try std.testing.expectEqualStrings("efgh5678", wt.commit);
     }
-    
+
     // Test not found case
-    const target_not_found = "refs/heads/nonexistent";
+    const target_not_found = "nonexistent";
     var found_not_exist: ?Worktree = null;
     
     var lines2 = std.mem.tokenizeScalar(u8, mock_output, '\n');
@@ -1200,10 +1230,15 @@ test "findWorktreeByBranch parsing" {
             current_commit = null;
         } else if (std.mem.startsWith(u8, line, "branch ")) {
             if (line.len > 7) {
-                current_branch = std.mem.trim(u8, line[7..], " \t\n\r");
+                const raw_branch2 = std.mem.trim(u8, line[7..], " \t\n\r");
+                if (std.mem.startsWith(u8, raw_branch2, "refs/heads/")) {
+                    current_branch = raw_branch2[11..];
+                } else {
+                    current_branch = raw_branch2;
+                }
             }
         }
     }
-    
+
     try std.testing.expect(found_not_exist == null);
 }
