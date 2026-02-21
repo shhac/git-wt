@@ -42,7 +42,7 @@ pub fn printHelp() !void {
     try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
     try stdout.print("\nShell Integration:\n", .{});
     try stdout.print("  To enable directory changes from git-wt, use the shell alias:\n", .{});
-    try stdout.print("  eval \"$(git-wt --alias gwt)\"\n", .{});
+    try stdout.print("  eval \"$(git-wt alias gwt)\"\n", .{});
     try stdout.print("  Then use 'gwt go' instead of 'git-wt go' to change directories.\n", .{});
 }
 
@@ -69,9 +69,17 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     allocator.free(target_wt.commit);
                 }
                 
-                // Use fd 3 if available for cleaner shell integration
-                const cmd_writer = fd.CommandWriter.init();
-                try cmd_writer.print("cd \"{s}\"\n", .{target_wt.path});
+                // Use fd3 if available, otherwise show_command to stdout, else changeCurDir
+                if (fd.isEnabled()) {
+                    const cmd_writer = fd.CommandWriter.init();
+                    try cmd_writer.print("cd '{s}'\n", .{target_wt.path});
+                } else if (show_command) {
+                    try stdout.print("cd '{s}'\n", .{target_wt.path});
+                } else {
+                    try colors.printDisplayPath(stdout, "📁 Navigating to:", target_wt.path, allocator);
+                    try process.changeCurDir(target_wt.path);
+                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
+                }
                 return;
             }
         } else |_| {
@@ -90,13 +98,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 // Use fd3 if available for shell integration
                 if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd \"{s}\"\n", .{wt.path});
+                    try cmd_writer.print("cd '{s}'\n", .{wt.path});
                 } else if (show_command) {
                     // If fd3 is not available but show_command is requested, output to stdout
-                    try stdout.print("cd \"{s}\"\n", .{wt.path});
+                    try stdout.print("cd '{s}'\n", .{wt.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", wt.path, allocator);
                     try process.changeCurDir(wt.path);
+                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
                 }
                 return;
             }
@@ -173,7 +182,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Show command mode - output cd commands
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd \"{s}\"  # {s} @ {s} - {s} ago\n", .{
+                    try cmd_writer.print("cd '{s}'  # {s} @ {s} - {s} ago\n", .{
                         wt.path,
                         wt_info.display_name,
                         wt.branch,
@@ -273,10 +282,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 // Check if we should output to fd3 for shell integration
                 if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd \"{s}\"\n", .{selected.path});
+                    try cmd_writer.print("cd '{s}'\n", .{selected.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
+                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
                 }
             } else {
                 // Selection was cancelled - no need for extra output since
@@ -338,13 +348,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 }
                 if (fd_enabled) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd \"{s}\"\n", .{selected.path});
+                    try cmd_writer.print("cd '{s}'\n", .{selected.path});
                 } else if (show_command) {
                     // If fd3 is not available but show_command is requested, output to stdout
-                    try stdout.print("cd \"{s}\"\n", .{selected.path});
+                    try stdout.print("cd '{s}'\n", .{selected.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
+                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
                 }
             }
         }
