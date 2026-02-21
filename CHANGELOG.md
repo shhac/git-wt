@@ -2,6 +2,18 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.5.1] - 2026-02-21
+
+### Added
+- **Configurable fd number** — `git-wt alias gwt --fd 5` generates a shell function using fd 5 instead of the default fd 3; useful when fd3 is already in use by another tool
+- **`GWT_FD` env var** — replaces `GWT_USE_FD3`; carries both "enabled" and "which fd" in one value (e.g., `GWT_FD=3`)
+
+### Fixed
+- **`gwt new` auto-navigation** — creating a worktree via the shell alias now navigates directly instead of showing the interactive picker (arg parser was consuming the branch name as the value of `--show-command`)
+
+### Changed
+- **`GWT_USE_FD3` removed** — replaced by `GWT_FD=N`; re-eval your alias to update: `eval "$(git-wt alias gwt)"`
+
 ## [0.5.0] - 2026-02-21
 
 ### Changed
