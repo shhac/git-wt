@@ -15,6 +15,7 @@ pub fn printHelp() !void {
     try stdout.writeAll("  -n, --non-interactive Forward --non-interactive flag to all commands\n");
     try stdout.writeAll("  --plain               Forward --plain flag for machine-readable output\n");
     try stdout.writeAll("  --debug               Add debug logging to the shell function\n");
+    try stdout.writeAll("  --fd <N>              Use file descriptor N instead of 3 (range: 3-9)\n");
     try stdout.writeAll("  -p, --parent-dir <path>  Set default parent directory for worktrees\n");
     try stdout.writeAll("                           Supports {repo} template substitution\n\n");
     try stdout.writeAll("Examples:\n");
@@ -57,6 +58,19 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     const plain = parsed.hasFlag(&.{"--plain"});
     const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" });
     const debug = parsed.hasFlag(&.{"--debug"});
+
+    // Parse --fd flag (default 3, valid range 3-9)
+    const fd_num: u8 = if (parsed.getFlag(&.{"--fd"})) |fd_str| blk: {
+        const n = std.fmt.parseInt(u8, fd_str, 10) catch {
+            try colors.printError(stderr, "Invalid fd number: {s} (must be 3-9)", .{fd_str});
+            return error.InvalidFdNumber;
+        };
+        if (n < 3 or n > 9) {
+            try colors.printError(stderr, "Invalid fd number: {} (must be 3-9)", .{n});
+            return error.InvalidFdNumber;
+        }
+        break :blk n;
+    } else 3;
     
     // Generate shell function
     try stdout.writeAll("# Shell function wrapper for git-wt to enable directory navigation\n");
@@ -106,20 +120,20 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("                return\n");
     try stdout.writeAll("            fi\n");
     try stdout.writeAll("        done\n");
-    try stdout.writeAll("        # Run go command with fd3 support\n");
+    try stdout.writeAll("        # Run go command with fd support\n");
     try stdout.writeAll("        local cd_cmd\n");
     try stdout.writeAll("        if [ $# -eq 0 ]; then\n");
     try stdout.writeAll("            # Interactive mode\n");
     if (debug) {
         try stdout.writeAll("            echo \"[DEBUG] Running interactive go command...\" >&2\n");
     }
-    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"${flags[@]}\" 3>&1 1>&2)\n");
+    try stdout.print("            cd_cmd=$(GWT_FD={d} \"$git_wt_bin\" go \"${{flags[@]}}\" {d}>&1 1>&2)\n", .{ fd_num, fd_num });
     try stdout.writeAll("        else\n");
     try stdout.writeAll("            # Direct branch navigation\n");
     if (debug) {
         try stdout.writeAll("            echo \"[DEBUG] Running go command with args: $@\" >&2\n");
     }
-    try stdout.writeAll("            cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"$@\" \"${flags[@]}\" 3>&1 1>&2)\n");
+    try stdout.print("            cd_cmd=$(GWT_FD={d} \"$git_wt_bin\" go \"$@\" \"${{flags[@]}}\" {d}>&1 1>&2)\n", .{ fd_num, fd_num });
     try stdout.writeAll("        fi\n");
     try stdout.writeAll("        local exit_code=$?\n");
     if (debug) {
@@ -140,7 +154,7 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        local new_exit=$?\n");
     try stdout.writeAll("        case \"$branch\" in -*) ;; *)\n");
     try stdout.writeAll("        if [ $new_exit -eq 0 ] && [ -n \"$branch\" ]; then\n");
-    try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"$branch\" --show-command \"${flags[@]}\" 3>&1 1>&2)\n");
+    try stdout.print("            local cd_cmd=$(GWT_FD={d} \"$git_wt_bin\" go \"$branch\" --show-command \"${{flags[@]}}\" {d}>&1 1>&2)\n", .{ fd_num, fd_num });
     if (debug) {
         try stdout.writeAll("            if [ -z \"$cd_cmd\" ]; then\n");
         try stdout.writeAll("                echo \"[DEBUG] cd_cmd: (empty)\" >&2\n");

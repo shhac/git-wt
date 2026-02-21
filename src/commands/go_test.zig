@@ -63,16 +63,16 @@ test "branch name matching" {
     }
 }
 
-test "fd3 mechanism regression test" {
+test "fd mechanism regression test" {
     // This test documents the fix for gwt go not navigating properly
     // The issue was that the fallback path in go.execute() was only checking
-    // show_command instead of fd.isEnabled() when deciding to use fd3
-    
+    // show_command instead of fd.isEnabled() when deciding to use the fd
+
     // Expected behavior after fix:
-    // 1. When GWT_USE_FD3=1, both optimized and fallback paths should output to fd3
-    // 2. The check should be: if (fd.isEnabled()) { use fd3 } else if (show_command) { stdout } else { changeCurDir }
+    // 1. When GWT_FD=N is set, both optimized and fallback paths should output to fd N
+    // 2. The check should be: if (fd.isEnabled()) { use fd } else if (show_command) { stdout } else { changeCurDir }
     // 3. This ensures shell integration works for all navigation methods
-    
+
     // Regression check: Ensure both code paths check fd.isEnabled() first
     try testing.expect(true);
 }

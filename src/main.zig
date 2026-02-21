@@ -127,7 +127,7 @@ fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
     // Validate flags before delegating (alias receives global flags passed through)
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
-    try parsed.validateKnownFlags(&.{ "--no-tty", "--non-interactive", "-n", "--plain", "--debug", "--parent-dir", "-p", "--help", "-h" }, io.getStdErr());
+    try parsed.validateKnownFlags(&.{ "--no-tty", "--non-interactive", "-n", "--plain", "--debug", "--fd", "--parent-dir", "-p", "--help", "-h" }, io.getStdErr());
 
     try cmd_alias.execute(allocator, args, non_interactive, no_tty);
 }
@@ -243,11 +243,11 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
             debug.print("NO_COLOR: not set", .{});
         }
         
-        if (std.process.getEnvVarOwned(allocator, "GWT_USE_FD3")) |v| {
+        if (std.process.getEnvVarOwned(allocator, "GWT_FD")) |v| {
             defer allocator.free(v);
-            debug.print("GWT_USE_FD3: {s}", .{v});
+            debug.print("GWT_FD: {s}", .{v});
         } else |_| {
-            debug.print("GWT_USE_FD3: not set", .{});
+            debug.print("GWT_FD: not set", .{});
         }
         
         // Git version
