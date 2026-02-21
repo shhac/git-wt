@@ -140,7 +140,7 @@ pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _
     try stdout.writeAll("        local new_exit=$?\n");
     try stdout.writeAll("        case \"$branch\" in -*) ;; *)\n");
     try stdout.writeAll("        if [ $new_exit -eq 0 ] && [ -n \"$branch\" ]; then\n");
-    try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go --show-command \"$branch\" \"${flags[@]}\" 3>&1 1>&2)\n");
+    try stdout.writeAll("            local cd_cmd=$(GWT_USE_FD3=1 \"$git_wt_bin\" go \"$branch\" --show-command \"${flags[@]}\" 3>&1 1>&2)\n");
     if (debug) {
         try stdout.writeAll("            if [ -z \"$cd_cmd\" ]; then\n");
         try stdout.writeAll("                echo \"[DEBUG] cd_cmd: (empty)\" >&2\n");
