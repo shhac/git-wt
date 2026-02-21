@@ -71,7 +71,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 
                 // Use fd 3 if available for cleaner shell integration
                 const cmd_writer = fd.CommandWriter.init();
-                try cmd_writer.print("cd {s}\n", .{target_wt.path});
+                try cmd_writer.print("cd \"{s}\"\n", .{target_wt.path});
                 return;
             }
         } else |_| {
@@ -90,10 +90,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 // Use fd3 if available for shell integration
                 if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd {s}\n", .{wt.path});
+                    try cmd_writer.print("cd \"{s}\"\n", .{wt.path});
                 } else if (show_command) {
                     // If fd3 is not available but show_command is requested, output to stdout
-                    try stdout.print("cd {s}\n", .{wt.path});
+                    try stdout.print("cd \"{s}\"\n", .{wt.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", wt.path, allocator);
                     try process.changeCurDir(wt.path);
@@ -141,7 +141,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             for (worktrees_with_time, 1..) |wt_info, idx| {
                 const wt = wt_info.worktree;
                 const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                const diff = std.time.timestamp() - timestamp;
+                const time_ago_seconds = @as(u64, @intCast(@max(0, diff)));
                 const duration_str = try time.formatDuration(allocator, time_ago_seconds);
                 defer allocator.free(duration_str);
                 
@@ -172,7 +173,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Show command mode - output cd commands
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd {s}  # {s} @ {s} - {s} ago\n", .{
+                    try cmd_writer.print("cd \"{s}\"  # {s} @ {s} - {s} ago\n", .{
                         wt.path,
                         wt_info.display_name,
                         wt.branch,
@@ -232,7 +233,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             
             for (worktrees_with_time) |wt_info| {
                 const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                const diff = std.time.timestamp() - timestamp;
+                const time_ago_seconds = @as(u64, @intCast(@max(0, diff)));
                 const duration_str = try time.formatDuration(allocator, time_ago_seconds);
                 defer allocator.free(duration_str);
                 
@@ -271,7 +273,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 // Check if we should output to fd3 for shell integration
                 if (fd.isEnabled()) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd {s}\n", .{selected.path});
+                    try cmd_writer.print("cd \"{s}\"\n", .{selected.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);
@@ -336,10 +338,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 }
                 if (fd_enabled) {
                     const cmd_writer = fd.CommandWriter.init();
-                    try cmd_writer.print("cd {s}\n", .{selected.path});
+                    try cmd_writer.print("cd \"{s}\"\n", .{selected.path});
                 } else if (show_command) {
                     // If fd3 is not available but show_command is requested, output to stdout
-                    try stdout.print("cd {s}\n", .{selected.path});
+                    try stdout.print("cd \"{s}\"\n", .{selected.path});
                 } else {
                     try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
                     try process.changeCurDir(selected.path);

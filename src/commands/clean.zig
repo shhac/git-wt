@@ -13,7 +13,7 @@ pub fn printHelp() !void {
     try stdout.print("Remove all worktrees for deleted branches.\n\n", .{});
     try stdout.print("Options:\n", .{});
     try stdout.print("  -h, --help        Show this help message\n", .{});
-    try stdout.print("  -n, --dry-run     Show what would be cleaned without removing\n", .{});
+    try stdout.print("  -d, --dry-run     Show what would be cleaned without removing\n", .{});
     try stdout.print("  -f, --force       Skip confirmation prompt\n\n", .{});
     try stdout.print("Examples:\n", .{});
     try stdout.print("  git-wt clean               # List and confirm before removal\n", .{});
@@ -126,7 +126,7 @@ pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
     for (to_clean.items) |wt| {
         // Remove the worktree
         const remove_result = try git.execWithResult(allocator, &[_][]const u8{
-            "git", "worktree", "remove", wt.path, "--force",
+            "worktree", "remove", wt.path, "--force",
         });
         defer switch (remove_result) {
             .success => |output| allocator.free(output),

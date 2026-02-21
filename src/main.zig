@@ -126,7 +126,7 @@ fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
-    const dry_run = parsed.hasFlag(&.{ "--dry-run", "-n" });
+    const dry_run = parsed.hasFlag(&.{ "--dry-run", "-d" });
     // Command-line flag overrides config
     const force = if (parsed.hasFlag(&.{ "--force", "-f" })) true else cfg.auto_confirm;
 
@@ -321,6 +321,7 @@ fn printUsage() void {
     print("  go [branch]   Navigate to worktree\n", .{});
     print("  list          List all worktrees\n", .{});
     print("  alias <name>  Generate shell function wrapper\n", .{});
+    print("  clean         Remove worktrees for deleted branches\n", .{});
     print("\nGlobal flags:\n", .{});
     print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
     print("  --no-tty               Force number-based selection (disable arrow keys)\n", .{});
