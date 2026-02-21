@@ -175,7 +175,8 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: 
                 try allocator.dupe(u8, "unknown")
             else blk: {
                 const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-                const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+                const diff = std.time.timestamp() - timestamp;
+                const time_ago_seconds: u64 = if (diff > 0) @intCast(diff) else 0;
                 break :blk try formatDuration(allocator, time_ago_seconds);
             };
             defer allocator.free(duration_str);
@@ -224,7 +225,8 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: 
             try allocator.dupe(u8, "unknown")
         else blk: {
             const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+            const diff = std.time.timestamp() - timestamp;
+            const time_ago_seconds: u64 = if (diff > 0) @intCast(diff) else 0;
             break :blk try formatDuration(allocator, time_ago_seconds);
         };
         defer allocator.free(duration_str);

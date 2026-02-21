@@ -63,10 +63,6 @@ pub fn validateBranchName(branch_name: []const u8) ValidationError!void {
         return ValidationError.BranchNameHasInvalidChars;
     }
     
-    if (std.mem.indexOf(u8, branch_name, "/.") != null) {
-        return ValidationError.BranchNameHasInvalidChars;
-    }
-    
     if (std.mem.endsWith(u8, branch_name, "/")) {
         return ValidationError.BranchNameHasInvalidChars;
     }

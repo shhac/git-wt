@@ -89,8 +89,8 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *confi
     defer parsed.deinit(allocator);
 
     // Command-line flags override config
-    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else cfg.no_color;
-    const plain = if (parsed.hasFlag(&.{"--plain"})) true else cfg.plain_output;
+    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else (cfg.no_color orelse false);
+    const plain = if (parsed.hasFlag(&.{"--plain"})) true else (cfg.plain_output orelse false);
     const show_command = parsed.hasFlag(&.{"--show-command"});
     const branch = parsed.getPositional(0);
 
@@ -106,9 +106,9 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *con
     defer parsed.deinit(allocator);
 
     // Command-line flags override config
-    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else cfg.no_color;
-    const plain = if (parsed.hasFlag(&.{"--plain"})) true else cfg.plain_output;
-    const json = if (parsed.hasFlag(&.{ "--json", "-j" })) true else cfg.json_output;
+    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else (cfg.no_color orelse false);
+    const plain = if (parsed.hasFlag(&.{"--plain"})) true else (cfg.plain_output orelse false);
+    const json = if (parsed.hasFlag(&.{ "--json", "-j" })) true else (cfg.json_output orelse false);
 
     try cmd_list.execute(allocator, no_color, plain, json);
 }
@@ -128,7 +128,7 @@ fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
 
     const dry_run = parsed.hasFlag(&.{ "--dry-run", "-d" });
     // Command-line flag overrides config
-    const force = if (parsed.hasFlag(&.{ "--force", "-f" })) true else cfg.auto_confirm;
+    const force = if (parsed.hasFlag(&.{ "--force", "-f" })) true else (cfg.auto_confirm orelse false);
 
     try cmd_clean.execute(allocator, dry_run, force);
 }
@@ -162,8 +162,8 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     defer cfg.deinit(allocator);
 
     // Parse global flags (override config)
-    var non_interactive = cfg.non_interactive;
-    var no_tty = cfg.no_tty;
+    var non_interactive = cfg.non_interactive orelse false;
+    var no_tty = cfg.no_tty orelse false;
     var debug_mode = false;
     var filtered_args = std.ArrayList([]const u8).empty;
     defer filtered_args.deinit(allocator);

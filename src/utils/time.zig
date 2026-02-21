@@ -4,7 +4,8 @@ const std = @import("std");
 /// Takes mod_time in nanoseconds and returns seconds ago
 pub fn secondsSince(mod_time: i128) u64 {
     const timestamp = @divFloor(mod_time, std.time.ns_per_s);
-    return @as(u64, @intCast(std.time.timestamp() - timestamp));
+    const diff = std.time.timestamp() - timestamp;
+    return if (diff > 0) @intCast(diff) else 0;
 }
 
 /// Format a duration in seconds to a human-readable string

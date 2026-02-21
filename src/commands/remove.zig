@@ -349,10 +349,11 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         
         for (worktrees_with_time) |wt_info| {
             const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+            const diff = std.time.timestamp() - timestamp;
+            const time_ago_seconds: u64 = if (diff > 0) @intCast(diff) else 0;
             const duration_str = try time.formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
-            
+
             const option_text = try std.fmt.allocPrint(allocator, "{s}{s}{s} @ {s}{s}{s} - {s}{s} ago{s}", .{
                 colors.path_color,
                 wt_info.display_name,
@@ -388,7 +389,8 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         
         for (worktrees_with_time, 1..) |wt_info, idx| {
             const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-            const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+            const diff = std.time.timestamp() - timestamp;
+            const time_ago_seconds: u64 = if (diff > 0) @intCast(diff) else 0;
             const duration_str = try time.formatDuration(allocator, time_ago_seconds);
             defer allocator.free(duration_str);
             

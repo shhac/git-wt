@@ -601,7 +601,8 @@ pub fn formatWorktreeOption(
     use_colors: bool,
 ) ![]u8 {
     const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
-    const time_ago_seconds = @as(u64, @intCast(std.time.timestamp() - timestamp));
+    const diff = std.time.timestamp() - timestamp;
+    const time_ago_seconds: u64 = if (diff > 0) @intCast(diff) else 0;
     const duration_str = try time.formatDuration(allocator, time_ago_seconds);
     defer allocator.free(duration_str);
     

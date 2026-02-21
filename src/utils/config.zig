@@ -13,14 +13,14 @@ pub const Config = struct {
     parent_dir: ?[]const u8 = null,
 
     // [behavior]
-    auto_confirm: bool = false,
-    non_interactive: bool = false,
-    plain_output: bool = false,
-    json_output: bool = false,
+    auto_confirm: ?bool = null,
+    non_interactive: ?bool = null,
+    plain_output: ?bool = null,
+    json_output: ?bool = null,
 
     // [ui]
-    no_color: bool = false,
-    no_tty: bool = false,
+    no_color: ?bool = null,
+    no_tty: ?bool = null,
 
     // [sync]
     extra_files: [][]const u8 = &.{},
@@ -176,27 +176,39 @@ fn parseConfigContent(allocator: std.mem.Allocator, content: []const u8) !Config
     return config;
 }
 
+/// Strip inline comments from an unquoted TOML value
+/// Quoted values (starting with ") are returned as-is since # is literal inside quotes
+fn stripInlineComment(value: []const u8) []const u8 {
+    if (value.len >= 2 and value[0] == '"') return value;
+    if (std.mem.indexOf(u8, value, "#")) |hash_pos| {
+        return std.mem.trimRight(u8, value[0..hash_pos], " \t");
+    }
+    return value;
+}
+
 /// Parse a single key-value pair
 fn parseKeyValue(allocator: std.mem.Allocator, config: *Config, section: []const u8, key: []const u8, value: []const u8) !void {
+    const effective_value = stripInlineComment(value);
+
     if (std.mem.eql(u8, section, "worktree")) {
         if (std.mem.eql(u8, key, "parent_dir")) {
-            config.parent_dir = try parseString(allocator, value);
+            config.parent_dir = try parseString(allocator, effective_value);
         }
     } else if (std.mem.eql(u8, section, "behavior")) {
         if (std.mem.eql(u8, key, "auto_confirm")) {
-            config.auto_confirm = try parseBool(value);
+            config.auto_confirm = try parseBool(effective_value);
         } else if (std.mem.eql(u8, key, "non_interactive")) {
-            config.non_interactive = try parseBool(value);
+            config.non_interactive = try parseBool(effective_value);
         } else if (std.mem.eql(u8, key, "plain_output")) {
-            config.plain_output = try parseBool(value);
+            config.plain_output = try parseBool(effective_value);
         } else if (std.mem.eql(u8, key, "json_output")) {
-            config.json_output = try parseBool(value);
+            config.json_output = try parseBool(effective_value);
         }
     } else if (std.mem.eql(u8, section, "ui")) {
         if (std.mem.eql(u8, key, "no_color")) {
-            config.no_color = try parseBool(value);
+            config.no_color = try parseBool(effective_value);
         } else if (std.mem.eql(u8, key, "no_tty")) {
-            config.no_tty = try parseBool(value);
+            config.no_tty = try parseBool(effective_value);
         }
     }
 }
@@ -246,12 +258,12 @@ fn mergeConfig(base: *Config, overlay: Config, allocator: std.mem.Allocator) voi
         if (base.parent_dir) |old| allocator.free(old);
         base.parent_dir = allocator.dupe(u8, dir) catch null;
     }
-    if (overlay.auto_confirm) base.auto_confirm = true;
-    if (overlay.non_interactive) base.non_interactive = true;
-    if (overlay.plain_output) base.plain_output = true;
-    if (overlay.json_output) base.json_output = true;
-    if (overlay.no_color) base.no_color = true;
-    if (overlay.no_tty) base.no_tty = true;
+    if (overlay.auto_confirm) |val| base.auto_confirm = val;
+    if (overlay.non_interactive) |val| base.non_interactive = val;
+    if (overlay.plain_output) |val| base.plain_output = val;
+    if (overlay.json_output) |val| base.json_output = val;
+    if (overlay.no_color) |val| base.no_color = val;
+    if (overlay.no_tty) |val| base.no_tty = val;
 
     // Merge arrays (append)
     if (overlay.extra_files.len > 0) {
