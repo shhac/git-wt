@@ -13,14 +13,14 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        zig-version: ['0.15.1']
+        zig-version: ['0.15.2']
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
           version: ${{ matrix.zig-version }}
 
