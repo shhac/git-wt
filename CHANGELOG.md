@@ -2,6 +2,33 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.5.0] - 2026-02-21
+
+### Changed
+- **`--help` and `--version` now output to stdout** — previously went to stderr, breaking `git-wt --help | less` and similar pipelines
+- **Unknown flags now produce an error** — previously silently ignored; typos like `--josn` are now caught with a helpful message
+- **Multi-select (rm) requires explicit selection** — pressing Enter without Space-toggling no longer auto-selects the highlighted item; prevents accidental deletion
+- **Shell alias uses bash arrays for flags** — `$flags` string replaced with `"${flags[@]}"` array; fixes `--parent-dir` with paths containing spaces
+- **Shell alias uses POSIX-compatible syntax** — replaced `[[ ]]` bashisms with `[ ]` and `case` for broader shell compatibility
+
+### Fixed
+- **Critical: `go` fast-path fd3 bug** — the `findWorktreeByBranch` optimization unconditionally wrote `cd` to stdout when fd3 was disabled; user saw raw text instead of navigating
+- **Shell cd paths now single-quoted** — prevents shell expansion of `$`, backticks, and other metacharacters in worktree paths
+- **`go --help` had wrong alias syntax** — said `git-wt --alias gwt` instead of `git-wt alias gwt`
+- **`go` without shell alias now shows setup hint** — instead of silently changing only the subprocess directory, prints a tip about setting up the shell alias
+
+### Added
+- **Unknown flag validation** — all commands now validate flags and error on unrecognized ones
+- **`--json`/`-j` documented in `list --help`** — was a supported but undiscoverable feature
+- **`NO_COLOR` support in `clean` command** — respects the standard `NO_COLOR` environment variable
+- **Configuration paths shown in `--help`** — `~/.config/git-wt/config` and `.git-wt.toml` now mentioned in help output
+- **Removed unused dependencies** — `clap` and `ansi_term` removed from `build.zig.zon` (neither was imported)
+- **Updated CI** — migrated to `mlugg/setup-zig`, Zig 0.15.2, `action-gh-release` v2
+
+### Developer Notes
+- Fixed `build.zig.zon` metadata: version now matches release, minimum_zig_version set to 0.15.1
+- Updated `docs/INSTALLATION.md` to require Zig 0.15.1+
+
 ## [0.4.4] - 2026-02-21
 
 ### Fixed
