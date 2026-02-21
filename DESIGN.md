@@ -5,7 +5,7 @@ This project follows clear design principles to ensure maintainability, reliabil
 ## Core Principles
 
 ### 1. Separation of Concerns
-- Each command (`new`, `rm`, `go`) lives in its own module
+- Each command (`new`, `rm`, `go`, `list`, `clean`, `alias`) lives in its own module
 - Utilities are extracted into focused, reusable modules
 - Main.zig only handles argument parsing and dispatch
 

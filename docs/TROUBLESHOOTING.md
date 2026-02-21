@@ -94,6 +94,16 @@ This shows:
 
 - `NO_COLOR=1` - Disable colored output globally
 - `DEBUG=1` - Enable debug output (alternative to `--debug`)
+- `GWT_FD=N` - File descriptor used for shell integration (set by the alias, default 3)
+
+### File Descriptor Conflicts
+
+If another tool in your environment uses fd3, you can configure a different fd:
+```bash
+# Regenerate your alias with a different fd (3-9)
+eval "$(git-wt alias gwt --fd 5)"
+# Then add to your shell config permanently
+```
 
 ## Exit Codes
 

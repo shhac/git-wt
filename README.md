@@ -104,7 +104,7 @@ my-repo-trees/        # Worktrees directory
 
 - **Configuration syncing**: Automatically copies `.env*`, `.claude`, `CLAUDE.local.md`, `.ai-cache`
 - **Safety by default**: Confirmation prompts, uncommitted changes detection, concurrent operation locking
-- **Shell integration**: Uses file descriptor 3 (fd3) to enable directory changes from CLI
+- **Shell integration**: Uses a configurable file descriptor (fd3 by default) to enable directory changes from CLI
 
 ## Contributing
 

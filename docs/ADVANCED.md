@@ -83,7 +83,10 @@ src/
 ├── commands/                 # Command implementations
 │   ├── new.zig              # Create worktree with setup
 │   ├── remove.zig           # Remove worktree with safety checks
-│   └── go.zig               # Navigate between worktrees
+│   ├── go.zig               # Navigate between worktrees
+│   ├── list.zig             # List worktrees with details
+│   ├── alias.zig            # Generate shell wrapper function
+│   └── clean.zig            # Clean worktrees for deleted branches
 ├── utils/                   # Shared utilities
 │   ├── git.zig              # Git operations and repository info
 │   ├── fs.zig               # Filesystem helpers and config copying
@@ -92,9 +95,12 @@ src/
 │   ├── process.zig          # External command execution
 │   ├── validation.zig       # Branch name and path validation
 │   ├── lock.zig             # File-based locking for concurrent operations
-│   ├── fd.zig               # File descriptor 3 (fd3) shell integration
+│   ├── fd.zig               # Configurable file descriptor shell integration
 │   ├── interactive.zig      # Interactive UI with arrow key navigation
 │   ├── time.zig             # Time formatting utilities
+│   ├── args.zig             # Argument parsing with flag validation
+│   ├── config.zig           # Configuration file support (TOML)
+│   ├── terminal.zig         # Terminal capability detection
 │   └── debug.zig            # Debug output utilities
 └── integration_tests.zig    # Integration tests without git dependencies
 ```

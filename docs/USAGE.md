@@ -16,7 +16,6 @@ This will:
 1. Create a new worktree at `../repo-trees/feature-branch` (or subdirectories for slashes)
 2. Create and checkout the new branch
 3. Copy configuration files from the main repository
-4. Optionally start Claude
 
 ### Remove a worktree
 
@@ -57,7 +56,10 @@ git-wt go --plain           # Output plain paths only
 # List all worktrees with details
 git-wt list
 
-# Plain output (machine-readable)
+# JSON output (machine-readable)
+git-wt list --json
+
+# Plain output (minimal formatting)
 git-wt list --plain
 
 # Without colors
@@ -78,7 +80,7 @@ git-wt list --no-color
 - Use **Space** to toggle multiple selections
 - Selected items show `[*]`, unselected show `[ ]`
 - **Enter** confirms all selected items
-- If nothing selected when pressing Enter, current item is selected
+- Pressing Enter without selecting anything shows a hint to use Space first
 
 ### Terminal Features
 - Automatic fallback to number-based selection when TTY unavailable
@@ -127,10 +129,20 @@ git-wt go [branch-name]
   --plain                        # Output plain paths only
 ```
 
+### `git-wt list`
+```bash
+git-wt list
+  -h, --help                     # Show command help
+  -j, --json                     # Output as JSON
+  --plain                        # Plain output format
+  --no-color                     # Disable colored output
+```
+
 ### `git-wt alias`
 ```bash
 git-wt alias <name> [options]
   -h, --help                     # Show command help
+  --fd <N>                       # File descriptor to use (3-9, default: 3)
   --no-tty                       # Forward --no-tty flag to all commands
   -n, --non-interactive          # Forward --non-interactive flag
   --plain                        # Forward --plain flag

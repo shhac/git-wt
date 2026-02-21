@@ -32,7 +32,7 @@ cp config.example.toml .git-wt.toml
 Settings are merged in the following order (highest priority first):
 
 1. **Command-line flags** (highest priority)
-2. **Environment variables** (e.g., `NO_COLOR`, `GWT_USE_FD3`)
+2. **Environment variables** (e.g., `NO_COLOR`, `GWT_FD`)
 3. **Project config** (`.git-wt.toml` in repo root)
 4. **User config** (`~/.config/git-wt/config`)
 5. **Built-in defaults** (lowest priority)
@@ -297,7 +297,7 @@ In addition to configuration files, git-wt respects these environment variables:
 | Variable | Description | Config Equivalent |
 |----------|-------------|-------------------|
 | `NO_COLOR` | Disable colors | `[ui] no_color = true` |
-| `GWT_USE_FD3` | Internal: fd3 mechanism | N/A |
+| `GWT_FD` | Shell integration fd number (e.g., `GWT_FD=3`) | N/A (set by alias) |
 | `NON_INTERACTIVE` | Non-interactive mode | `[behavior] non_interactive = true` |
 
 **Precedence:** Environment variables are overridden by command-line flags but override config files.

@@ -48,17 +48,14 @@ zig build -Doptimize=ReleaseFast -Dtarget=x86_64-linux
 
 ## Creating a Release
 
-```bash
-# 1. Update version in build.zig if needed
-# 2. Build for all platforms
-./scripts/build-release.sh  # (create this script with above commands)
+Releases are automated via GitHub Actions. Push a version tag to trigger:
 
-# 3. Create GitHub release
-gh release create v0.1.0 \
-  --title "v0.1.0" \
-  --notes "Initial release" \
-  zig-out/bin/git-wt-*
+```bash
+git tag -a v0.5.1 -m "Release v0.5.1"
+git push origin v0.5.1
 ```
+
+GitHub Actions will build for all platforms and publish the release automatically.
 
 ## Version Management
 

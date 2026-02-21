@@ -12,7 +12,7 @@ This is a Zig implementation providing enhanced git worktree management:
 - `git-wt alias <name>` - Generate shell function wrapper
 - `git-wt clean` - Remove worktrees for deleted branches
 
-**Version:** 0.4.3
+**Version:** 0.5.1
 **Zig Version:** 0.15.1+
 **Platform Support:** macOS (Intel/ARM/Universal), Linux (x86_64/ARM64), Windows (via WSL2)
 
@@ -89,7 +89,7 @@ From [DESIGN.md](DESIGN.md):
 2. **Explicit Over Implicit** - All errors handled explicitly, memory management visible
 3. **User Experience First** - Colors, prompts, progress indicators
 4. **Safety by Default** - Confirmations, validation, comprehensive errors
-5. **Testability** - Pure functions, non-interactive mode, 70+ tests
+5. **Testability** - Pure functions, non-interactive mode, 72+ tests
 6. **Zero Runtime Dependencies** - Only git required, single binary
 
 ## Common Development Tasks
@@ -101,7 +101,7 @@ From [DESIGN.md](DESIGN.md):
 zig build -Doptimize=ReleaseFast
 
 # Run tests
-zig test src/main.zig              # Unit tests (70+)
+zig test src/main.zig              # Unit tests (72+)
 zig test src/integration_tests.zig # Integration tests (38)
 
 # Manual testing
@@ -166,8 +166,8 @@ These skills are automatically invoked when relevant. You can also ask Claude to
 - All platforms built automatically
 
 ### Shell Integration
-- fd3 mechanism for directory navigation
-- Generated shell function wrapper
+- Configurable file descriptor mechanism for directory navigation (fd3 default, `--fd <N>` for 3-9)
+- Generated shell function wrapper with `GWT_FD` env var
 - Setup: `eval "$(git-wt alias gwt)"`
 - See [SHELL-INTEGRATION.md](docs/SHELL-INTEGRATION.md)
 
@@ -204,7 +204,7 @@ These skills are automatically invoked when relevant. You can also ask Claude to
 ## Implementation Notes
 
 ### Zig Version Compatibility
-- **Current:** Zig 0.15.1
+- **Current:** Zig 0.15.2
 - **Minimum:** Zig 0.15.1 (uses modern APIs)
 - **Breaking Changes:** ArrayList.writer() now requires allocator parameter
 
@@ -215,23 +215,29 @@ These skills are automatically invoked when relevant. You can also ask Claude to
 - **Error Context:** Meaningful error propagation
 
 ### Testing Philosophy
-- **70 unit tests** covering all modules
+- **72 unit tests** covering all modules
 - **38 integration tests** for workflows
 - **Expect-based tests** for interactive features
 - **Non-interactive mode** for CI/CD
 
 ## Recent Changes
 
-### v0.4.2 (Current - 2025-10-31)
-- ✅ GitHub Actions CI/CD (testing, builds, releases)
-- ✅ Configuration file support (user + project level)
-- ✅ Added missing test file for clean command
-- ✅ Fixed Zig version requirement in README
+### v0.5.1 (Current - 2026-02-21)
+- ✅ Configurable fd number (`--fd <N>` flag, `GWT_FD` env var)
+- ✅ Fixed `gwt new` auto-navigation (navigates directly instead of showing picker)
 
-### v0.4.0-0.4.1
-- ✅ Clean command for deleted branches
-- ✅ JSON output for list command
-- ✅ Bug fixes for duplicate symbols
+### v0.5.0 (2026-02-21)
+- ✅ Help/version output to stdout (enables piping)
+- ✅ Unknown flag validation across all commands
+- ✅ Fixed critical fd3 fast-path bug in `go` command
+- ✅ Shell alias uses bash arrays and POSIX-compatible syntax
+- ✅ Removed unused dependencies (clap, ansi_term)
+- ✅ Updated CI (mlugg/setup-zig, Zig 0.15.2, action-gh-release v2)
+
+### v0.4.3-0.4.4
+- ✅ Fixed critical clean command, signal termination, shell navigation bugs
+- ✅ Config boolean override, TOML inline comments, memory leak fixes
+- ✅ Skill validator for maintaining documentation accuracy
 
 See [CHANGELOG.md](CHANGELOG.md) for complete history.
 
@@ -251,7 +257,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete history.
 ## Project Status
 
 **Production Ready:** ✅
-**Test Coverage:** 70 unit tests + 38 integration tests
+**Test Coverage:** 72 unit tests + 38 integration tests
 **Known Bugs:** 0 (46 fixed)
 **CI/CD:** Automated via GitHub Actions
 **Documentation:** Comprehensive (11 markdown files)
@@ -259,7 +265,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete history.
 **Active Features:**
 - All core commands fully functional
 - Configuration file support
-- Shell integration (fd3)
+- Shell integration (configurable fd)
 - Multi-platform releases
 - Comprehensive error handling
 - Interactive UI with fallbacks

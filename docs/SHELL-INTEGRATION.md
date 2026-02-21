@@ -25,6 +25,9 @@ git-wt alias gwt --parent-dir "../my-worktrees"
 
 # Dynamic parent with repo name
 git-wt alias gwt --parent-dir "../{repo}-trees"
+
+# Use a different file descriptor (default is 3)
+git-wt alias gwt --fd 5
 ```
 
 ## Usage with Shell Integration
@@ -37,14 +40,19 @@ gwt go main              # Actually changes to the main repository
 gwt rm feature-branch    # Removes the feature-branch worktree
 ```
 
-## How It Works (fd3 Mechanism)
+## How It Works (File Descriptor Mechanism)
 
-The tool uses a sophisticated shell integration system via file descriptor 3 (fd3):
+The tool uses a shell integration system via a configurable file descriptor (fd3 by default):
 
-1. The alias function opens fd3 for reading
-2. git-wt detects fd3 and writes cd commands to it
-3. The shell function reads from fd3 and executes the commands
+1. The alias function sets `GWT_FD=N` and opens that fd for reading
+2. git-wt detects `GWT_FD` and writes `cd` commands to the specified fd
+3. The shell function reads from the fd and `eval`s the commands
 4. This allows the CLI tool to change the parent shell's directory
+
+If fd3 conflicts with another tool in your environment, use `--fd <N>` (3-9) when generating the alias:
+```bash
+eval "$(git-wt alias gwt --fd 5)"
+```
 
 ## Troubleshooting Shell Integration
 
@@ -65,5 +73,5 @@ Make sure you're using the aliased command (`gwt`) rather than the direct binary
 
 For detailed setup instructions, run:
 ```bash
-git-wt --help setup
+git-wt alias --help
 ```
