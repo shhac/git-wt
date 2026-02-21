@@ -40,6 +40,25 @@ pub const ParsedArgs = struct {
     pub fn getPositionals(self: *const ParsedArgs) []const []const u8 {
         return self.positional.items;
     }
+
+    /// Validate that all parsed flags are in the known set
+    pub fn validateKnownFlags(self: *const ParsedArgs, known_flags: []const []const u8, stderr: anytype) !void {
+        var it = self.flags.iterator();
+        while (it.next()) |entry| {
+            const flag = entry.key_ptr.*;
+            var found = false;
+            for (known_flags) |known| {
+                if (std.mem.eql(u8, flag, known)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                try stderr.print("Error: Unknown flag '{s}'. Use --help for available options.\n", .{flag});
+                return error.UnknownFlag;
+            }
+        }
+    }
 };
 
 /// Parse command-line arguments into flags and positional arguments

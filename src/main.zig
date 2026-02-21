@@ -1,6 +1,5 @@
 const std = @import("std");
 const process = std.process;
-const print = std.debug.print;
 const build_options = @import("build_options");
 
 const git = @import("utils/git.zig");
@@ -44,6 +43,8 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
+    try parsed.validateKnownFlags(&.{ "--parent-dir", "-p" }, io.getStdErr());
+
     // Command-line flag overrides config
     const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" }) orelse cfg.parent_dir;
     const branch_name = parsed.getPositional(0);
@@ -53,7 +54,8 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
     } else {
         const stderr = io.getStdErr();
         try colors.printError(stderr, "Missing required arguments", .{});
-        print("Usage: {s}\n", .{commands[0].usage});
+        const stdout = io.getStdOut();
+        try stdout.print("Usage: {s}\n", .{commands[0].usage});
         return error.MissingBranchName;
     }
 }
@@ -64,6 +66,8 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *c
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
+
+    try parsed.validateKnownFlags(&.{ "--force", "-f" }, io.getStdErr());
 
     const force = parsed.hasFlag(&.{ "--force", "-f" });
     const branch_names = parsed.getPositionals();
@@ -88,6 +92,8 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *confi
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
+    try parsed.validateKnownFlags(&.{ "--no-color", "--plain", "--show-command" }, io.getStdErr());
+
     // Command-line flags override config
     const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else (cfg.no_color orelse false);
     const plain = if (parsed.hasFlag(&.{"--plain"})) true else (cfg.plain_output orelse false);
@@ -105,6 +111,8 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *con
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
+    try parsed.validateKnownFlags(&.{ "--no-color", "--plain", "--json", "-j" }, io.getStdErr());
+
     // Command-line flags override config
     const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else (cfg.no_color orelse false);
     const plain = if (parsed.hasFlag(&.{"--plain"})) true else (cfg.plain_output orelse false);
@@ -115,6 +123,12 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *con
 
 fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
     _ = cfg; // Config not used yet in alias command
+
+    // Validate flags before delegating (alias receives global flags passed through)
+    var parsed = try args_parser.parseArgs(allocator, args);
+    defer parsed.deinit(allocator);
+    try parsed.validateKnownFlags(&.{ "--no-tty", "--non-interactive", "-n", "--plain", "--debug", "--parent-dir", "-p", "--help", "-h" }, io.getStdErr());
+
     try cmd_alias.execute(allocator, args, non_interactive, no_tty);
 }
 
@@ -125,6 +139,8 @@ fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
+
+    try parsed.validateKnownFlags(&.{ "--dry-run", "-d", "--force", "-f" }, io.getStdErr());
 
     const dry_run = parsed.hasFlag(&.{ "--dry-run", "-d" });
     // Command-line flag overrides config
@@ -143,7 +159,8 @@ pub fn main() void {
         switch (err) {
             error.MissingRequiredArguments,
             error.MissingBranchName,
-            error.UnknownCommand => process.exit(1),
+            error.UnknownCommand,
+            error.UnknownFlag => process.exit(1),
             else => {
                 const stderr = io.getStdErr();
                 stderr.print("Error: {}\n", .{err}) catch {};
@@ -259,7 +276,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     }
 
     if (final_args.len < 2) {
-        printUsage();
+        try printUsage();
         return;
     }
 
@@ -268,15 +285,16 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     if (std.mem.eql(u8, arg1, "--help") or std.mem.eql(u8, arg1, "-h")) {
         // Check if there's a specific help topic
         if (final_args.len > 2 and std.mem.eql(u8, final_args[2], "setup")) {
-            printSetupHelp();
+            try printSetupHelp();
         } else {
-            printHelp();
+            try printHelp();
         }
         return;
     }
 
     if (std.mem.eql(u8, arg1, "--version") or std.mem.eql(u8, arg1, "-v")) {
-        print("git-wt version {s}\n", .{build_options.version});
+        const stdout = io.getStdOut();
+        try stdout.print("git-wt version {s}\n", .{build_options.version});
         return;
     }
 
@@ -298,7 +316,8 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
             if (command_args.len < cmd.min_args) {
                 const stderr = io.getStdErr();
                 try colors.printError(stderr, "Missing required arguments", .{});
-                print("Usage: {s}\n", .{cmd.usage});
+                const stdout = io.getStdOut();
+                try stdout.print("Usage: {s}\n", .{cmd.usage});
                 return error.MissingRequiredArguments;
             }
             try cmd.execute(allocator, command_args, &cfg, non_interactive, no_tty);
@@ -309,71 +328,78 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     // Unknown command
     const stderr = io.getStdErr();
     try stderr.print("{s}Error:{s} Unknown command '{s}'\n", .{ colors.error_prefix, colors.reset, arg1 });
-    printUsage();
+    try printUsage();
     return error.UnknownCommand;
 }
 
-fn printUsage() void {
-    print("Usage: git-wt [--non-interactive] [--no-tty] <command> [options]\n", .{});
-    print("\nCommands:\n", .{});
-    print("  new <branch>  Create a new worktree\n", .{});
-    print("  rm [branch...] Remove worktree(s) (interactive multi-select if none)\n", .{});
-    print("  go [branch]   Navigate to worktree\n", .{});
-    print("  list          List all worktrees\n", .{});
-    print("  alias <name>  Generate shell function wrapper\n", .{});
-    print("  clean         Remove worktrees for deleted branches\n", .{});
-    print("\nGlobal flags:\n", .{});
-    print("  -n, --non-interactive  Run without prompts (for testing)\n", .{});
-    print("  --no-tty               Force number-based selection (disable arrow keys)\n", .{});
-    print("  -h, --help             Show help\n", .{});
-    print("  -v, --version          Show version\n", .{});
-    print("  --debug                Show diagnostic information\n", .{});
-    print("\nUse 'git-wt --help' for more information\n", .{});
-    print("Use 'git-wt --help setup' for shell integration setup\n", .{});
+fn printUsage() !void {
+    const stdout = io.getStdOut();
+    try stdout.writeAll("Usage: git-wt [--non-interactive] [--no-tty] <command> [options]\n");
+    try stdout.writeAll("\nCommands:\n");
+    try stdout.writeAll("  new <branch>  Create a new worktree\n");
+    try stdout.writeAll("  rm [branch...] Remove worktree(s) (interactive multi-select if none)\n");
+    try stdout.writeAll("  go [branch]   Navigate to worktree\n");
+    try stdout.writeAll("  list          List all worktrees\n");
+    try stdout.writeAll("  alias <name>  Generate shell function wrapper\n");
+    try stdout.writeAll("  clean         Remove worktrees for deleted branches\n");
+    try stdout.writeAll("\nGlobal flags:\n");
+    try stdout.writeAll("  -n, --non-interactive  Run without prompts (for testing)\n");
+    try stdout.writeAll("  --no-tty               Force number-based selection (disable arrow keys)\n");
+    try stdout.writeAll("  -h, --help             Show help\n");
+    try stdout.writeAll("  -v, --version          Show version\n");
+    try stdout.writeAll("  --debug                Show diagnostic information\n");
+    try stdout.writeAll("\nUse 'git-wt --help' for more information\n");
+    try stdout.writeAll("Use 'git-wt --help setup' for shell integration setup\n");
 }
 
-fn printHelp() void {
-    print("git-wt - Git worktree management tool\n\n", .{});
-    printUsage();
-    print("\nExamples:\n", .{});
-    print("  git-wt new feature-branch   Create a new worktree for 'feature-branch'\n", .{});
-    print("  git-wt rm feature-branch    Remove the 'feature-branch' worktree\n", .{});
-    print("  git-wt rm branch1 branch2   Remove multiple worktrees at once\n", .{});
-    print("  git-wt go                   Interactively select and navigate to a worktree\n", .{});
-    print("  git-wt go main              Navigate to the main repository\n", .{});
-    print("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n", .{});
-    print("  git-wt list                 List all worktrees with details\n", .{});
-    print("  git-wt list --plain         List worktrees in machine-readable format\n", .{});
-    print("  git-wt alias gwt            Generate shell function for 'gwt' command\n", .{});
-    print("\nFor shell integration setup, use: git-wt --help setup\n", .{});
+fn printHelp() !void {
+    const stdout = io.getStdOut();
+    try stdout.writeAll("git-wt - Git worktree management tool\n\n");
+    try printUsage();
+    try stdout.writeAll("\nExamples:\n");
+    try stdout.writeAll("  git-wt new feature-branch   Create a new worktree for 'feature-branch'\n");
+    try stdout.writeAll("  git-wt rm feature-branch    Remove the 'feature-branch' worktree\n");
+    try stdout.writeAll("  git-wt rm branch1 branch2   Remove multiple worktrees at once\n");
+    try stdout.writeAll("  git-wt go                   Interactively select and navigate to a worktree\n");
+    try stdout.writeAll("  git-wt go main              Navigate to the main repository\n");
+    try stdout.writeAll("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n");
+    try stdout.writeAll("  git-wt list                 List all worktrees with details\n");
+    try stdout.writeAll("  git-wt list --plain         List worktrees in machine-readable format\n");
+    try stdout.writeAll("  git-wt alias gwt            Generate shell function for 'gwt' command\n");
+    try stdout.writeAll("\nConfiguration:\n");
+    try stdout.writeAll("  User config:    ~/.config/git-wt/config\n");
+    try stdout.writeAll("  Project config: .git-wt.toml\n");
+    try stdout.writeAll("  See docs/CONFIGURATION.md for details.\n");
+    try stdout.writeAll("\nFor shell integration setup, use: git-wt --help setup\n");
 }
 
-fn printSetupHelp() void {
-    print("git-wt - Shell Integration Setup\n\n", .{});
-    print("Since CLI tools cannot change the parent shell's directory, you need to set up\n", .{});
-    print("a shell function wrapper to enable proper directory navigation.\n\n", .{});
-    print("SETUP INSTRUCTIONS:\n", .{});
-    print("\n1. Generate the shell function:\n", .{});
-    print("   git-wt alias gwt\n", .{});
-    print("\n2. Add to your shell configuration:\n", .{});
-    print("   For zsh (.zshrc):\n", .{});
-    print("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.zshrc\n", .{});
-    print("     source ~/.zshrc\n", .{});
-    print("\n   For bash (.bashrc):\n", .{});
-    print("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.bashrc\n", .{});
-    print("     source ~/.bashrc\n", .{});
-    print("\n3. Use the alias for directory navigation:\n", .{});
-    print("   gwt new feature-branch    # Creates worktree AND navigates to it\n", .{});
-    print("   gwt go main              # Actually changes to main repository\n", .{});
-    print("   gwt go feature-branch    # Actually changes to worktree\n", .{});
-    print("   gwt rm feature-branch    # Removes the feature-branch worktree\n", .{});
-    print("\nNOTE: You can use any alias name instead of 'gwt':\n", .{});
-    print("  git-wt alias wt        # Creates 'wt' alias\n", .{});
-    print("  git-wt alias gw        # Creates 'gw' alias\n", .{});
-    print("\nAdvanced options:\n", .{});
-    print("  git-wt alias gwt --plain              # Always use plain output\n", .{});
-    print("  git-wt alias gwt --parent-dir '../{{repo}}-trees'  # Custom parent dir\n", .{});
-    print("\nWithout this setup, git-wt commands will work but won't change directories.\n", .{});
+fn printSetupHelp() !void {
+    const stdout = io.getStdOut();
+    try stdout.writeAll("git-wt - Shell Integration Setup\n\n");
+    try stdout.writeAll("Since CLI tools cannot change the parent shell's directory, you need to set up\n");
+    try stdout.writeAll("a shell function wrapper to enable proper directory navigation.\n\n");
+    try stdout.writeAll("SETUP INSTRUCTIONS:\n");
+    try stdout.writeAll("\n1. Generate the shell function:\n");
+    try stdout.writeAll("   git-wt alias gwt\n");
+    try stdout.writeAll("\n2. Add to your shell configuration:\n");
+    try stdout.writeAll("   For zsh (.zshrc):\n");
+    try stdout.writeAll("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.zshrc\n");
+    try stdout.writeAll("     source ~/.zshrc\n");
+    try stdout.writeAll("\n   For bash (.bashrc):\n");
+    try stdout.writeAll("     echo 'eval \"$(git-wt alias gwt)\"' >> ~/.bashrc\n");
+    try stdout.writeAll("     source ~/.bashrc\n");
+    try stdout.writeAll("\n3. Use the alias for directory navigation:\n");
+    try stdout.writeAll("   gwt new feature-branch    # Creates worktree AND navigates to it\n");
+    try stdout.writeAll("   gwt go main              # Actually changes to main repository\n");
+    try stdout.writeAll("   gwt go feature-branch    # Actually changes to worktree\n");
+    try stdout.writeAll("   gwt rm feature-branch    # Removes the feature-branch worktree\n");
+    try stdout.writeAll("\nNOTE: You can use any alias name instead of 'gwt':\n");
+    try stdout.writeAll("  git-wt alias wt        # Creates 'wt' alias\n");
+    try stdout.writeAll("  git-wt alias gw        # Creates 'gw' alias\n");
+    try stdout.writeAll("\nAdvanced options:\n");
+    try stdout.writeAll("  git-wt alias gwt --plain              # Always use plain output\n");
+    try stdout.writeAll("  git-wt alias gwt --parent-dir '../{repo}-trees'  # Custom parent dir\n");
+    try stdout.writeAll("\nWithout this setup, git-wt commands will work but won't change directories.\n");
 }
 
 

@@ -1,7 +1,7 @@
 # Installation Guide
 
 ## Requirements
-- Zig 0.14.1 or later
+- Zig 0.15.1 or later
 - Git (obviously!)
 
 ## Build from Source
