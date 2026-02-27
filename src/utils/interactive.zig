@@ -7,40 +7,26 @@ const git = @import("git.zig");
 const time = @import("time.zig");
 const io = @import("io.zig");
 const terminal = @import("terminal.zig");
-var g_original_termios: ?posix.termios = null;
+var g_original_termios: posix.termios = undefined;
+var g_termios_valid = std.atomic.Value(bool).init(false);
 var g_is_raw_mode = std.atomic.Value(bool).init(false);
-var g_signal_mutex = std.Thread.Mutex{};
 var g_needs_redraw = std.atomic.Value(bool).init(false);
-var g_output_writer: ?io.FileWriter = null;
+var g_output_fd = std.atomic.Value(i32).init(-1);
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.c) void {
-    // Check if we're in raw mode and get state atomically
-    var termios_copy: posix.termios = undefined;
-    var writer_copy: ?io.FileWriter = null;
-    var should_restore = false;
-
-    {
-        g_signal_mutex.lock();
-        defer g_signal_mutex.unlock();
-
-        if (g_is_raw_mode.load(.acquire) and g_original_termios != null) {
-            termios_copy = g_original_termios.?;
-            writer_copy = g_output_writer;
-            should_restore = true;
-        }
+    if (g_is_raw_mode.load(.acquire) and g_termios_valid.load(.acquire)) {
+        posix.tcsetattr(io.getStdIn().handle, .FLUSH, g_original_termios) catch {};
     }
-
-    // Restore terminal state outside of mutex lock
-    if (should_restore) {
-        posix.tcsetattr(io.getStdIn().handle, .FLUSH, termios_copy) catch {};
-        // Show cursor on the output writer (stdout or stderr depending on mode)
-        const out = writer_copy orelse io.getStdOut();
-        out.print("\x1b[?25h", .{}) catch {};
+    // Show cursor on the output writer (stdout or stderr depending on mode)
+    const out_fd = g_output_fd.load(.acquire);
+    if (out_fd >= 0) {
+        _ = std.posix.write(@intCast(out_fd), "\x1b[?25h") catch {};
+    } else {
+        _ = std.posix.write(std.posix.STDOUT_FILENO, "\x1b[?25h") catch {};
     }
-    
-    // Exit the program
-    std.process.exit(130); // 128 + SIGINT(2)
+    // Use _exit to bypass atexit handlers (async-signal-safe)
+    std.c._exit(130); // 128 + SIGINT(2)
 }
 
 /// Signal handler for SIGWINCH (window size change)
@@ -110,10 +96,9 @@ pub const RawMode = struct {
         try posix.tcsetattr(io.getStdIn().handle, .FLUSH, raw);
         self.is_raw.store(true, .release);
         
-        // Register for signal handling
-        g_signal_mutex.lock();
-        defer g_signal_mutex.unlock();
+        // Publish termios data before setting validity flag (acquire/release ordering)
         g_original_termios = self.original_termios;
+        g_termios_valid.store(true, .release);
         g_is_raw_mode.store(true, .release);
     }
     
@@ -121,15 +106,11 @@ pub const RawMode = struct {
     pub fn exit(self: *RawMode) void {
         if (!self.is_raw.load(.acquire)) return;
         
-        // Unregister from signal handling atomically
-        {
-            g_signal_mutex.lock();
-            defer g_signal_mutex.unlock();
-            g_is_raw_mode.store(false, .release);
-            g_original_termios = null;
-        }
-        
-        // Restore terminal settings outside of mutex lock
+        // Clear raw mode flags before restoring terminal
+        g_is_raw_mode.store(false, .release);
+        g_termios_valid.store(false, .release);
+
+        // Restore terminal settings
         posix.tcsetattr(io.getStdIn().handle, .FLUSH, self.original_termios) catch {};
         self.is_raw.store(false, .release);
     }
@@ -417,17 +398,9 @@ pub fn selectFromListUnified(
     try raw_mode.enter();
     defer raw_mode.exit();
 
-    // Store writer globally for signal handler access
-    {
-        g_signal_mutex.lock();
-        defer g_signal_mutex.unlock();
-        g_output_writer = writer;
-    }
-    defer {
-        g_signal_mutex.lock();
-        defer g_signal_mutex.unlock();
-        g_output_writer = null;
-    }
+    // Store fd globally for signal handler access (atomic, no mutex needed)
+    g_output_fd.store(writer.file.handle, .release);
+    defer g_output_fd.store(-1, .release);
 
     // Hide cursor
     try hideCursor(stdout);
