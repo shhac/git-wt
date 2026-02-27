@@ -2,6 +2,8 @@
 
 A fast, reliable CLI tool for managing git worktrees with enhanced features like automatic setup, configuration copying, and interactive navigation.
 
+**Website:** [git-wt.paulie.app](https://git-wt.paulie.app/)
+
 ## Features
 
 - **Create worktrees** with automatic branch creation and configuration copying
