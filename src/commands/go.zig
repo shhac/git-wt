@@ -79,7 +79,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (interactive.isStdoutTty()) {
-                        try stderr.print("→ cd '{s}'\n", .{target_wt.path});
+                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{target_wt.path});
                     } else {
                         try stdout.print("{s}\n", .{target_wt.path});
                     }
@@ -109,7 +109,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (interactive.isStdoutTty()) {
-                        try stderr.print("→ cd '{s}'\n", .{wt.path});
+                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{wt.path});
                     } else {
                         try stdout.print("{s}\n", .{wt.path});
                     }
@@ -126,9 +126,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
     } else {
         // Interactive selection (or just list if non-interactive)
 
-        // In bare mode or show_command mode, route informational output to stderr
-        // so stdout stays clean (bare-tty: nothing; bare-piped: raw path only)
-        const info_writer = if (current_mode.isBare() or show_command) stderr else stdout;
+        // In bare-piped mode, route informational output to stderr
+        // so only the raw worktree path goes to stdout for scripting
+        const is_bare_piped = current_mode.isBare() and !interactive.isStdoutTty();
+        const info_writer = if (is_bare_piped) stderr else stdout;
 
         // Get worktrees with modification times, sorted by newest first
         // Use smart loading for large repositories in interactive mode
@@ -144,14 +145,15 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         // Check if we'll use interactive mode
-        const will_use_interactive = !non_interactive and !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
+        const will_use_interactive = !non_interactive and !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or current_mode.isWrapper());
         
         // Display worktrees (skip if we're going to show interactive UI)
         if (!plain and !will_use_interactive) {
+            const header_writer = if (show_command or is_bare_piped) stderr else stdout;
             if (non_interactive and no_color) {
-                try info_writer.print("Available worktrees:\n", .{});
+                try header_writer.print("Available worktrees:\n", .{});
             } else {
-                try colors.printInfo(info_writer, "Available worktrees:\n", .{});
+                try colors.printInfo(header_writer, "Available worktrees:\n", .{});
             }
         }
         
@@ -242,7 +244,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         // - We have TTY for input/output
         // - Not in show_command mode (unless fd3 is enabled, in which case we still want interactive UI)
         // - Not in no_tty mode (which forces number-based selection)
-        const use_interactive = !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or fd.isEnabled());
+        const use_interactive = !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or current_mode.isWrapper());
         
         if (use_interactive) {
             // Build list of options for interactive selection
@@ -275,6 +277,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 try options_list.append(allocator, option_text);
             }
             
+            // In bare-piped mode, render picker UI to stderr to keep stdout clean
+            const ui_writer = if (is_bare_piped) stderr else stdout;
+
             // Don't show header - the interactive UI will handle display
             const selection = try interactive.selectFromList(
                 allocator,
@@ -284,7 +289,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     .show_instructions = true,
                     .use_colors = !no_color,
                 },
-                stdout,
+                ui_writer,
             );
             
             if (selection) |idx| {
@@ -297,7 +302,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (interactive.isStdoutTty()) {
-                        try stderr.print("→ cd '{s}'\n", .{selected.path});
+                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
                     } else {
                         try stdout.print("{s}\n", .{selected.path});
                     }
@@ -313,7 +318,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             defer allocator.free(prompt);
             
             // Handle reading input differently when stdout must stay clean
-            const response = if (show_command or current_mode.isBare()) blk: {
+            const response = if (show_command or is_bare_piped) blk: {
                 // Route prompt to stderr to keep stdout clean for path output
                 try stderr.print("{s} ", .{prompt});
                 const stdin = io.getStdIn();
@@ -369,7 +374,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (interactive.isStdoutTty()) {
-                        try stderr.print("→ cd '{s}'\n", .{selected.path});
+                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
                     } else {
                         try stdout.print("{s}\n", .{selected.path});
                     }

@@ -43,9 +43,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
 
-    // In bare mode, route informational output to stderr
-    // so stdout stays clean (bare-tty: nothing; bare-piped: raw path only)
-    const info_writer = if (current_mode.isBare()) stderr else stdout;
+    // In bare-piped mode, route informational output to stderr
+    // so only the raw worktree path goes to stdout for scripting
+    const is_bare_piped = current_mode.isBare() and !interactive.isStdoutTty();
+    const info_writer = if (is_bare_piped) stderr else stdout;
     
     // Validate branch name
     validation.validateBranchName(branch_name) catch |err| {
@@ -247,7 +248,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     } else if (interactive.isStdoutTty()) {
         // Bare TTY: confirmation on stderr with copy-paste hint
         try colors.printDisplayPath(stderr, "📁 Created worktree:", worktree_path, allocator);
-        try stderr.print("→ cd '{s}'\n", .{worktree_path});
+        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{worktree_path});
     } else {
         // Bare piped: raw path on stdout for scripting
         try stdout.print("{s}\n", .{worktree_path});
