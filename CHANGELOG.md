@@ -2,6 +2,11 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.6.1] - 2026-02-27
+
+### Fixed
+- **Namespaced branch display names** — branches with slashes (e.g., `aaaa/foo` and `bbbb/foo`) previously both displayed as `foo` in list, go, and rm pickers; now shows the path relative to the trees dir (`aaaa/foo`, `bbbb/foo`)
+
 ## [0.6.0] - 2026-02-27
 
 ### Added
