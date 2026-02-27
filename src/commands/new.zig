@@ -10,6 +10,7 @@ const proc = @import("../utils/process.zig");
 const validation = @import("../utils/validation.zig");
 const lock = @import("../utils/lock.zig");
 const io = @import("../utils/io.zig");
+const mode_mod = @import("../utils/mode.zig");
 
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
@@ -37,7 +38,8 @@ pub fn printHelp() !void {
     try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // TODO: output path to stdout in bare mode
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     

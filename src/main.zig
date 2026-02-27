@@ -39,7 +39,6 @@ const commands = [_]Command{
 
 fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = no_tty; // Not used in new command yet
-    _ = current_mode; // TODO: pass to cmd_new.execute for bare mode path output
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -52,7 +51,7 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
     const branch_name = parsed.getPositional(0);
 
     if (branch_name) |branch| {
-        try cmd_new.execute(allocator, branch, non_interactive, parent_dir);
+        try cmd_new.execute(allocator, branch, non_interactive, parent_dir, current_mode);
     } else {
         const stderr = io.getStdErr();
         try colors.printError(stderr, "Missing required arguments", .{});
@@ -64,7 +63,6 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
 
 fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = cfg; // Config not used yet in remove command
-    _ = current_mode; // Remove command is not mode-sensitive
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -79,19 +77,18 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *c
         // Multiple branch removal mode
         if (branch_names.len == 1) {
             // Single branch - use existing function
-            try cmd_remove.execute(allocator, branch_names[0], non_interactive, force);
+            try cmd_remove.execute(allocator, branch_names[0], non_interactive, force, current_mode);
         } else {
             // Multiple branches - use new function
-            try cmd_remove.executeMultiple(allocator, branch_names, non_interactive, force);
+            try cmd_remove.executeMultiple(allocator, branch_names, non_interactive, force, current_mode);
         }
     } else {
         // Interactive mode - let the remove command handle it
-        try cmd_remove.executeInteractive(allocator, non_interactive or no_tty, force);
+        try cmd_remove.executeInteractive(allocator, non_interactive or no_tty, force, current_mode);
     }
 }
 
 fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
-    _ = current_mode; // TODO: pass to cmd_go.execute to replace fd.isEnabled() checks
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
@@ -104,14 +101,12 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *confi
     const show_command = parsed.hasFlag(&.{"--show-command"});
     const branch = parsed.getPositional(0);
 
-    try cmd_go.execute(allocator, branch, non_interactive, no_tty, no_color, plain, show_command);
+    try cmd_go.execute(allocator, branch, non_interactive, no_tty, no_color, plain, show_command, current_mode);
 }
 
 fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = non_interactive; // List doesn't use this flag
     _ = no_tty; // List doesn't use this flag
-    _ = current_mode; // List command is not mode-sensitive
-
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
@@ -123,25 +118,23 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *con
     const plain = if (parsed.hasFlag(&.{"--plain"})) true else (cfg.plain_output orelse false);
     const json = if (parsed.hasFlag(&.{ "--json", "-j" })) true else (cfg.json_output orelse false);
 
-    try cmd_list.execute(allocator, no_color, plain, json);
+    try cmd_list.execute(allocator, no_color, plain, json, current_mode);
 }
 
 fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = cfg; // Config not used yet in alias command
-    _ = current_mode; // Alias command is not mode-sensitive
 
     // Validate flags before delegating (alias receives global flags passed through)
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
     try parsed.validateKnownFlags(&.{ "--no-tty", "--non-interactive", "-n", "--plain", "--debug", "--fd", "--parent-dir", "-p", "--help", "-h" }, io.getStdErr());
 
-    try cmd_alias.execute(allocator, args, non_interactive, no_tty);
+    try cmd_alias.execute(allocator, args, non_interactive, no_tty, current_mode);
 }
 
 fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = non_interactive; // Clean doesn't use this flag
     _ = no_tty; // Clean doesn't use this flag
-    _ = current_mode; // Clean command is not mode-sensitive
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -153,7 +146,7 @@ fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
     // Command-line flag overrides config
     const force = if (parsed.hasFlag(&.{ "--force", "-f" })) true else (cfg.auto_confirm orelse false);
 
-    try cmd_clean.execute(allocator, dry_run, force);
+    try cmd_clean.execute(allocator, dry_run, force, current_mode);
 }
 
 pub fn main() void {

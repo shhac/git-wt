@@ -3,6 +3,8 @@ const std = @import("std");
 const colors = @import("../utils/colors.zig");
 const args = @import("../utils/args.zig");
 const io = @import("../utils/io.zig");
+const mode_mod = @import("../utils/mode.zig");
+
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
     try stdout.writeAll("Usage: git-wt alias <name> [options]\n\n");
@@ -33,7 +35,8 @@ pub fn printHelp() !void {
     try stdout.writeAll("  gwt rm feature       # Remove worktree\n");
 }
 
-pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _: bool, _: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, command_args: []const []const u8, _: bool, _: bool, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // Alias command is not mode-sensitive
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     

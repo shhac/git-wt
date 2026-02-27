@@ -7,6 +7,7 @@ const fs = std.fs;
 const git = @import("../utils/git.zig");
 const colors = @import("../utils/colors.zig");
 const io = @import("../utils/io.zig");
+const mode_mod = @import("../utils/mode.zig");
 
 /// Escape a string for JSON output
 fn escapeJson(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
@@ -93,7 +94,8 @@ pub fn printHelp() !void {
     try stdout.print("  4. Sort by modification time (newest first)\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: bool, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // List command is not mode-sensitive
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
 

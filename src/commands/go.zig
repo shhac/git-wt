@@ -13,6 +13,7 @@ const fd = @import("../utils/fd.zig");
 const interactive = @import("../utils/interactive.zig");
 const time = @import("../utils/time.zig");
 const debug = @import("../utils/debug.zig");
+const mode_mod = @import("../utils/mode.zig");
 const io = @import("../utils/io.zig");
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
@@ -46,7 +47,8 @@ pub fn printHelp() !void {
     try stdout.print("  Then use 'gwt go' instead of 'git-wt go' to change directories.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // TODO: replace fd.isEnabled() checks with mode-based routing
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     

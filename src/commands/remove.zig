@@ -11,6 +11,8 @@ const lock = @import("../utils/lock.zig");
 const validation = @import("../utils/validation.zig");
 const fs_utils = @import("../utils/fs.zig");
 const io = @import("../utils/io.zig");
+const mode_mod = @import("../utils/mode.zig");
+
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt rm [branch-name...]\n\n", .{});
@@ -43,7 +45,8 @@ pub fn printHelp() !void {
     try stdout.print("\nNote: The current worktree cannot be removed.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, force: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_interactive: bool, force: bool, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // Remove command is not mode-sensitive
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     
@@ -261,7 +264,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, non_intera
 }
 
 /// Execute remove command for multiple branches
-pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []const u8, non_interactive: bool, force: bool) !void {
+pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []const u8, non_interactive: bool, force: bool, current_mode: mode_mod.Mode) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     
@@ -296,7 +299,7 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
         });
         
         // Execute single branch removal
-        execute(allocator, branch, true, force) catch |err| {
+        execute(allocator, branch, true, force, current_mode) catch |err| {
             failed_count += 1;
             try failed_branches.append(allocator, branch);
             try colors.printError(stderr, "Failed to remove worktree for branch '{s}': {}", .{ branch, err });
@@ -321,7 +324,7 @@ pub fn executeMultiple(allocator: std.mem.Allocator, branch_names: []const []con
 }
 
 /// Execute remove command with interactive selection
-pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: bool, force: bool) !void {
+pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: bool, force: bool, current_mode: mode_mod.Mode) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     
@@ -488,9 +491,9 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
         
         // Call the multiple execute function with selected branches
         if (branch_names.items.len == 1) {
-            try execute(allocator, branch_names.items[0], force_non_interactive, force);
+            try execute(allocator, branch_names.items[0], force_non_interactive, force, current_mode);
         } else {
-            try executeMultiple(allocator, branch_names.items, force_non_interactive, force);
+            try executeMultiple(allocator, branch_names.items, force_non_interactive, force, current_mode);
         }
     } else {
         try colors.printInfo(stdout, "Cancelled\n", .{});

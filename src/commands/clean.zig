@@ -7,6 +7,7 @@ const input = @import("../utils/input.zig");
 const lock = @import("../utils/lock.zig");
 const io = @import("../utils/io.zig");
 const process = @import("../utils/process.zig");
+const mode_mod = @import("../utils/mode.zig");
 
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
@@ -26,7 +27,8 @@ pub fn printHelp() !void {
     try stdout.print("  3. Remove them after confirmation (unless --dry-run)\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool) !void {
+pub fn execute(allocator: std.mem.Allocator, dry_run: bool, force: bool, current_mode: mode_mod.Mode) !void {
+    _ = current_mode; // Clean command is not mode-sensitive
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
 
