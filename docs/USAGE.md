@@ -50,6 +50,13 @@ git-wt go --no-color        # Disable colored output
 git-wt go --plain           # Output plain paths only
 ```
 
+### Scripting
+
+Without the shell alias, capture the path with command substitution:
+```bash
+cd "$(git-wt go feature-branch)"
+```
+
 ### List all worktrees
 
 ```bash

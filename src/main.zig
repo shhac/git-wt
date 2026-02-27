@@ -342,7 +342,7 @@ fn printUsage() !void {
     try stdout.writeAll("\nCommands:\n");
     try stdout.writeAll("  new <branch>  Create a new worktree\n");
     try stdout.writeAll("  rm [branch...] Remove worktree(s) (interactive multi-select if none)\n");
-    try stdout.writeAll("  go [branch]   Navigate to worktree\n");
+    try stdout.writeAll("  go [branch]   Go to worktree (or output path)\n");
     try stdout.writeAll("  list          List all worktrees\n");
     try stdout.writeAll("  alias <name>  Generate shell function wrapper\n");
     try stdout.writeAll("  clean         Remove worktrees for deleted branches\n");
@@ -364,9 +364,9 @@ fn printHelp() !void {
     try stdout.writeAll("  git-wt new feature-branch   Create a new worktree for 'feature-branch'\n");
     try stdout.writeAll("  git-wt rm feature-branch    Remove the 'feature-branch' worktree\n");
     try stdout.writeAll("  git-wt rm branch1 branch2   Remove multiple worktrees at once\n");
-    try stdout.writeAll("  git-wt go                   Interactively select and navigate to a worktree\n");
-    try stdout.writeAll("  git-wt go main              Navigate to the main repository\n");
-    try stdout.writeAll("  git-wt go feature-branch    Navigate to the 'feature-branch' worktree\n");
+    try stdout.writeAll("  git-wt go                   Interactively select a worktree\n");
+    try stdout.writeAll("  git-wt go main              Go to the main repository\n");
+    try stdout.writeAll("  git-wt go feature-branch    Go to the 'feature-branch' worktree\n");
     try stdout.writeAll("  git-wt list                 List all worktrees with details\n");
     try stdout.writeAll("  git-wt list --plain         List worktrees in machine-readable format\n");
     try stdout.writeAll("  git-wt alias gwt            Generate shell function for 'gwt' command\n");

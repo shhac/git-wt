@@ -50,13 +50,14 @@ pub fn printHelp() !void {
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. List all available worktrees (sorted by modification time)\n", .{});
     try stdout.print("  2. Allow interactive selection if no branch specified\n", .{});
-    try stdout.print("  3. Navigate to the selected worktree\n", .{});
-    try stdout.print("  4. Change the current working directory\n\n", .{});
+    try stdout.print("  3. Navigate to the selected worktree (with shell alias)\n", .{});
+    try stdout.print("     or output its path for scripting (without alias)\n\n", .{});
     try stdout.print("Note: Use 'main' as the branch name to navigate to the main repository.\n", .{});
     try stdout.print("\nShell Integration:\n", .{});
-    try stdout.print("  To enable directory changes from git-wt, use the shell alias:\n", .{});
-    try stdout.print("  eval \"$(git-wt alias gwt)\"\n", .{});
-    try stdout.print("  Then use 'gwt go' instead of 'git-wt go' to change directories.\n", .{});
+    try stdout.print("  With shell alias (gwt): changes directory automatically\n", .{});
+    try stdout.print("  Without alias: outputs path for copy-paste or scripting\n", .{});
+    try stdout.print("    cd \"$(git-wt go feature-branch)\"\n", .{});
+    try stdout.print("  Setup: eval \"$(git-wt alias gwt)\"\n", .{});
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool, current_mode: mode_mod.Mode) !void {

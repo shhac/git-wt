@@ -35,7 +35,9 @@ pub fn printHelp() !void {
     try stdout.print("This command will:\n", .{});
     try stdout.print("  1. Create a new worktree in ../repo-trees/branch-name\n", .{});
     try stdout.print("  2. Create and checkout the new branch\n", .{});
-    try stdout.print("  3. Copy configuration files (.env, .claude, etc.)\n\n", .{});
+    try stdout.print("  3. Copy configuration files (.env, .claude, etc.)\n", .{});
+    try stdout.print("  4. Navigate to the new worktree (with shell alias)\n", .{});
+    try stdout.print("     or output its path (without alias)\n\n", .{});
     try stdout.print("Note: Parent directory must exist, be writable, and not be inside\n", .{});
     try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }

@@ -54,6 +54,28 @@ If fd3 conflicts with another tool in your environment, use `--fd <N>` (3-9) whe
 eval "$(git-wt alias gwt --fd 5)"
 ```
 
+## Without Shell Alias (Bare Mode)
+
+When running `git-wt` directly (without the shell alias), it cannot change your
+shell's working directory. Instead, it outputs the worktree path:
+
+**Interactive terminal (stdout is a TTY):**
+The tool shows a copy-paste hint on stderr:
+```
+→ cd '/path/to/worktree'
+```
+
+**Piped or scripted (stdout is not a TTY):**
+The tool outputs the raw path on stdout, suitable for command substitution:
+```bash
+cd "$(git-wt go feature-branch)"
+cd "$(git-wt go main)"
+cd "$(git-wt new my-feature)"
+```
+
+All informational output (progress messages, prompts) goes to stderr in this mode,
+keeping stdout clean for the path.
+
 ## Troubleshooting Shell Integration
 
 ### Alias not working
