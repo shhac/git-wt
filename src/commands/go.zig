@@ -48,7 +48,6 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool, current_mode: mode_mod.Mode) !void {
-    _ = current_mode; // TODO: replace fd.isEnabled() checks with mode-based routing
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
     
@@ -78,9 +77,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else if (show_command) {
                     try stdout.print("cd '{s}'\n", .{target_wt.path});
                 } else {
-                    try colors.printDisplayPath(stdout, "📁 Navigating to:", target_wt.path, allocator);
-                    try process.changeCurDir(target_wt.path);
-                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
+                    // Bare mode: output path for scripting/copy-paste
+                    if (interactive.isStdoutTty()) {
+                        try stderr.print("→ cd '{s}'\n", .{target_wt.path});
+                    } else {
+                        try stdout.print("{s}\n", .{target_wt.path});
+                    }
                 }
                 return;
             }
@@ -105,9 +107,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     // If fd3 is not available but show_command is requested, output to stdout
                     try stdout.print("cd '{s}'\n", .{wt.path});
                 } else {
-                    try colors.printDisplayPath(stdout, "📁 Navigating to:", wt.path, allocator);
-                    try process.changeCurDir(wt.path);
-                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
+                    // Bare mode: output path for scripting/copy-paste
+                    if (interactive.isStdoutTty()) {
+                        try stderr.print("→ cd '{s}'\n", .{wt.path});
+                    } else {
+                        try stdout.print("{s}\n", .{wt.path});
+                    }
                 }
                 return;
             }
@@ -120,14 +125,18 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         return error.WorktreeNotFound;
     } else {
         // Interactive selection (or just list if non-interactive)
-        
+
+        // In bare mode or show_command mode, route informational output to stderr
+        // so stdout stays clean (bare-tty: nothing; bare-piped: raw path only)
+        const info_writer = if (current_mode.isBare() or show_command) stderr else stdout;
+
         // Get worktrees with modification times, sorted by newest first
         // Use smart loading for large repositories in interactive mode
         const worktrees_with_time = try git.listWorktreesWithTimeSmart(allocator, true, !non_interactive);
         defer git.freeWorktreesWithTime(allocator, worktrees_with_time);
-        
+
         if (worktrees_with_time.len == 0) {
-            try stdout.print("{s}No other worktrees found{s}\n", .{
+            try info_writer.print("{s}No other worktrees found{s}\n", .{
                 colors.warning_prefix,
                 colors.reset,
             });
@@ -139,11 +148,10 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         
         // Display worktrees (skip if we're going to show interactive UI)
         if (!plain and !will_use_interactive) {
-            const header_writer = if (show_command) stderr else stdout;
             if (non_interactive and no_color) {
-                try header_writer.print("Available worktrees:\n", .{});
+                try info_writer.print("Available worktrees:\n", .{});
             } else {
-                try colors.printInfo(header_writer, "Available worktrees:\n", .{});
+                try colors.printInfo(info_writer, "Available worktrees:\n", .{});
             }
         }
         
@@ -194,14 +202,14 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             } else {
                 // Both interactive and non-interactive show the same list
                 if (non_interactive and no_color) {
-                    try stdout.print("  {d}) {s} @ {s} - {s} ago\n", .{
+                    try info_writer.print("  {d}) {s} @ {s} - {s} ago\n", .{
                         idx,
                         wt_info.display_name,
                         wt.branch,
                         duration_str,
                     });
                 } else {
-                    try stdout.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
+                    try info_writer.print("  {s}{d}{s}) {s}{s}{s} @ {s}{s}{s}\n", .{
                         colors.green,
                         idx,
                         colors.reset,
@@ -212,9 +220,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                         wt.branch,
                         colors.reset,
                     });
-                    
+
                     // Format timestamp
-                    try stdout.print("     {s}Last modified:{s} {s} ago\n", .{
+                    try info_writer.print("     {s}Last modified:{s} {s} ago\n", .{
                         colors.yellow,
                         colors.reset,
                         duration_str,
@@ -287,23 +295,26 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'\n", .{selected.path});
                 } else {
-                    try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
-                    try process.changeCurDir(selected.path);
-                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
+                    // Bare mode: output path for scripting/copy-paste
+                    if (interactive.isStdoutTty()) {
+                        try stderr.print("→ cd '{s}'\n", .{selected.path});
+                    } else {
+                        try stdout.print("{s}\n", .{selected.path});
+                    }
                 }
             } else {
                 // Selection was cancelled - no need for extra output since
                 // the interactive UI already cleaned up its display
-                try stdout.print("Cancelled\n", .{});
+                try info_writer.print("Cancelled\n", .{});
             }
         } else {
             // Fall back to number-based selection
             const prompt = try std.fmt.allocPrint(allocator, "\n{s}Enter number to navigate to (or 'q' to quit):{s}", .{ colors.yellow, colors.reset });
             defer allocator.free(prompt);
             
-            // Handle reading input differently in show_command mode
-            const response = if (show_command) blk: {
-                // In show_command mode, handle prompt and input manually to avoid stdout pollution
+            // Handle reading input differently when stdout must stay clean
+            const response = if (show_command or current_mode.isBare()) blk: {
+                // Route prompt to stderr to keep stdout clean for path output
                 try stderr.print("{s} ", .{prompt});
                 const stdin = io.getStdIn();
                 // Read input directly
@@ -328,7 +339,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 const trimmed = std.mem.trim(u8, resp, " \t\r\n");
                 
                 if (trimmed.len > 0 and (trimmed[0] == 'q' or trimmed[0] == 'Q')) {
-                    try colors.printInfo(stdout, "Cancelled", .{});
+                    try colors.printInfo(info_writer, "Cancelled", .{});
                     return;
                 }
                 
@@ -356,9 +367,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     // If fd3 is not available but show_command is requested, output to stdout
                     try stdout.print("cd '{s}'\n", .{selected.path});
                 } else {
-                    try colors.printDisplayPath(stdout, "📁 Navigating to:", selected.path, allocator);
-                    try process.changeCurDir(selected.path);
-                    try stderr.print("Note: To change your shell's directory, use the shell alias instead.\n      Run: git-wt alias gwt\n", .{});
+                    // Bare mode: output path for scripting/copy-paste
+                    if (interactive.isStdoutTty()) {
+                        try stderr.print("→ cd '{s}'\n", .{selected.path});
+                    } else {
+                        try stdout.print("{s}\n", .{selected.path});
+                    }
                 }
             }
         }

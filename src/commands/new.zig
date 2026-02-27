@@ -9,6 +9,7 @@ const input = @import("../utils/input.zig");
 const proc = @import("../utils/process.zig");
 const validation = @import("../utils/validation.zig");
 const lock = @import("../utils/lock.zig");
+const interactive = @import("../utils/interactive.zig");
 const io = @import("../utils/io.zig");
 const mode_mod = @import("../utils/mode.zig");
 
@@ -39,9 +40,12 @@ pub fn printHelp() !void {
 }
 
 pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8, current_mode: mode_mod.Mode) !void {
-    _ = current_mode; // TODO: output path to stdout in bare mode
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
+
+    // In bare mode, route informational output to stderr
+    // so stdout stays clean (bare-tty: nothing; bare-piped: raw path only)
+    const info_writer = if (current_mode.isBare()) stderr else stdout;
     
     // Validate branch name
     validation.validateBranchName(branch_name) catch |err| {
@@ -207,7 +211,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     }
     
     // Create the worktree
-    try colors.printDisplayPath(stdout, "Creating worktree for branch:", worktree_path, allocator);
+    try colors.printDisplayPath(info_writer, "Creating worktree for branch:", worktree_path, allocator);
     
     const create_result = try git.createWorktree(allocator, worktree_path, branch_name);
     defer create_result.deinit(allocator);
@@ -227,16 +231,25 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     }
     worktree_created = true;
     
-    try colors.printSuccess(stdout, "Worktree created successfully", .{});
+    try colors.printSuccess(info_writer, "Worktree created successfully", .{});
     
     // Copy configuration files BEFORE changing directory
-    try colors.printInfo(stdout, "📋 Copying local configuration files...", .{});
+    try colors.printInfo(info_writer, "📋 Copying local configuration files...", .{});
     fs_utils.copyConfigFiles(allocator, repo_info.root, worktree_path) catch |err| {
         try colors.printError(stderr, "Failed to copy configuration files: {}", .{err});
         // Continue anyway - this is not fatal
     };
     
-    // Change to the new worktree directory
-    try process.changeCurDir(worktree_path);
-    try colors.printDisplayPath(stdout, "📁 Changed to worktree:", worktree_path, allocator);
+    // Output worktree path based on mode
+    if (current_mode.isWrapper()) {
+        // Wrapper mode: shell alias handles navigation via go command
+        try colors.printDisplayPath(info_writer, "📁 Changed to worktree:", worktree_path, allocator);
+    } else if (interactive.isStdoutTty()) {
+        // Bare TTY: confirmation on stderr with copy-paste hint
+        try colors.printDisplayPath(stderr, "📁 Created worktree:", worktree_path, allocator);
+        try stderr.print("→ cd '{s}'\n", .{worktree_path});
+    } else {
+        // Bare piped: raw path on stdout for scripting
+        try stdout.print("{s}\n", .{worktree_path});
+    }
 }
