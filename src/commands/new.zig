@@ -12,6 +12,7 @@ const lock = @import("../utils/lock.zig");
 const interactive = @import("../utils/interactive.zig");
 const io = @import("../utils/io.zig");
 const mode_mod = @import("../utils/mode.zig");
+const terminal = @import("../utils/terminal.zig");
 
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
@@ -39,7 +40,7 @@ pub fn printHelp() !void {
     try stdout.print("      the current repository. Paths are resolved to absolute paths.\n", .{});
 }
 
-pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8, current_mode: mode_mod.Mode) !void {
+pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, parent_dir: ?[]const u8, current_mode: mode_mod.Mode, no_color: bool) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
 
@@ -248,7 +249,12 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: []const u8, _: bool, p
     } else if (interactive.isStdoutTty()) {
         // Bare TTY: confirmation on stderr with copy-paste hint
         try colors.printDisplayPath(stderr, "📁 Created worktree:", worktree_path, allocator);
-        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{worktree_path});
+        const arrow = if (terminal.supportsUtf8()) "\xe2\x86\x92" else "->";
+        if (no_color) {
+            try stderr.print("{s} cd '{s}'\n", .{ arrow, worktree_path });
+        } else {
+            try stderr.print("\x1b[33m{s}\x1b[0m cd '{s}'\n", .{ arrow, worktree_path });
+        }
     } else {
         // Bare piped: raw path on stdout for scripting
         try stdout.print("{s}\n", .{worktree_path});

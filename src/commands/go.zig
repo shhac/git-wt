@@ -15,6 +15,18 @@ const time = @import("../utils/time.zig");
 const debug = @import("../utils/debug.zig");
 const mode_mod = @import("../utils/mode.zig");
 const io = @import("../utils/io.zig");
+const terminal = @import("../utils/terminal.zig");
+
+/// Print bare-mode path hint to stderr, respecting --no-color and UTF-8 support
+fn printBareHint(writer: anytype, path: []const u8, no_color: bool) !void {
+    const arrow = if (terminal.supportsUtf8()) "\xe2\x86\x92" else "->";
+    if (no_color) {
+        try writer.print("{s} cd '{s}'\n", .{ arrow, path });
+    } else {
+        try writer.print("\x1b[33m{s}\x1b[0m cd '{s}'\n", .{ arrow, path });
+    }
+}
+
 pub fn printHelp() !void {
     const stdout = io.getStdOut();
     try stdout.print("Usage: git-wt go [branch-name]\n\n", .{});
@@ -81,7 +93,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (stdout_is_tty) {
-                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{target_wt.path});
+                        try printBareHint(stderr, target_wt.path, no_color);
                     } else {
                         try stdout.print("{s}\n", .{target_wt.path});
                     }
@@ -111,7 +123,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (stdout_is_tty) {
-                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{wt.path});
+                        try printBareHint(stderr, wt.path, no_color);
                     } else {
                         try stdout.print("{s}\n", .{wt.path});
                     }
@@ -302,7 +314,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (stdout_is_tty) {
-                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
+                        try printBareHint(stderr, selected.path, no_color);
                     } else {
                         try stdout.print("{s}\n", .{selected.path});
                     }
@@ -374,7 +386,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 } else {
                     // Bare mode: output path for scripting/copy-paste
                     if (stdout_is_tty) {
-                        try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
+                        try printBareHint(stderr, selected.path, no_color);
                     } else {
                         try stdout.print("{s}\n", .{selected.path});
                     }

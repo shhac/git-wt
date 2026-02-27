@@ -44,14 +44,15 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
 
-    try parsed.validateKnownFlags(&.{ "--parent-dir", "-p" }, io.getStdErr());
+    try parsed.validateKnownFlags(&.{ "--parent-dir", "-p", "--no-color" }, io.getStdErr());
 
     // Command-line flag overrides config
     const parent_dir = parsed.getFlag(&.{ "--parent-dir", "-p" }) orelse cfg.parent_dir;
+    const no_color = if (parsed.hasFlag(&.{"--no-color"})) true else (cfg.no_color orelse false);
     const branch_name = parsed.getPositional(0);
 
     if (branch_name) |branch| {
-        try cmd_new.execute(allocator, branch, non_interactive, parent_dir, current_mode);
+        try cmd_new.execute(allocator, branch, non_interactive, parent_dir, current_mode, no_color);
     } else {
         const stderr = io.getStdErr();
         try colors.printError(stderr, "Missing required arguments", .{});
