@@ -11,6 +11,7 @@ const input = @import("utils/input.zig");
 const interactive = @import("utils/interactive.zig");
 const io = @import("utils/io.zig");
 const config = @import("utils/config.zig");
+const mode = @import("utils/mode.zig");
 
 const cmd_new = @import("commands/new.zig");
 const cmd_remove = @import("commands/remove.zig");
@@ -23,7 +24,7 @@ const Command = struct {
     name: []const u8,
     min_args: usize,
     usage: []const u8,
-    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) anyerror!void,
+    execute: *const fn (allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) anyerror!void,
     help: *const fn () anyerror!void,
 };
 
@@ -36,8 +37,9 @@ const commands = [_]Command{
     .{ .name = "clean", .min_args = 0, .usage = "git-wt clean [options]", .execute = executeClean, .help = cmd_clean.printHelp },
 };
 
-fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = no_tty; // Not used in new command yet
+    _ = current_mode; // TODO: pass to cmd_new.execute for bare mode path output
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -60,8 +62,9 @@ fn executeNew(allocator: std.mem.Allocator, args: []const []const u8, cfg: *conf
     }
 }
 
-fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = cfg; // Config not used yet in remove command
+    _ = current_mode; // Remove command is not mode-sensitive
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -87,7 +90,8 @@ fn executeRemove(allocator: std.mem.Allocator, args: []const []const u8, cfg: *c
     }
 }
 
-fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
+    _ = current_mode; // TODO: pass to cmd_go.execute to replace fd.isEnabled() checks
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
     defer parsed.deinit(allocator);
@@ -103,9 +107,10 @@ fn executeGo(allocator: std.mem.Allocator, args: []const []const u8, cfg: *confi
     try cmd_go.execute(allocator, branch, non_interactive, no_tty, no_color, plain, show_command);
 }
 
-fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = non_interactive; // List doesn't use this flag
     _ = no_tty; // List doesn't use this flag
+    _ = current_mode; // List command is not mode-sensitive
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -121,8 +126,9 @@ fn executeList(allocator: std.mem.Allocator, args: []const []const u8, cfg: *con
     try cmd_list.execute(allocator, no_color, plain, json);
 }
 
-fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = cfg; // Config not used yet in alias command
+    _ = current_mode; // Alias command is not mode-sensitive
 
     // Validate flags before delegating (alias receives global flags passed through)
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -132,9 +138,10 @@ fn executeAlias(allocator: std.mem.Allocator, args: []const []const u8, cfg: *co
     try cmd_alias.execute(allocator, args, non_interactive, no_tty);
 }
 
-fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool) !void {
+fn executeClean(allocator: std.mem.Allocator, args: []const []const u8, cfg: *config.Config, non_interactive: bool, no_tty: bool, current_mode: mode.Mode) !void {
     _ = non_interactive; // Clean doesn't use this flag
     _ = no_tty; // Clean doesn't use this flag
+    _ = current_mode; // Clean command is not mode-sensitive
 
     // Parse arguments using the new parser
     var parsed = try args_parser.parseArgs(allocator, args);
@@ -299,8 +306,11 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
     }
 
 
+    // Detect operating mode (wrapper vs bare) once at startup
+    const current_mode = mode.detect();
+
     const command_args = if (final_args.len > 2) final_args[2..] else &[_][]const u8{};
-    
+
     // Find and execute command
     for (commands) |cmd| {
         if (std.mem.eql(u8, arg1, cmd.name)) {
@@ -312,7 +322,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
                 try cmd.help();
                 return;
             }
-            
+
             if (command_args.len < cmd.min_args) {
                 const stderr = io.getStdErr();
                 try colors.printError(stderr, "Missing required arguments", .{});
@@ -320,7 +330,7 @@ fn mainImpl(allocator: std.mem.Allocator) !void {
                 try stdout.print("Usage: {s}\n", .{cmd.usage});
                 return error.MissingRequiredArguments;
             }
-            try cmd.execute(allocator, command_args, &cfg, non_interactive, no_tty);
+            try cmd.execute(allocator, command_args, &cfg, non_interactive, no_tty, current_mode);
             return;
         }
     }

@@ -9,6 +9,7 @@ test {
     _ = @import("process.zig");
     _ = @import("debug.zig");
     _ = @import("fd.zig");
+    _ = @import("mode.zig");
     _ = @import("time.zig");
     _ = @import("args.zig");
     _ = @import("config.zig");
