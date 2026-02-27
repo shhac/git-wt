@@ -792,6 +792,36 @@ pub const WorktreeWithTime = struct {
     display_name: []const u8,
 };
 
+/// Compute a display name for a worktree path.
+/// - Returns "[main]" if the path matches the main repo
+/// - Returns the relative path under the trees dir (e.g. "aaaa/foo") if applicable
+/// - Falls back to basename
+pub fn computeDisplayName(allocator: std.mem.Allocator, wt_path: []const u8, main_repo_path: ?[]const u8) ![]u8 {
+    if (main_repo_path) |main_path| {
+        // Check if this is the main repository
+        if (std.mem.eql(u8, wt_path, main_path)) {
+            return try allocator.dupe(u8, "[main]");
+        }
+
+        // Compute the trees dir: {dirname(main)}/{basename(main)}-trees
+        const repo_parent = fs.path.dirname(main_path) orelse ".";
+        const repo_name = fs.path.basename(main_path);
+        const trees_dir = try std.fmt.allocPrint(allocator, "{s}/{s}-trees/", .{ repo_parent, repo_name });
+        defer allocator.free(trees_dir);
+
+        // If the worktree path starts with trees_dir, return the relative portion
+        if (std.mem.startsWith(u8, wt_path, trees_dir)) {
+            const relative = wt_path[trees_dir.len..];
+            if (relative.len > 0) {
+                return try allocator.dupe(u8, relative);
+            }
+        }
+    }
+
+    // Fallback to basename
+    return try allocator.dupe(u8, fs.path.basename(wt_path));
+}
+
 /// List worktrees with modification times, sorted by newest first
 /// Caller owns returned memory and must call freeWorktreesWithTime
 /// Get worktrees with time information, optimized for large repositories
@@ -833,24 +863,18 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
         // Get modification time (0 if unavailable)
         const mod_time = getPathModTime(arena_allocator, wt.path) catch 0;
 
-        // Create display name: check if this is the main repository by comparing paths
-        const display_name = if (main_repo_path != null and std.mem.eql(u8, wt.path, main_repo_path.?))
-            try allocator.dupe(u8, "[main]")
-        else blk: {
-            const basename = std.fs.path.basename(wt.path);
-            break :blk try allocator.dupe(u8, basename);
-        };
+        const display_name = try computeDisplayName(allocator, wt.path, main_repo_path);
         errdefer allocator.free(display_name);
-        
+
         const path = try allocator.dupe(u8, wt.path);
         errdefer allocator.free(path);
-        
+
         const branch = try allocator.dupe(u8, wt.branch);
         errdefer allocator.free(branch);
-        
+
         const commit = try allocator.dupe(u8, wt.commit);
         errdefer allocator.free(commit);
-        
+
         // Create the worktree copy
         const wt_item = WorktreeWithTime{
             .worktree = Worktree{
@@ -864,10 +888,10 @@ pub fn listWorktreesWithTimeSmart(allocator: std.mem.Allocator, exclude_current:
             .mod_time = mod_time,
             .display_name = display_name,
         };
-        
+
         try worktrees_list.append(allocator, wt_item);
     }
-    
+
     // Sort by modification time (most recent first)
     const items = try worktrees_list.toOwnedSlice(allocator);
     std.mem.sort(WorktreeWithTime, items, {}, struct {
@@ -918,16 +942,7 @@ pub fn listWorktreesWithTime(allocator: std.mem.Allocator, exclude_current: bool
         // Build worktree item using arena for temporary allocations
         var wt_item: WorktreeWithTime = undefined;
 
-        // Determine display name: check if this is the main repository by comparing paths
-        const temp_display_name = if (main_repo_path != null and std.mem.eql(u8, wt.path, main_repo_path.?))
-            try arena_allocator.dupe(u8, "[main]")
-        else blk: {
-            const basename = std.fs.path.basename(wt.path);
-            break :blk try arena_allocator.dupe(u8, basename);
-        };
-        
-        // Now allocate everything from the main allocator in a safe order
-        const display_name = try allocator.dupe(u8, temp_display_name);
+        const display_name = try computeDisplayName(allocator, wt.path, main_repo_path);
         errdefer allocator.free(display_name);
         
         const path = try allocator.dupe(u8, wt.path);
@@ -1241,4 +1256,70 @@ test "findWorktreeByBranch parsing" {
     }
 
     try std.testing.expect(found_not_exist == null);
+}
+
+test "computeDisplayName main repo" {
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/home/user/my-repo", "/home/user/my-repo");
+    defer allocator.free(name);
+    try std.testing.expectEqualStrings("[main]", name);
+}
+
+test "computeDisplayName simple worktree in trees dir" {
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/home/user/my-repo-trees/feature", "/home/user/my-repo");
+    defer allocator.free(name);
+    try std.testing.expectEqualStrings("feature", name);
+}
+
+test "computeDisplayName nested worktree in trees dir" {
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/home/user/my-repo-trees/aaaa/foo", "/home/user/my-repo");
+    defer allocator.free(name);
+    try std.testing.expectEqualStrings("aaaa/foo", name);
+}
+
+test "computeDisplayName disambiguates namespaced branches" {
+    const allocator = std.testing.allocator;
+    const name1 = try computeDisplayName(allocator, "/home/user/my-repo-trees/aaaa/foo", "/home/user/my-repo");
+    defer allocator.free(name1);
+    const name2 = try computeDisplayName(allocator, "/home/user/my-repo-trees/bbbb/foo", "/home/user/my-repo");
+    defer allocator.free(name2);
+    try std.testing.expectEqualStrings("aaaa/foo", name1);
+    try std.testing.expectEqualStrings("bbbb/foo", name2);
+    try std.testing.expect(!std.mem.eql(u8, name1, name2));
+}
+
+test "computeDisplayName fallback for custom parent dir" {
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/some/custom/path/branch", "/home/user/my-repo");
+    defer allocator.free(name);
+    try std.testing.expectEqualStrings("branch", name);
+}
+
+test "computeDisplayName fallback when no main repo path" {
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/some/path/branch", null);
+    defer allocator.free(name);
+    try std.testing.expectEqualStrings("branch", name);
+}
+
+test "computeDisplayName path equals trees dir exactly" {
+    // Edge case: wt_path is the trees dir itself (empty relative) — should fallback to basename
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/home/user/my-repo-trees/", "/home/user/my-repo");
+    defer allocator.free(name);
+    // trailing slash stripped by basename → empty string won't happen, basename returns "my-repo-trees"
+    // Actually the path with trailing slash: startsWith matches, relative is "", len == 0, falls through to basename
+    try std.testing.expectEqualStrings("my-repo-trees", name);
+}
+
+test "computeDisplayName root-level repo" {
+    // Edge case: repo at filesystem root, dirname returns null → uses "."
+    const allocator = std.testing.allocator;
+    const name = try computeDisplayName(allocator, "/repo-trees/feature", "/repo");
+    defer allocator.free(name);
+    // trees_dir = "./repo-trees/" which won't match "/repo-trees/feature"
+    // so falls back to basename
+    try std.testing.expectEqualStrings("feature", name);
 }

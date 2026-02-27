@@ -129,6 +129,9 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: 
         allocator.free(worktrees_with_time);
     }
     
+    // First worktree is always the main repository
+    const main_repo_path: ?[]const u8 = if (worktrees.len > 0) worktrees[0].path else null;
+
     // Get modification times and prepare display names
     for (worktrees, 0..) |wt, i| {
         // Try to get modification time, use 0 if path doesn't exist
@@ -142,15 +145,8 @@ pub fn execute(allocator: std.mem.Allocator, no_color: bool, plain: bool, json: 
             };
             break :blk stat.mtime;
         };
-        
-        // Determine display name
-        const display_name = if (i == 0) // First worktree is always main
-            try allocator.dupe(u8, "[main]")
-        else blk2: {
-            // Extract relative path from worktree path
-            const basename = fs.path.basename(wt.path);
-            break :blk2 try allocator.dupe(u8, basename);
-        };
+
+        const display_name = try git.computeDisplayName(allocator, wt.path, main_repo_path);
         
         worktrees_with_time[i] = .{
             .worktree = wt,
