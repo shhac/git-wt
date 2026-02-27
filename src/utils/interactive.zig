@@ -59,6 +59,11 @@ pub fn isStdoutTty() bool {
     return posix.isatty(io.getStdOut().file.handle);
 }
 
+/// Check if stderr is a TTY (terminal)
+pub fn isStderrTty() bool {
+    return posix.isatty(io.getStdErr().file.handle);
+}
+
 /// Check if a given writer's underlying file is a TTY
 pub fn isWriterTty(writer: io.FileWriter) bool {
     return posix.isatty(writer.file.handle);
