@@ -11,27 +11,32 @@ var g_original_termios: ?posix.termios = null;
 var g_is_raw_mode = std.atomic.Value(bool).init(false);
 var g_signal_mutex = std.Thread.Mutex{};
 var g_needs_redraw = std.atomic.Value(bool).init(false);
+var g_output_writer: ?io.FileWriter = null;
 
 /// Signal handler for SIGINT
 fn handleSignal(_: i32) callconv(.c) void {
-    // Check if we're in raw mode and get termios atomically
+    // Check if we're in raw mode and get state atomically
     var termios_copy: posix.termios = undefined;
+    var writer_copy: ?io.FileWriter = null;
     var should_restore = false;
-    
+
     {
         g_signal_mutex.lock();
         defer g_signal_mutex.unlock();
-        
+
         if (g_is_raw_mode.load(.acquire) and g_original_termios != null) {
             termios_copy = g_original_termios.?;
+            writer_copy = g_output_writer;
             should_restore = true;
         }
     }
-    
+
     // Restore terminal state outside of mutex lock
     if (should_restore) {
         posix.tcsetattr(io.getStdIn().handle, .FLUSH, termios_copy) catch {};
-        showCursor() catch {};
+        // Show cursor on the output writer (stdout or stderr depending on mode)
+        const out = writer_copy orelse io.getStdOut();
+        out.print("\x1b[?25h", .{}) catch {};
     }
     
     // Exit the program
@@ -52,6 +57,11 @@ pub fn isStdinTty() bool {
 /// Check if stdout is a TTY (terminal)
 pub fn isStdoutTty() bool {
     return posix.isatty(io.getStdOut().file.handle);
+}
+
+/// Check if a given writer's underlying file is a TTY
+pub fn isWriterTty(writer: io.FileWriter) bool {
+    return posix.isatty(writer.file.handle);
 }
 
 /// Get navigation text based on terminal capabilities
@@ -174,35 +184,30 @@ pub fn readKey() !struct { key: Key, char: u8 } {
 }
 
 /// Clear current line and move cursor to start
-pub fn clearLine() !void {
-    const stdout = io.getStdOut();
-    try stdout.print("\r\x1b[2K", .{});
+pub fn clearLine(writer: io.FileWriter) !void {
+    try writer.print("\r\x1b[2K", .{});
 }
 
 /// Move cursor up n lines
-pub fn moveCursorUp(n: usize) !void {
+pub fn moveCursorUp(writer: io.FileWriter, n: usize) !void {
     if (n == 0) return;
-    const stdout = io.getStdOut();
-    try stdout.print("\x1b[{d}A", .{n});
+    try writer.print("\x1b[{d}A", .{n});
 }
 
-/// Move cursor down n lines  
-pub fn moveCursorDown(n: usize) !void {
+/// Move cursor down n lines
+pub fn moveCursorDown(writer: io.FileWriter, n: usize) !void {
     if (n == 0) return;
-    const stdout = io.getStdOut();
-    try stdout.print("\x1b[{d}B", .{n});
+    try writer.print("\x1b[{d}B", .{n});
 }
 
 /// Hide cursor
-pub fn hideCursor() !void {
-    const stdout = io.getStdOut();
-    try stdout.print("\x1b[?25l", .{});
+pub fn hideCursor(writer: io.FileWriter) !void {
+    try writer.print("\x1b[?25l", .{});
 }
 
 /// Show cursor
-pub fn showCursor() !void {
-    const stdout = io.getStdOut();
-    try stdout.print("\x1b[?25h", .{});
+pub fn showCursor(writer: io.FileWriter) !void {
+    try writer.print("\x1b[?25h", .{});
 }
 
 
@@ -307,6 +312,7 @@ pub fn selectFromList(
     allocator: std.mem.Allocator,
     items: []const []const u8,
     options: SelectOptions,
+    writer: io.FileWriter,
 ) !?usize {
     const unified_options = SelectOptions{
         .mode = .single,
@@ -315,8 +321,8 @@ pub fn selectFromList(
         .use_colors = options.use_colors,
         .allow_empty = false,
     };
-    
-    const result = try selectFromListUnified(allocator, items, unified_options);
+
+    const result = try selectFromListUnified(allocator, items, unified_options, writer);
     return switch (result) {
         .single => |idx| idx,
         .cancelled => null,
@@ -361,15 +367,16 @@ pub fn selectFromListUnified(
     allocator: std.mem.Allocator,
     items: []const []const u8,
     options: SelectOptions,
+    writer: io.FileWriter,
 ) !SelectionResult {
     if (items.len == 0) return SelectionResult.cancelled;
-    
-    // Check if we're in a TTY
-    if (!isStdinTty() or !isStdoutTty()) {
+
+    // Check if we're in a TTY (stdin for input, writer target for output)
+    if (!isStdinTty() or !isWriterTty(writer)) {
         return SelectionResult.cancelled;
     }
-    
-    const stdout = io.getStdOut();
+
+    const stdout = writer;
     var current: usize = 0;
     
     // Selection state - only used in multi mode
@@ -404,15 +411,27 @@ pub fn selectFromListUnified(
     var raw_mode = RawMode{ .original_termios = undefined };
     try raw_mode.enter();
     defer raw_mode.exit();
-    
+
+    // Store writer globally for signal handler access
+    {
+        g_signal_mutex.lock();
+        defer g_signal_mutex.unlock();
+        g_output_writer = writer;
+    }
+    defer {
+        g_signal_mutex.lock();
+        defer g_signal_mutex.unlock();
+        g_output_writer = null;
+    }
+
     // Hide cursor
-    try hideCursor();
-    defer showCursor() catch {};
+    try hideCursor(stdout);
+    defer showCursor(stdout) catch {};
     
     // Helper function to render all items
     const renderAllItems = struct {
         fn call(
-            writer: anytype,
+            out: anytype,
             item_list: []const []const u8,
             current_idx: usize,
             selection_state: ?*const std.ArrayList(bool),
@@ -420,7 +439,7 @@ pub fn selectFromListUnified(
         ) !void {
             for (item_list, 0..) |item, i| {
                 const is_selected = if (selection_state) |sel| sel.items[i] else false;
-                try renderItem(writer, item, i == current_idx, is_selected, opts.use_colors, opts.mode);
+                try renderItem(out, item, i == current_idx, is_selected, opts.use_colors, opts.mode);
             }
         }
     }.call;
@@ -444,7 +463,7 @@ pub fn selectFromListUnified(
             // Move to start of menu and clear from cursor down
             // This preserves content above the menu (unlike \x1b[2J)
             const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-            try moveCursorUp(total_lines);
+            try moveCursorUp(stdout, total_lines);
             try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
 
             // Redraw everything
@@ -513,7 +532,7 @@ pub fn selectFromListUnified(
 
                 // Clear display using simple clear-from-cursor-down
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines);
+                try moveCursorUp(stdout, total_lines);
                 try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
 
                 switch (options.mode) {
@@ -538,7 +557,7 @@ pub fn selectFromListUnified(
             .escape => {
                 // Clear display using simple clear-from-cursor-down
                 const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                try moveCursorUp(total_lines);
+                try moveCursorUp(stdout, total_lines);
                 try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
 
                 return SelectionResult.cancelled;
@@ -547,7 +566,7 @@ pub fn selectFromListUnified(
                 if (key_info.char == 'q' or key_info.char == 'Q') {
                     // Clear display using simple clear-from-cursor-down
                     const total_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-                    try moveCursorUp(total_lines);
+                    try moveCursorUp(stdout, total_lines);
                     try stdout.print("\x1b[0J", .{}); // Clear from cursor to end of screen
 
                     return SelectionResult.cancelled;
@@ -559,7 +578,7 @@ pub fn selectFromListUnified(
         // Redraw if needed
         if (needs_redraw) {
             const redraw_lines: usize = items.len + (if (options.show_instructions) @as(usize, 2) else @as(usize, 0));
-            try moveCursorUp(redraw_lines);
+            try moveCursorUp(stdout, redraw_lines);
 
             // Redraw all items
             try renderAllItems(stdout, items, current, if (selected) |*sel| sel else null, options);
@@ -568,7 +587,7 @@ pub fn selectFromListUnified(
             if (options.show_instructions) {
                 // Move to start of line and clear before printing
                 try stdout.print("\r", .{});
-                try clearLine();
+                try clearLine(stdout);
                 try renderInstructions(stdout, options.mode, options.use_colors);
             }
 
@@ -585,6 +604,7 @@ pub fn selectMultipleFromList(
     allocator: std.mem.Allocator,
     items: []const []const u8,
     options: SelectOptions,
+    writer: io.FileWriter,
 ) !?[]usize {
     const unified_options = SelectOptions{
         .mode = .multi,
@@ -593,8 +613,8 @@ pub fn selectMultipleFromList(
         .use_colors = options.use_colors,
         .allow_empty = options.allow_empty,
     };
-    
-    const result = try selectFromListUnified(allocator, items, unified_options);
+
+    const result = try selectFromListUnified(allocator, items, unified_options, writer);
     return switch (result) {
         .multiple => |indices| indices,
         .cancelled => null,

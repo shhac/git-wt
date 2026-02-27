@@ -383,6 +383,7 @@ pub fn executeInteractive(allocator: std.mem.Allocator, force_non_interactive: b
                 .use_colors = true,
                 .allow_empty = false,
             },
+            stdout,
         );
         
         selected_indices = selection;
