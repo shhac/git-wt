@@ -50,7 +50,9 @@ pub fn printHelp() !void {
 pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_interactive: bool, no_tty: bool, no_color: bool, plain: bool, show_command: bool, current_mode: mode_mod.Mode) !void {
     const stdout = io.getStdOut();
     const stderr = io.getStdErr();
-    
+    const stdin_is_tty = interactive.isStdinTty();
+    const stdout_is_tty = interactive.isStdoutTty();
+
     // Get all worktrees using git worktree list
     const worktrees = try git.listWorktrees(allocator);
     defer git.freeWorktrees(allocator, worktrees);
@@ -70,15 +72,15 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     allocator.free(target_wt.commit);
                 }
                 
-                // Use fd3 if available, otherwise show_command to stdout, else changeCurDir
-                if (fd.isEnabled()) {
+                // Use fd if available, otherwise show_command to stdout, else bare-mode output
+                if (current_mode.isWrapper()) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'\n", .{target_wt.path});
                 } else if (show_command) {
                     try stdout.print("cd '{s}'\n", .{target_wt.path});
                 } else {
                     // Bare mode: output path for scripting/copy-paste
-                    if (interactive.isStdoutTty()) {
+                    if (stdout_is_tty) {
                         try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{target_wt.path});
                     } else {
                         try stdout.print("{s}\n", .{target_wt.path});
@@ -99,16 +101,16 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 std.mem.eql(u8, wt.branch, branch) or std.mem.endsWith(u8, wt.path, branch);
                 
             if (matches) {
-                // Use fd3 if available for shell integration
-                if (fd.isEnabled()) {
+                // Use fd if available for shell integration
+                if (current_mode.isWrapper()) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'\n", .{wt.path});
                 } else if (show_command) {
-                    // If fd3 is not available but show_command is requested, output to stdout
+                    // If fd is not available but show_command is requested, output to stdout
                     try stdout.print("cd '{s}'\n", .{wt.path});
                 } else {
                     // Bare mode: output path for scripting/copy-paste
-                    if (interactive.isStdoutTty()) {
+                    if (stdout_is_tty) {
                         try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{wt.path});
                     } else {
                         try stdout.print("{s}\n", .{wt.path});
@@ -128,7 +130,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
 
         // In bare-piped mode, route informational output to stderr
         // so only the raw worktree path goes to stdout for scripting
-        const is_bare_piped = current_mode.isBare() and !interactive.isStdoutTty();
+        const is_bare_piped = current_mode.isBare() and !stdout_is_tty;
         const info_writer = if (is_bare_piped) stderr else stdout;
 
         // Get worktrees with modification times, sorted by newest first
@@ -145,7 +147,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         }
         
         // Check if we'll use interactive mode
-        const will_use_interactive = !non_interactive and !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or current_mode.isWrapper());
+        const will_use_interactive = !non_interactive and !no_tty and stdin_is_tty and stdout_is_tty and (!show_command or current_mode.isWrapper());
         
         // Display worktrees (skip if we're going to show interactive UI)
         if (!plain and !will_use_interactive) {
@@ -159,6 +161,7 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         
         // Only display the list if we're not going to show interactive UI
         if (!will_use_interactive) {
+            const cmd_writer = fd.CommandWriter.init();
             for (worktrees_with_time, 1..) |wt_info, idx| {
                 const wt = wt_info.worktree;
                 const timestamp = @divFloor(wt_info.mod_time, std.time.ns_per_s);
@@ -193,7 +196,6 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     try stdout.print("{s}\n", .{wt.path});
                 } else {
                     // Show command mode - output cd commands
-                    const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'  # {s} @ {s} - {s} ago\n", .{
                         wt.path,
                         wt_info.display_name,
@@ -242,11 +244,9 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
         // Try interactive selection first
         // Use interactive mode when:
         // - We have TTY for input/output
-        // - Not in show_command mode (unless fd3 is enabled, in which case we still want interactive UI)
+        // - Not in show_command mode (unless fd is enabled, in which case we still want interactive UI)
         // - Not in no_tty mode (which forces number-based selection)
-        const use_interactive = !no_tty and interactive.isStdinTty() and interactive.isStdoutTty() and (!show_command or current_mode.isWrapper());
-        
-        if (use_interactive) {
+        if (will_use_interactive) {
             // Build list of options for interactive selection
             var options_list = std.ArrayList([]u8).empty;
             defer options_list.deinit(allocator);
@@ -277,8 +277,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 try options_list.append(allocator, option_text);
             }
             
-            // In bare-piped mode, render picker UI to stderr to keep stdout clean
-            const ui_writer = if (is_bare_piped) stderr else stdout;
+            // Render picker UI to stdout (stdout_is_tty must be true here)
+            const ui_writer = stdout;
 
             // Don't show header - the interactive UI will handle display
             const selection = try interactive.selectFromList(
@@ -295,13 +295,13 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
             if (selection) |idx| {
                 const selected = worktrees_with_time[idx].worktree;
                 
-                // Check if we should output to fd3 for shell integration
-                if (fd.isEnabled()) {
+                // Check if we should output to fd for shell integration
+                if (current_mode.isWrapper()) {
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'\n", .{selected.path});
                 } else {
                     // Bare mode: output path for scripting/copy-paste
-                    if (interactive.isStdoutTty()) {
+                    if (stdout_is_tty) {
                         try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
                     } else {
                         try stdout.print("{s}\n", .{selected.path});
@@ -360,8 +360,8 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                 
                 const selected = worktrees_with_time[selection - 1].worktree;
                 
-                // Use fd3 if available for shell integration
-                const fd_enabled = fd.isEnabled();
+                // Use fd if available for shell integration
+                const fd_enabled = current_mode.isWrapper();
                 if (debug.isEnabled()) {
                     std.debug.print("[DEBUG] go: fd_enabled={}, show_command={}, path={s}\n", .{ fd_enabled, show_command, selected.path });
                 }
@@ -369,11 +369,11 @@ pub fn execute(allocator: std.mem.Allocator, branch_name: ?[]const u8, non_inter
                     const cmd_writer = fd.CommandWriter.init();
                     try cmd_writer.print("cd '{s}'\n", .{selected.path});
                 } else if (show_command) {
-                    // If fd3 is not available but show_command is requested, output to stdout
+                    // If fd is not available but show_command is requested, output to stdout
                     try stdout.print("cd '{s}'\n", .{selected.path});
                 } else {
                     // Bare mode: output path for scripting/copy-paste
-                    if (interactive.isStdoutTty()) {
+                    if (stdout_is_tty) {
                         try stderr.print("\x1b[33m→\x1b[0m cd '{s}'\n", .{selected.path});
                     } else {
                         try stdout.print("{s}\n", .{selected.path});

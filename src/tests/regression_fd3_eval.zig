@@ -56,8 +56,8 @@ test "regression: verify go command imports fd module" {
     // Verify it imports the fd module
     try testing.expect(std.mem.indexOf(u8, go_content, "@import(\"../utils/fd.zig\")") != null);
 
-    // Verify it uses fd.isEnabled()
-    try testing.expect(std.mem.indexOf(u8, go_content, "fd.isEnabled()") != null);
+    // Verify it uses fd.CommandWriter.init() for fd-based output
+    try testing.expect(std.mem.indexOf(u8, go_content, "fd.CommandWriter.init()") != null);
 }
 
 test "regression: verify debug logging for fd issues" {
