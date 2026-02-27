@@ -2,6 +2,29 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.6.0] - 2026-02-27
+
+### Added
+- **Bare mode (dual-mode support)** — when running as `git wt` (without the shell alias), the tool now outputs worktree paths instead of attempting to change directories. At a TTY, shows a copy-paste hint (`→ cd '/path'`); when piped, outputs the raw path for scripting (`cd "$(git-wt go branch)"`)
+- **Mode detection module** — new `mode.zig` detects wrapper vs bare mode once at startup based on `GWT_FD` presence, passed through all commands
+- **`isStderrTty` / `isWriterTty` helpers** — interactive module can now check TTY status of any output writer
+- **Bare-mode documentation** — SHELL-INTEGRATION.md and USAGE.md now document the scripting pattern and bare-mode behavior
+
+### Fixed
+- **`--no-color` respected in bare-mode hints** — the `→ cd '/path'` hint lines previously had hardcoded ANSI color codes that ignored `--no-color`; now properly gated
+- **UTF-8 arrow fallback** — the `→` character in bare-mode hints now falls back to `->` on non-UTF-8 terminals (matches existing `✓`/`[OK]` pattern)
+- **Signal handler async-signal-safety** — replaced mutex with atomic operations to prevent potential deadlock when SIGINT arrives during terminal state changes; uses `_exit(130)` instead of `exit(130)` to bypass atexit handlers
+- **`new` command respects `--no-color`** — added `no_color` parameter to `new` command (previously only `go` and `list` supported it)
+
+### Changed
+- **`process.changeCurDir()` removed** — all 5 call sites (4 in `go`, 1 in `new`) removed; these were no-ops in bare mode and misleading in wrapper mode
+- **Help text updated** — `go`, `new`, and top-level help now accurately describe both wrapper and bare mode behavior instead of claiming to "change the current working directory"
+- **Interactive picker accepts output writer** — `selectFromList` / `selectMultipleFromList` / `selectFromListUnified` now take an explicit writer parameter, enabling future stderr rendering
+
+### Performance
+- **fd/TTY checks cached** — `isStdinTty()`, `isStdoutTty()`, and `fd.isEnabled()` results cached at function entry in `go` command instead of repeated syscalls (was 4-9 calls per invocation)
+- **Duplicate computation eliminated** — `will_use_interactive` / `use_interactive` collapsed to single computation; dead `ui_writer` branch simplified
+
 ## [0.5.1] - 2026-02-21
 
 ### Added

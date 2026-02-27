@@ -12,7 +12,7 @@ This is a Zig implementation providing enhanced git worktree management:
 - `git-wt alias <name>` - Generate shell function wrapper
 - `git-wt clean` - Remove worktrees for deleted branches
 
-**Version:** 0.5.1
+**Version:** 0.6.0
 **Zig Version:** 0.15.1+
 **Platform Support:** macOS (Intel/ARM/Universal), Linux (x86_64/ARM64), Windows (via WSL2)
 
@@ -215,14 +215,22 @@ These skills are automatically invoked when relevant. You can also ask Claude to
 - **Error Context:** Meaningful error propagation
 
 ### Testing Philosophy
-- **72 unit tests** covering all modules
+- **74 unit tests** covering all modules
 - **38 integration tests** for workflows
 - **Expect-based tests** for interactive features
 - **Non-interactive mode** for CI/CD
 
 ## Recent Changes
 
-### v0.5.1 (Current - 2026-02-21)
+### v0.6.0 (Current - 2026-02-27)
+- ✅ Bare mode (dual-mode): outputs paths when running without shell alias
+- ✅ Scripting support: `cd "$(git-wt go branch)"` pattern
+- ✅ Signal handler async-signal-safety (mutex → atomics)
+- ✅ `--no-color` respected in bare-mode hints + UTF-8 arrow fallback
+- ✅ fd/TTY checks cached for performance
+- ✅ Help text and docs updated for bare-mode behavior
+
+### v0.5.1 (2026-02-21)
 - ✅ Configurable fd number (`--fd <N>` flag, `GWT_FD` env var)
 - ✅ Fixed `gwt new` auto-navigation (navigates directly instead of showing picker)
 
@@ -257,7 +265,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete history.
 ## Project Status
 
 **Production Ready:** ✅
-**Test Coverage:** 72 unit tests + 38 integration tests
+**Test Coverage:** 74 unit tests + 38 integration tests
 **Known Bugs:** 0 (46 fixed)
 **CI/CD:** Automated via GitHub Actions
 **Documentation:** Comprehensive (11 markdown files)
