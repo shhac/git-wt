@@ -257,7 +257,7 @@ fn getPathModTime(allocator: std.mem.Allocator, path: []const u8) !i128 {
 fn checkIsCurrentWorktree(cwd_path: []const u8, worktree_path: []const u8) bool {
     // Exact match
     if (std.mem.eql(u8, cwd_path, worktree_path)) return true;
-    
+
     // Check if cwd is a subdirectory of this worktree
     // Ensure we have a proper path separator after the prefix
     if (std.mem.startsWith(u8, cwd_path, worktree_path)) {
@@ -266,6 +266,34 @@ fn checkIsCurrentWorktree(cwd_path: []const u8, worktree_path: []const u8) bool 
         }
     }
     return false;
+}
+
+/// When worktrees are nested (e.g. a worktree inside the main repo), multiple
+/// worktrees can match the CWD prefix check. Only the most specific (longest
+/// path) match is actually the current worktree.
+fn resolveNestedCurrent(worktrees: []Worktree) void {
+    var best_len: usize = 0;
+    var best_idx: ?usize = null;
+    var current_count: usize = 0;
+
+    for (worktrees, 0..) |wt, i| {
+        if (wt.is_current) {
+            current_count += 1;
+            if (wt.path.len > best_len) {
+                best_len = wt.path.len;
+                best_idx = i;
+            }
+        }
+    }
+
+    // Only fix up if there are multiple "current" worktrees (nested case)
+    if (current_count > 1) {
+        for (worktrees, 0..) |*wt, i| {
+            if (wt.is_current and i != best_idx.?) {
+                wt.is_current = false;
+            }
+        }
+    }
 }
 
 /// Get limited list of worktrees for large repository optimization
@@ -354,7 +382,9 @@ fn listWorktreesLimited(allocator: std.mem.Allocator, max_items: usize) ![]Workt
         });
     }
     
-    return worktrees.toOwnedSlice(allocator);
+    const result = try worktrees.toOwnedSlice(allocator);
+    resolveNestedCurrent(result);
+    return result;
 }
 
 /// Get list of worktrees
@@ -466,7 +496,9 @@ pub fn listWorktrees(allocator: std.mem.Allocator) ![]Worktree {
         });
     }
     
-    return worktrees.toOwnedSlice(allocator);
+    const result = try worktrees.toOwnedSlice(allocator);
+    resolveNestedCurrent(result);
+    return result;
 }
 
 /// Create a new worktree
@@ -764,6 +796,34 @@ test "is_current detection logic" {
              
         try std.testing.expectEqual(tc.expected, is_current);
     }
+}
+
+test "resolveNestedCurrent keeps only most specific match" {
+    // Simulates a worktree nested inside the main repo:
+    // main repo at /projects/backend, worktree at /projects/backend/.conductor/sofia
+    var worktrees = [_]Worktree{
+        .{ .path = "/projects/backend", .branch = "main", .commit = "abc", .is_current = true },
+        .{ .path = "/projects/backend-trees/perth", .branch = "feat-1", .commit = "def", .is_current = false },
+        .{ .path = "/projects/backend/.conductor/sofia", .branch = "feat-2", .commit = "ghi", .is_current = true },
+    };
+
+    resolveNestedCurrent(&worktrees);
+
+    try std.testing.expectEqual(false, worktrees[0].is_current);
+    try std.testing.expectEqual(false, worktrees[1].is_current);
+    try std.testing.expectEqual(true, worktrees[2].is_current);
+}
+
+test "resolveNestedCurrent no-op with single current" {
+    var worktrees = [_]Worktree{
+        .{ .path = "/projects/backend", .branch = "main", .commit = "abc", .is_current = false },
+        .{ .path = "/projects/backend-trees/perth", .branch = "feat-1", .commit = "def", .is_current = true },
+    };
+
+    resolveNestedCurrent(&worktrees);
+
+    try std.testing.expectEqual(false, worktrees[0].is_current);
+    try std.testing.expectEqual(true, worktrees[1].is_current);
 }
 
 test "Worktree struct" {
