@@ -28,34 +28,26 @@ All tests must pass before proceeding.
 
 ### 2. Update Release Dependencies
 
-Four files must be updated for every release:
+Three files must be updated for every release (no version test update needed — the version test uses a regex pattern that works for any version):
 
 **File 1: CHANGELOG.md**
-- Add new version section at the top
+- Add new version section at the top (below the `# Changelog` heading)
 - Format: `## [X.Y.Z] - YYYY-MM-DD`
-- Categories: Added, Fixed, Changed, Developer Notes
+- Categories: Added, Fixed, Changed
 - The release workflow extracts this section for GitHub release notes
 
 **File 2: build.zig**
-- Update default version string on line 20
+- Update default version string
 - Format: `const version_option = b.option([]const u8, "version", "Version string") orelse "X.Y.Z";`
 
 **File 3: build.zig.zon**
-- Update `.version` field to match the new release version
-- Format: `.version = "X.Y.Z",`
+- Update `.version = "X.Y.Z"`
 
-**File 4: Tests**
-- Ensure all 70+ tests pass
-- Run both unit and integration tests
-
-### 3. Create Release Commits
-
-Use granular, focused commits:
+### 3. Create Release Commit
 
 ```bash
-# Commit version bump
 git add CHANGELOG.md build.zig build.zig.zon
-git commit -m "chore[release]: bump version to X.Y.Z"
+gm chore release "bump version to X.Y.Z"
 ```
 
 ### 4. Create and Push Tag
@@ -69,8 +61,7 @@ Brief summary of changes
 See CHANGELOG.md for full details."
 
 # Push commit and tag
-git push origin main
-git push origin vX.Y.Z
+git push origin main vX.Y.Z
 ```
 
 ### 5. Automated Release Process
@@ -86,7 +77,7 @@ Once the tag is pushed, GitHub Actions automatically:
 
 2. **Creates GitHub Release:**
    - Extracts changelog section for release notes
-   - Attaches all platform tarballs
+   - Attaches all platform tarballs (`git-wt-{platform}.tar.gz`)
    - Publishes release (not draft)
 
 3. **Timeline:** ~10-15 minutes for full release
@@ -102,6 +93,83 @@ curl -L https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-macos-un
 ./git-wt --version  # Should show new version
 ```
 
+### 7. Update Homebrew Tap
+
+The Homebrew formula may live in a sibling repo. Check for it at `../homebrew-tap/` relative to this repo's parent directory. The skill does not assume the path exists — probe for it.
+
+```bash
+# Probe for the tap repo (try common relative path)
+TAP_DIR="$(git rev-parse --show-toplevel)/../homebrew-tap"
+if [ ! -d "$TAP_DIR/Formula" ]; then
+  echo "Homebrew tap not found at $TAP_DIR — skipping formula update"
+  # Stop here for Homebrew; the release is still complete without it
+fi
+```
+
+If found, update `Formula/git-wt.rb`:
+
+1. **Download each platform tarball and compute SHA256:**
+
+```bash
+VERSION="X.Y.Z"
+BASE_URL="https://github.com/shhac/git-wt/releases/download/v${VERSION}"
+for PLATFORM in aarch64-macos x86_64-macos aarch64-linux x86_64-linux; do
+  curl -sL "${BASE_URL}/git-wt-${PLATFORM}.tar.gz" | shasum -a 256
+done
+```
+
+2. **Update the formula** with new version, URLs, and SHA256 hashes. The formula structure:
+
+```ruby
+class GitWt < Formula
+  desc "Fast CLI tool for managing git worktrees with enhanced features"
+  homepage "https://github.com/shhac/git-wt"
+  version "X.Y.Z"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-aarch64-macos.tar.gz"
+      sha256 "<hash>"
+    end
+    on_intel do
+      url "https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-x86_64-macos.tar.gz"
+      sha256 "<hash>"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-aarch64-linux.tar.gz"
+      sha256 "<hash>"
+    end
+    on_intel do
+      url "https://github.com/shhac/git-wt/releases/download/vX.Y.Z/git-wt-x86_64-linux.tar.gz"
+      sha256 "<hash>"
+    end
+  end
+
+  def install
+    bin.install "git-wt"
+  end
+
+  test do
+    assert_match "git-wt version X.Y.Z", shell_output("#{bin}/git-wt --version")
+  end
+end
+```
+
+3. **Commit and push the tap update:**
+
+```bash
+cd "$TAP_DIR"
+git add Formula/git-wt.rb
+git commit -m "git-wt X.Y.Z"
+git push
+```
+
+If the formula file doesn't exist yet, create it from the template above.
+
 ## Version Numbering
 
 Follow semantic versioning (semver):
@@ -110,27 +178,22 @@ Follow semantic versioning (semver):
 - **Minor (0.X.0)**: New features, backward compatible
 - **Patch (0.0.X)**: Bug fixes, backward compatible
 
-Examples:
-- `v0.4.2` → Bug fixes and small improvements
-- `v0.5.0` → New features (config files, new commands)
-- `v1.0.0` → Stable API, production ready
-
 ## Hotfix Releases
 
 For urgent fixes:
 
 ```bash
 # 1. Create hotfix branch from main
-git checkout -b hotfix/X.Y.Z
+git swc paul/hotfix-X.Y.Z
 
-# 2. Make fix, update CHANGELOG.md, build.zig, and build.zig.zon
+# 2. Make fix, update CHANGELOG.md, build.zig, build.zig.zon
 # 3. Test thoroughly
 # 4. Merge to main
-git checkout main
-git merge hotfix/X.Y.Z
+git sw main
+git merge paul/hotfix-X.Y.Z
 
 # 5. Tag and push
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin main vX.Y.Z
 ```
 
@@ -138,7 +201,7 @@ git push origin main vX.Y.Z
 
 For testing or custom builds, use the manual build artifacts workflow:
 
-1. Go to GitHub Actions → "Build Artifacts"
+1. Go to GitHub Actions > "Build Artifacts"
 2. Click "Run workflow"
 3. Select branch to build from
 4. Download artifacts from workflow run (30-day retention)
@@ -171,10 +234,11 @@ Before completing release:
 - [ ] CHANGELOG.md updated with version section
 - [ ] build.zig version updated
 - [ ] build.zig.zon version updated
-- [ ] Binary builds and shows correct version
-- [ ] Changes committed with "chore[release]" message
+- [ ] Binary builds and shows correct version (`--version`)
+- [ ] Changes committed with `chore[release]` message
 - [ ] Tag created with proper format (vX.Y.Z)
 - [ ] Tag pushed to GitHub
-- [ ] GitHub Actions workflows triggered
+- [ ] GitHub Actions workflow triggered
 - [ ] Release published with binaries
 - [ ] Release verified by downloading artifact
+- [ ] Homebrew tap updated (if `../homebrew-tap/` exists)
