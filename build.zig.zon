@@ -1,7 +1,7 @@
 .{
     .fingerprint = 0x84ba8f2f7df68da3,
     .name = .git_wt,
-    .version = "0.6.1",
+    .version = "0.6.2",
     .minimum_zig_version = "0.15.1",
 
     .dependencies = .{},

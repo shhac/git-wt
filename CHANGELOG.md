@@ -2,6 +2,11 @@
 
 All notable changes to git-wt will be documented in this file.
 
+## [0.6.2] - 2026-03-11
+
+### Fixed
+- **Nested worktree current detection** — when a worktree is nested inside another worktree (e.g., `.conductor/sofia` inside the main repo), `list` previously marked both as `(current)`; now only the most specific (deepest) path is marked current
+
 ## [0.6.1] - 2026-02-27
 
 ### Fixed
