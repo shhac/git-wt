@@ -1,5 +1,5 @@
 ---
-name: git-wt-release
+name: release
 description: This skill should be used when creating a new release for git-wt, including version bumping, changelog updates, tagging, and publishing through GitHub Actions. Invoked when creating releases, bumping versions, publishing releases, or preparing release tags.
 allowed-tools: Read, Edit, Bash, Grep
 ---
@@ -28,7 +28,7 @@ All tests must pass before proceeding.
 
 ### 2. Update Release Dependencies
 
-Three files must be updated for every release:
+Four files must be updated for every release:
 
 **File 1: CHANGELOG.md**
 - Add new version section at the top
@@ -40,7 +40,11 @@ Three files must be updated for every release:
 - Update default version string on line 20
 - Format: `const version_option = b.option([]const u8, "version", "Version string") orelse "X.Y.Z";`
 
-**File 3: Tests**
+**File 3: build.zig.zon**
+- Update `.version` field to match the new release version
+- Format: `.version = "X.Y.Z",`
+
+**File 4: Tests**
 - Ensure all 70+ tests pass
 - Run both unit and integration tests
 
@@ -50,7 +54,7 @@ Use granular, focused commits:
 
 ```bash
 # Commit version bump
-git add CHANGELOG.md build.zig
+git add CHANGELOG.md build.zig build.zig.zon
 git commit -m "chore[release]: bump version to X.Y.Z"
 ```
 
@@ -119,7 +123,7 @@ For urgent fixes:
 # 1. Create hotfix branch from main
 git checkout -b hotfix/X.Y.Z
 
-# 2. Make fix, update CHANGELOG.md and build.zig
+# 2. Make fix, update CHANGELOG.md, build.zig, and build.zig.zon
 # 3. Test thoroughly
 # 4. Merge to main
 git checkout main
@@ -166,6 +170,7 @@ Before completing release:
 - [ ] All tests pass (unit + integration)
 - [ ] CHANGELOG.md updated with version section
 - [ ] build.zig version updated
+- [ ] build.zig.zon version updated
 - [ ] Binary builds and shows correct version
 - [ ] Changes committed with "chore[release]" message
 - [ ] Tag created with proper format (vX.Y.Z)

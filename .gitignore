@@ -50,7 +50,7 @@ test-*.sh
 verify-*.sh
 
 # Release builds
-release/
+/release/
 git-wt-*-macos
 git-wt-*-linux
 git-wt-*.tar.gz

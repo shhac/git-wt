@@ -31,7 +31,7 @@ Available skills in `.claude/skills/`:
 - `git-wt-architecture` - Codebase structure, file locations, design patterns
 - `git-wt-bugtrack` - Bug tracking workflow, BUGS.md structure
 - `git-wt-debug` - Debugging procedures, troubleshooting guide
-- `git-wt-release` - Release process, versioning, CI/CD
+- `release` - Release process, versioning, CI/CD
 - `git-wt-test` - Testing workflows, test commands, coverage
 
 ### 2. Validation Checks by Skill
@@ -64,7 +64,7 @@ find src -type d -maxdepth 2
 - Utility module count and names
 - Design patterns (command table, GitResult union, etc.)
 
-#### git-wt-release
+#### release
 **Check:**
 - Version in `build.zig` matches current version
 - Release workflow steps match `.github/workflows/release.yml`
@@ -277,7 +277,7 @@ Hook trigger: After commit with "refactor" or "feat" in message
 ### Validation Order
 1. git-wt-architecture (foundation - validate first)
 2. git-wt-test (depends on architecture)
-3. git-wt-release (depends on build system)
+3. release (depends on build system)
 4. git-wt-debug (depends on flags/features)
 5. git-wt-bugtrack (independent)
 
@@ -312,5 +312,5 @@ Hook trigger: After commit with "refactor" or "feat" in message
 
 - **git-wt-architecture** - Primary target for validation
 - **git-wt-test** - Test counts need frequent updates
-- **git-wt-release** - Version numbers change with releases
+- **release** - Version numbers change with releases
 - All skills - Can be validated and updated by this skill

@@ -125,7 +125,7 @@ zig test src/integration_tests.zig # Integration tests (38)
 
 ### Creating Releases
 
-**For release process:** Use the `git-wt-release` skill.
+**For release process:** Use the `release` skill.
 
 Quick reference:
 1. Update CHANGELOG.md with version section
@@ -140,7 +140,7 @@ Quick reference:
 
 Claude has access to these git-wt-specific skills:
 
-- **`git-wt-release`** - Complete release process automation
+- **`release`** - Complete release process automation
 - **`git-wt-test`** - Testing workflows and procedures
 - **`git-wt-debug`** - Debugging and troubleshooting
 - **`git-wt-architecture`** - Codebase navigation and understanding
