@@ -25,12 +25,10 @@ var goCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		wts, err := wt.List(ctx, "")
+		wts, cur, err := loadWorktrees(ctx)
 		if err != nil {
 			return err
 		}
-		wt.SortByModTime(wts)
-		cur := wt.Current(wts, mustWD())
 
 		target, err := resolveGoTarget(wts, cur, args, repo.MainRoot, wt.TreesDirFor(repo.MainRoot))
 		if err != nil {

@@ -79,11 +79,10 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 		}
 	}
 
-	wts, err := wt.List(ctx, "")
+	wts, cur, err := loadWorktrees(ctx)
 	if err != nil {
 		return err
 	}
-	cur := wt.Current(wts, mustWD())
 
 	targets, err := collectCleanTargets(ctx, wts, repo, doOrphaned, doGone)
 	if err != nil {

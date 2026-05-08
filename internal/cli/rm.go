@@ -50,12 +50,10 @@ var rmCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		wts, err := wt.List(ctx, "")
+		wts, cur, err := loadWorktrees(ctx)
 		if err != nil {
 			return err
 		}
-		wt.SortByModTime(wts)
-		cur := wt.Current(wts, mustWD())
 
 		targets, err := resolveRmTargets(wts, repo, args, wt.TreesDirFor(repo.MainRoot))
 		if err != nil {

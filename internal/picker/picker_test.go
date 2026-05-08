@@ -40,6 +40,38 @@ func isQuit(c tea.Cmd) bool {
 	return ok
 }
 
+// ----- moveCursor -----
+
+func TestMoveCursor(t *testing.T) {
+	cases := []struct {
+		name           string
+		cursor, n      int
+		key            string
+		want           int
+	}{
+		{"up from middle", 1, 3, "up", 0},
+		{"k from middle (vim)", 1, 3, "k", 0},
+		{"up at top clamps", 0, 3, "up", 0},
+		{"down from middle", 1, 3, "down", 2},
+		{"j from middle (vim)", 1, 3, "j", 2},
+		{"down at bottom clamps", 2, 3, "down", 2},
+		{"home from middle", 1, 3, "home", 0},
+		{"g from middle (vim)", 1, 3, "g", 0},
+		{"end from middle", 1, 3, "end", 2},
+		{"G from middle (vim)", 1, 3, "G", 2},
+		{"unknown key leaves cursor", 1, 3, "x", 1},
+		{"empty list returns -1 on end", 0, 0, "end", -1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := moveCursor(c.cursor, c.n, c.key)
+			if got != c.want {
+				t.Errorf("moveCursor(%d, %d, %q) = %d, want %d", c.cursor, c.n, c.key, got, c.want)
+			}
+		})
+	}
+}
+
 // ----- selectModel -----
 
 func TestSelectModel_DownUpNavigation(t *testing.T) {

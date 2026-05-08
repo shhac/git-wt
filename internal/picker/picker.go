@@ -80,21 +80,33 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			return m, tea.Quit
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.rows)-1 {
-				m.cursor++
-			}
-		case "home", "g":
-			m.cursor = 0
-		case "end", "G":
-			m.cursor = len(m.rows) - 1
+		default:
+			m.cursor = moveCursor(m.cursor, len(m.rows), k.String())
 		}
 	}
 	return m, nil
+}
+
+// moveCursor applies the navigation keys (up/down/home/end and their vim
+// counterparts) and returns the new cursor index, clamped to [0, n-1].
+// Unrecognised keys leave the cursor unchanged. Shared by selectModel and
+// multiModel.
+func moveCursor(cursor, n int, key string) int {
+	switch key {
+	case "up", "k":
+		if cursor > 0 {
+			return cursor - 1
+		}
+	case "down", "j":
+		if cursor < n-1 {
+			return cursor + 1
+		}
+	case "home", "g":
+		return 0
+	case "end", "G":
+		return n - 1
+	}
+	return cursor
 }
 
 func (m selectModel) View() string {
@@ -162,18 +174,6 @@ func (m multiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case " ":
 			m.selected[m.cursor] = !m.selected[m.cursor]
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.rows)-1 {
-				m.cursor++
-			}
-		case "home", "g":
-			m.cursor = 0
-		case "end", "G":
-			m.cursor = len(m.rows) - 1
 		case "a":
 			// toggle all
 			anyOff := false
@@ -186,6 +186,8 @@ func (m multiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := range m.rows {
 				m.selected[i] = anyOff
 			}
+		default:
+			m.cursor = moveCursor(m.cursor, len(m.rows), k.String())
 		}
 	}
 	return m, nil

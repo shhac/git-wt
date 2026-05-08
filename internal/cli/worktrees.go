@@ -1,10 +1,25 @@
 package cli
 
 import (
+	"context"
 	"strings"
 
 	"github.com/shhac/git-wt/internal/wt"
 )
+
+// loadWorktrees runs the standard list-then-sort-then-resolve-current pipeline
+// shared by list, go, rm, and clean. Centralising it means future changes
+// (e.g. a different sort criterion or a symlink-aware CWD lookup) only touch
+// one place.
+func loadWorktrees(ctx context.Context) ([]wt.Worktree, *wt.Worktree, error) {
+	wts, err := wt.List(ctx, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	wt.SortByModTime(wts)
+	cur := wt.Current(wts, mustWD())
+	return wts, cur, nil
+}
 
 // findByBranch returns the worktree whose Branch matches name exactly. If no
 // exact match is found, falls back to a unique suffix match (e.g. "auth"
