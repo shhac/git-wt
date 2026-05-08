@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -32,105 +33,138 @@ var cleanCmd = &cobra.Command{
 		"upstream-gone check (skip with --no-fetch).",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-
 		if cleanOrphanedOnly && cleanGoneOnly {
 			return fmt.Errorf("--orphaned-only and --upstream-gone-only are mutually exclusive")
 		}
-
-		repo, err := wt.Inspect(ctx, "")
-		if err != nil {
-			return err
-		}
-
-		// Prune any worktrees whose directories have been removed manually.
-		// This is cheap and almost always desirable.
-		if _, err := git.Run(ctx, "worktree", "prune"); err != nil {
-			return fmt.Errorf("git worktree prune: %w", err)
-		}
-
-		doOrphaned := !cleanGoneOnly
-		doGone := !cleanOrphanedOnly
-
-		if doGone && !cleanNoFetch {
-			fmt.Fprintln(os.Stderr, "fetching with --prune…")
-			if _, err := git.Run(ctx, "fetch", "--prune"); err != nil {
-				// Soft-fail: maybe no remote, or offline. Carry on with
-				// orphaned check; report and continue.
-				fmt.Fprintf(os.Stderr, "warning: git fetch --prune failed: %v\n", err)
-			}
-		}
-
-		wts, err := wt.List(ctx, "")
-		if err != nil {
-			return err
-		}
-		cur := wt.Current(wts, mustWD())
-
-		var targets []taggedTarget
-		if doOrphaned {
-			branchExists := func(b string) (bool, error) { return wt.BranchExists(ctx, "", b) }
-			ts, err := findOrphanedWorktrees(wts, repo, branchExists)
-			if err != nil {
-				return err
-			}
-			targets = append(targets, ts...)
-		}
-		if doGone {
-			gone, err := goneBranches(ctx)
-			if err != nil {
-				return err
-			}
-			ts := findUpstreamGoneWorktrees(wts, repo, goneSetFromList(gone))
-			// Don't double-count: skip targets already added by the orphaned check.
-			seen := pathSet(targets)
-			for _, t := range ts {
-				if _, dupe := seen[t.wt.Path]; !dupe {
-					targets = append(targets, t)
-				}
-			}
-		}
-
-		if len(targets) == 0 {
-			fmt.Fprintln(os.Stderr, "nothing to clean")
-			return nil
-		}
-
-		fmt.Fprintln(os.Stderr, "worktrees to remove:")
-		for _, t := range targets {
-			fmt.Fprintf(os.Stderr, "  %s  [%s]  (%s)\n", t.wt.Display(), t.reason, t.wt.Path)
-		}
-
-		if cleanDryRun {
-			return nil
-		}
-
-		if interactive() {
-			var confirm bool
-			err := huh.NewConfirm().
-				Title(fmt.Sprintf("Remove these %d worktree(s) and their branches?", len(targets))).
-				Affirmative("Remove").
-				Negative("Cancel").
-				Value(&confirm).
-				WithTheme(huh.ThemeBase()).
-				Run()
-			if err != nil {
-				return err
-			}
-			if !confirm {
-				fmt.Fprintln(os.Stderr, "cancelled")
-				return nil
-			}
-		}
-
-		toRm := make([]wt.Worktree, len(targets))
-		for i, t := range targets {
-			toRm[i] = t.wt
-		}
-		// Always pass force=true: the branches/upstream are already gone, the
-		// user has confirmed (or asked for non-interactive cleanup).
-		return executeRm(ctx, repo, toRm, cur, rmTreeAndBranch, true)
+		return runClean(cmd.Context(), cleanFlags{
+			dryRun:       cleanDryRun,
+			noFetch:      cleanNoFetch,
+			orphanedOnly: cleanOrphanedOnly,
+			goneOnly:     cleanGoneOnly,
+		})
 	},
+}
+
+// cleanFlags is the resolved flag state for one clean invocation. Pulled out
+// of the global flagXxx vars so runClean is callable from tests without
+// touching package state.
+type cleanFlags struct {
+	dryRun, noFetch          bool
+	orphanedOnly, goneOnly   bool
+}
+
+// runClean is the body of `git-wt clean`. Steps: setup → discover targets
+// → render → maybe-confirm → delegate to executeRm.
+func runClean(ctx context.Context, flags cleanFlags) error {
+	repo, err := wt.Inspect(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	// Prune any worktrees whose directories have been removed manually.
+	// Cheap and almost always desirable.
+	if _, err := git.Run(ctx, "worktree", "prune"); err != nil {
+		return fmt.Errorf("git worktree prune: %w", err)
+	}
+
+	doOrphaned := !flags.goneOnly
+	doGone := !flags.orphanedOnly
+
+	if doGone && !flags.noFetch {
+		fmt.Fprintln(os.Stderr, "fetching with --prune…")
+		if _, err := git.Run(ctx, "fetch", "--prune"); err != nil {
+			// Soft-fail: maybe no remote, or offline. Carry on; the orphaned
+			// check still works without a fetch.
+			fmt.Fprintf(os.Stderr, "warning: git fetch --prune failed: %v\n", err)
+		}
+	}
+
+	wts, err := wt.List(ctx, "")
+	if err != nil {
+		return err
+	}
+	cur := wt.Current(wts, mustWD())
+
+	targets, err := collectCleanTargets(ctx, wts, repo, doOrphaned, doGone)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stderr, "nothing to clean")
+		return nil
+	}
+
+	printCleanTargets(os.Stderr, targets)
+	if flags.dryRun {
+		return nil
+	}
+	if interactive() {
+		ok, err := confirmClean(len(targets))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Fprintln(os.Stderr, "cancelled")
+			return nil
+		}
+	}
+
+	toRm := make([]wt.Worktree, len(targets))
+	for i, t := range targets {
+		toRm[i] = t.wt
+	}
+	// force=true: the branches/upstream are already gone, the user has
+	// confirmed (or asked for non-interactive cleanup).
+	return executeRm(ctx, repo, toRm, cur, rmTreeAndBranch, true)
+}
+
+// collectCleanTargets runs the requested checks and returns a deduped target
+// list. doOrphaned/doGone gate the two scans.
+func collectCleanTargets(ctx context.Context, wts []wt.Worktree, repo *wt.RepoInfo, doOrphaned, doGone bool) ([]taggedTarget, error) {
+	var targets []taggedTarget
+	if doOrphaned {
+		branchExists := func(b string) (bool, error) { return wt.BranchExists(ctx, "", b) }
+		ts, err := findOrphanedWorktrees(wts, repo, branchExists)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, ts...)
+	}
+	if doGone {
+		gone, err := goneBranches(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ts := findUpstreamGoneWorktrees(wts, repo, goneSetFromList(gone))
+		seen := pathSet(targets)
+		for _, t := range ts {
+			if _, dupe := seen[t.wt.Path]; !dupe {
+				targets = append(targets, t)
+			}
+		}
+	}
+	return targets, nil
+}
+
+// printCleanTargets writes the human-readable target list. Pure: takes any io.Writer.
+func printCleanTargets(w io.Writer, targets []taggedTarget) {
+	fmt.Fprintln(w, "worktrees to remove:")
+	for _, t := range targets {
+		fmt.Fprintf(w, "  %s  [%s]  (%s)\n", t.wt.Display(), t.reason, t.wt.Path)
+	}
+}
+
+// confirmClean prompts the user for final approval (interactive only).
+func confirmClean(n int) (bool, error) {
+	var ok bool
+	err := huh.NewConfirm().
+		Title(fmt.Sprintf("Remove these %d worktree(s) and their branches?", n)).
+		Affirmative("Remove").
+		Negative("Cancel").
+		Value(&ok).
+		WithTheme(huh.ThemeBase()).
+		Run()
+	return ok, err
 }
 
 func init() {
