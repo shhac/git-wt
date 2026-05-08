@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -289,14 +288,3 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-// orphanBranch deletes the local branch's ref file directly, simulating the
-// "branch deleted but worktree still tracks it" scenario that `clean
-// --orphaned-only` is meant to find. Git itself refuses `branch -D` while a
-// worktree uses the branch; the ref-file shortcut lets us set up the test.
-func orphanBranch(repo, branch string) error {
-	refPath := filepath.Join(repo, ".git", "refs", "heads", branch)
-	if err := os.Remove(refPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}

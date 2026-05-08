@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/ui"
 	"github.com/shhac/git-wt/internal/wt"
@@ -76,38 +74,3 @@ func formatPickerRow(t wt.Worktree, mainRoot, treesDir string, branchW, parentW 
 	return ui.Branch(branch) + "  " + ui.Dim(loc) + "  " + ui.Dim(mtime)
 }
 
-// columnWidths returns the maximum widths of the branch and location columns
-// across wts. lipgloss.Width is used so ANSI escape codes don't inflate the
-// measurement.
-func columnWidths(wts []wt.Worktree, mainRoot, treesDir string) (branchW, parentW int) {
-	for _, t := range wts {
-		if n := lipgloss.Width(t.Display()); n > branchW {
-			branchW = n
-		}
-		if n := lipgloss.Width(t.DisplayPath(mainRoot, treesDir)); n > parentW {
-			parentW = n
-		}
-	}
-	return
-}
-
-// padRight pads s with spaces on the right so its visible width equals width.
-// No-op if s is already wider.
-func padRight(s string, width int) string {
-	pad := width - lipgloss.Width(s)
-	if pad <= 0 {
-		return s
-	}
-	return s + spaces(pad)
-}
-
-func spaces(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	out := make([]byte, n)
-	for i := range out {
-		out[i] = ' '
-	}
-	return string(out)
-}
