@@ -1,10 +1,18 @@
-# Zig build artifacts
-.zig-cache/
-zig-cache/
-zig-out/
-build/
+# Go build artifacts
+/git-wt
+/dist/
+/bin/
 *.exe
-*.o
+*.test
+*.out
+
+# Vendored deps (defensive — we don't vendor)
+vendor/
+
+# Coverage
+coverage.out
+coverage.html
+*.cover
 
 # Editor and IDE files
 .vscode/
@@ -13,9 +21,6 @@ build/
 *.swo
 *~
 .DS_Store
-
-# Debug files
-*.pdb
 
 # Local development
 .env
@@ -35,23 +40,14 @@ CLAUDE.local.md
 *.temp
 *.log
 
-# Test coverage
-coverage/
-*.gcov
-*.gcda
-*.gcno
-
-# Test directories and scripts
+# E2E scratch dirs (created by test-interactive/* and scripts/test-shell-integration.sh)
 .e2e-test/
-test-*/
-*-test/
 test-claude-script.sh
-test-*.sh
-verify-*.sh
 
-# Release builds
+# Release artifacts
 /release/
-git-wt-*-macos
-git-wt-*-linux
-git-wt-*.tar.gz
-git-wt-*.zip
+git-wt-*-darwin*
+git-wt-*-linux*
+git-wt-*-windows*
+*.tar.gz
+*.zip
