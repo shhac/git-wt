@@ -137,8 +137,3 @@ func renderAlias(name, exe string, fdN int, plain, nonInteractive, debug bool) s
 	return r.Replace(aliasTemplate)
 }
 
-// shellQuote single-quotes s for safe inclusion in a POSIX shell command.
-// Single quotes inside s are emitted as `'\''`.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}

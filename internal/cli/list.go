@@ -2,9 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/ui"
@@ -35,22 +35,13 @@ func init() {
 
 // printList renders the table to w using the user's --plain preference.
 // Columns: marker | branch | parent dir | mtime
-func printList(w *os.File, wts []wt.Worktree, cur *wt.Worktree) {
+func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree) {
 	if len(wts) == 0 {
 		fmt.Fprintln(w, "no worktrees")
 		return
 	}
 
-	branchW, parentW := 0, 0
-	for _, t := range wts {
-		if n := lipgloss.Width(t.Display()); n > branchW {
-			branchW = n
-		}
-		if n := lipgloss.Width(t.ParentDirName()); n > parentW {
-			parentW = n
-		}
-	}
-
+	branchW, parentW := columnWidths(wts)
 	for i := range wts {
 		t := &wts[i]
 		marker := "  "
@@ -66,25 +57,6 @@ func printList(w *os.File, wts []wt.Worktree, cur *wt.Worktree) {
 		}
 		fmt.Fprintln(w, row)
 	}
-}
-
-func padRight(s string, width int) string {
-	pad := width - lipgloss.Width(s)
-	if pad <= 0 {
-		return s
-	}
-	return s + spaces(pad)
-}
-
-func spaces(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	out := make([]byte, n)
-	for i := range out {
-		out[i] = ' '
-	}
-	return string(out)
 }
 
 // mustWD returns the current working directory, falling back to "." on error.

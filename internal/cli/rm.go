@@ -122,50 +122,6 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]w
 	return out, nil
 }
 
-func filterRemovable(wts []wt.Worktree, repo *wt.RepoInfo) []wt.Worktree {
-	out := make([]wt.Worktree, 0, len(wts))
-	for _, t := range wts {
-		if t.Path == repo.MainRoot {
-			continue
-		}
-		out = append(out, t)
-	}
-	return out
-}
-
-// pickWorktreesToRemove opens a huh multi-select.
-func pickWorktreesToRemove(wts []wt.Worktree) ([]wt.Worktree, error) {
-	branchW, parentW := columnWidths(wts)
-	options := make([]huh.Option[string], len(wts))
-	for i, t := range wts {
-		options[i] = huh.NewOption(formatPickerRow(t, branchW, parentW), t.Path)
-	}
-
-	var picked []string
-	err := huh.NewMultiSelect[string]().
-		Title("Select worktrees to remove (space to toggle, enter to continue)").
-		Options(options...).
-		Value(&picked).
-		WithTheme(huh.ThemeBase()).
-		Run()
-	if err != nil {
-		return nil, err
-	}
-	if len(picked) == 0 {
-		return nil, nil
-	}
-	out := make([]wt.Worktree, 0, len(picked))
-	for _, p := range picked {
-		for i := range wts {
-			if wts[i].Path == p {
-				out = append(out, wts[i])
-				break
-			}
-		}
-	}
-	return out, nil
-}
-
 // chooseRmAction implements the confirmation step. Flags pre-narrow the
 // options; non-interactive mode picks the default and skips the prompt.
 func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
@@ -214,15 +170,7 @@ func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
 // targets, we chdir to the main repo and emit its path so the parent shell
 // follows.
 func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction, force bool) error {
-	bouncing := false
-	if cur != nil {
-		for _, t := range targets {
-			if t.Path == cur.Path {
-				bouncing = true
-				break
-			}
-		}
-	}
+	bouncing := needsBounce(cur, targets)
 	if bouncing {
 		if err := os.Chdir(repo.MainRoot); err != nil {
 			return fmt.Errorf("chdir to main repo: %w", err)
@@ -259,4 +207,19 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 		return emitTarget(repo.MainRoot)
 	}
 	return nil
+}
+
+// needsBounce reports whether any of targets is the current worktree, in
+// which case rm must move the parent shell back to the main repo before
+// deleting (the cwd would otherwise be invalidated).
+func needsBounce(cur *wt.Worktree, targets []wt.Worktree) bool {
+	if cur == nil {
+		return false
+	}
+	for _, t := range targets {
+		if t.Path == cur.Path {
+			return true
+		}
+	}
+	return false
 }
