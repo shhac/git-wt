@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/git"
+	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -158,15 +158,20 @@ func printCleanTargets(w io.Writer, targets []taggedTarget) {
 // Ctrl-C are treated as a cancel response (returns false, nil) rather than
 // an error.
 func confirmClean(n int) (bool, error) {
-	var ok bool
-	err := huh.NewConfirm().
-		Title(fmt.Sprintf("Remove these %d worktree(s) and their branches?", n)).
-		Affirmative("Remove").
-		Negative("Cancel").
-		Value(&ok).
-		WithTheme(pickerTheme()).
-		Run()
-	return ok, silentIfAborted(err)
+	choice, ok, err := picker.Confirm(
+		fmt.Sprintf("Remove these %d worktree(s) and their branches?", n),
+		[]picker.Option[bool]{
+			{Label: "Remove", Value: true},
+			{Label: "Cancel", Value: false},
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return choice, nil
 }
 
 func init() {

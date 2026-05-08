@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/git"
+	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -140,33 +140,30 @@ func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAct
 		summary.WriteString("\n    " + t.Display())
 	}
 
-	var choice rmAction
-	err := huh.NewSelect[rmAction]().
-		Title(summary.String()).
-		Options(rmOptions(keepBranch, deleteBranch)...).
-		Value(&choice).
-		WithTheme(pickerTheme()).
-		Run()
-	if err := silentIfAborted(err); err != nil {
+	choice, ok, err := picker.Confirm(summary.String(), rmOptions(keepBranch, deleteBranch))
+	if err != nil {
 		return rmCancel, err
+	}
+	if !ok {
+		return rmCancel, nil
 	}
 	return choice, nil
 }
 
 // rmOptions builds the option list shown by chooseRmAction. Pure: only the
 // flag combination matters. Cancel is always last.
-func rmOptions(keepBranch, deleteBranch bool) []huh.Option[rmAction] {
-	keepOpt := huh.NewOption("Worktree only (keep branch)", rmTreeOnly)
-	delOpt := huh.NewOption("Worktree and branch", rmTreeAndBranch)
-	cancelOpt := huh.NewOption("Cancel", rmCancel)
+func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
+	keepOpt := picker.Option[rmAction]{Label: "Worktree only (keep branch)", Value: rmTreeOnly}
+	delOpt := picker.Option[rmAction]{Label: "Worktree and branch", Value: rmTreeAndBranch}
+	cancelOpt := picker.Option[rmAction]{Label: "Cancel", Value: rmCancel}
 
 	switch {
 	case keepBranch:
-		return []huh.Option[rmAction]{keepOpt, cancelOpt}
+		return []picker.Option[rmAction]{keepOpt, cancelOpt}
 	case deleteBranch:
-		return []huh.Option[rmAction]{delOpt, cancelOpt}
+		return []picker.Option[rmAction]{delOpt, cancelOpt}
 	default:
-		return []huh.Option[rmAction]{keepOpt, delOpt, cancelOpt}
+		return []picker.Option[rmAction]{keepOpt, delOpt, cancelOpt}
 	}
 }
 
