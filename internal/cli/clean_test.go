@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/shhac/git-wt/internal/wt"
@@ -154,3 +155,80 @@ func TestPathSet_Dedup(t *testing.T) {
 		t.Errorf("expected /b in set")
 	}
 }
+
+func TestPrintCleanTargets(t *testing.T) {
+	var buf strings.Builder
+	targets := []taggedTarget{
+		{wt: wt.Worktree{Path: "/p/a", Branch: "a"}, reason: "branch deleted"},
+		{wt: wt.Worktree{Path: "/p/b", Branch: "b"}, reason: "upstream gone"},
+	}
+	printCleanTargets(&buf, targets)
+	got := buf.String()
+	for _, want := range []string{"worktrees to remove:", "[branch deleted]", "[upstream gone]", "/p/a", "/p/b"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q\n--- got ---\n%s", want, got)
+		}
+	}
+}
+
+// collectCleanTargets composes findOrphanedWorktrees + goneBranches +
+// findUpstreamGoneWorktrees, with dedup to prevent counting the same path
+// twice. The orphaned scan calls into git via wt.BranchExists, and the
+// upstream-gone scan calls git for-each-ref. We can't unit-test the full
+// function without a git seam, but we can test the dedup-and-merge slice of
+// it by directly exercising the building blocks the same way the function
+// does — which is what these helpers (findOrphaned, findUpstreamGone,
+// pathSet) already do — and asserting the dedup semantics that the
+// integration of the two checks is supposed to enforce.
+
+func TestCollectCleanTargets_DedupSimulation(t *testing.T) {
+	// A worktree on a branch that is BOTH locally-deleted and has gone
+	// upstream tracking should appear only once in the merged target list.
+	wts := []wt.Worktree{
+		{Path: "/p/main", Branch: "main"},
+		{Path: "/p/dual", Branch: "dual"}, // both orphaned + upstream-gone
+		{Path: "/p/orph", Branch: "orph"}, // only orphaned
+		{Path: "/p/gone", Branch: "gone"}, // only upstream-gone
+	}
+	repo := &wt.RepoInfo{MainRoot: "/p/main"}
+
+	// "alive" branches (everything else is orphaned)
+	branchExists := func(b string) (bool, error) { return b == "gone", nil }
+
+	orph, err := findOrphanedWorktrees(wts, repo, branchExists)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone := findUpstreamGoneWorktrees(wts, repo, goneSetFromList([]string{"dual", "gone"}))
+
+	// Replicate collectCleanTargets' merge-with-dedup logic.
+	targets := append([]taggedTarget(nil), orph...)
+	seen := pathSet(targets)
+	for _, t := range gone {
+		if _, dup := seen[t.wt.Path]; !dup {
+			targets = append(targets, t)
+		}
+	}
+
+	// Expect three distinct paths: /p/dual (orphaned wins, no dup),
+	// /p/orph (orphaned), /p/gone (upstream-gone).
+	wantPaths := map[string]string{
+		"/p/dual": "branch deleted", // orphaned check ran first
+		"/p/orph": "branch deleted",
+		"/p/gone": "upstream gone",
+	}
+	if len(targets) != len(wantPaths) {
+		t.Fatalf("len = %d, want %d (got: %+v)", len(targets), len(wantPaths), targets)
+	}
+	for _, tg := range targets {
+		want, ok := wantPaths[tg.wt.Path]
+		if !ok {
+			t.Errorf("unexpected path: %s", tg.wt.Path)
+			continue
+		}
+		if tg.reason != want {
+			t.Errorf("reason for %s: got %q, want %q (the orphaned check should win)", tg.wt.Path, tg.reason, want)
+		}
+	}
+}
+

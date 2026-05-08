@@ -83,17 +83,3 @@ func TestPrintList_ColumnAlignment(t *testing.T) {
 	}
 }
 
-func TestPrintCleanTargets(t *testing.T) {
-	var buf strings.Builder
-	targets := []taggedTarget{
-		{wt: wt.Worktree{Path: "/p/a", Branch: "a"}, reason: "branch deleted"},
-		{wt: wt.Worktree{Path: "/p/b", Branch: "b"}, reason: "upstream gone"},
-	}
-	printCleanTargets(&buf, targets)
-	got := buf.String()
-	for _, want := range []string{"worktrees to remove:", "[branch deleted]", "[upstream gone]", "/p/a", "/p/b"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output missing %q\n--- got ---\n%s", want, got)
-		}
-	}
-}
