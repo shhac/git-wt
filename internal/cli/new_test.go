@@ -138,6 +138,59 @@ func TestWarnIfParentNotIgnored_RepoRootItself_Silent(t *testing.T) {
 	}
 }
 
+func TestCopyConfigs_BadGlobReturnsError(t *testing.T) {
+	repo := initRepo(t)
+	dst := t.TempDir()
+	specPath := filepath.Join(repo, "my-copy-spec")
+	// `[` opens a character class with no matching `]`. filepath.Match (and
+	// filepath.Glob) reports this as ErrBadPattern.
+	if err := os.WriteFile(specPath, []byte("[unclosed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyConfigs(repo, dst, specPath); err == nil {
+		t.Errorf("expected error from bad glob pattern, got nil")
+	}
+}
+
+func TestCopyConfigs_MissingSpecFallsBackToDefaults(t *testing.T) {
+	repo := initRepo(t)
+	dst := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte("FOO=1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(repo, "does-not-exist")
+	if err := copyConfigs(repo, dst, missing); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".env")); err != nil {
+		t.Errorf(".env should have been copied via default spec; %v", err)
+	}
+}
+
+func TestCopyConfigs_SpecPresentReplacesDefaults(t *testing.T) {
+	repo := initRepo(t)
+	dst := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte("FOO=1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "extra"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(repo, "my-copy-spec")
+	if err := os.WriteFile(specPath, []byte("extra\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyConfigs(repo, dst, specPath); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "extra")); err != nil {
+		t.Errorf("extra should have been copied; %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".env")); err == nil {
+		t.Errorf(".env should NOT have been copied (spec overrides default); but it exists")
+	}
+}
+
 func TestWarnIfParentNotIgnored_NestedPath_FiresWithRelative(t *testing.T) {
 	hermeticGit(t)
 	repo := initRepo(t)

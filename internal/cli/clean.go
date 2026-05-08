@@ -84,7 +84,9 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 		return err
 	}
 
-	targets, err := collectCleanTargets(ctx, wts, repo, doOrphaned, doGone)
+	branchExists := func(b string) (bool, error) { return wt.BranchExists(ctx, "", b) }
+	listGone := func() ([]string, error) { return goneBranches(ctx) }
+	targets, err := collectCleanTargets(wts, repo, doOrphaned, doGone, branchExists, listGone)
 	if err != nil {
 		return err
 	}
@@ -117,12 +119,23 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 	return executeRm(ctx, repo, toRm, cur, rmTreeAndBranch, true)
 }
 
+// goneBranchesFn is the DI seam for the upstream-gone scan, mirroring
+// branchExistsFn for the orphaned scan. The cli wires the real git-backed
+// implementation; tests pass a fake.
+type goneBranchesFn func() ([]string, error)
+
 // collectCleanTargets runs the requested checks and returns a deduped target
-// list. doOrphaned/doGone gate the two scans.
-func collectCleanTargets(ctx context.Context, wts []wt.Worktree, repo *wt.RepoInfo, doOrphaned, doGone bool) ([]taggedTarget, error) {
+// list. doOrphaned/doGone gate the two scans. branchExists and listGone are
+// the DI seams over git so the function is unit-testable end-to-end.
+func collectCleanTargets(
+	wts []wt.Worktree,
+	repo *wt.RepoInfo,
+	doOrphaned, doGone bool,
+	branchExists branchExistsFn,
+	listGone goneBranchesFn,
+) ([]taggedTarget, error) {
 	var targets []taggedTarget
 	if doOrphaned {
-		branchExists := func(b string) (bool, error) { return wt.BranchExists(ctx, "", b) }
 		ts, err := findOrphanedWorktrees(wts, repo, branchExists)
 		if err != nil {
 			return nil, err
@@ -130,7 +143,7 @@ func collectCleanTargets(ctx context.Context, wts []wt.Worktree, repo *wt.RepoIn
 		targets = append(targets, ts...)
 	}
 	if doGone {
-		gone, err := goneBranches(ctx)
+		gone, err := listGone()
 		if err != nil {
 			return nil, err
 		}

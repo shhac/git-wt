@@ -173,17 +173,13 @@ func TestPrintCleanTargets(t *testing.T) {
 
 // collectCleanTargets composes findOrphanedWorktrees + goneBranches +
 // findUpstreamGoneWorktrees, with dedup to prevent counting the same path
-// twice. The orphaned scan calls into git via wt.BranchExists, and the
-// upstream-gone scan calls git for-each-ref. We can't unit-test the full
-// function without a git seam, but we can test the dedup-and-merge slice of
-// it by directly exercising the building blocks the same way the function
-// does — which is what these helpers (findOrphaned, findUpstreamGone,
-// pathSet) already do — and asserting the dedup semantics that the
-// integration of the two checks is supposed to enforce.
+// twice. With the branchExists / listGone DI seams it's directly callable
+// from tests with no git subprocess.
 
-func TestCollectCleanTargets_DedupSimulation(t *testing.T) {
+func TestCollectCleanTargets_DedupBetweenScans(t *testing.T) {
 	// A worktree on a branch that is BOTH locally-deleted and has gone
-	// upstream tracking should appear only once in the merged target list.
+	// upstream tracking should appear only once in the merged target list,
+	// with the orphaned reason winning (orphaned scan runs first).
 	wts := []wt.Worktree{
 		{Path: "/p/main", Branch: "main"},
 		{Path: "/p/dual", Branch: "dual"}, // both orphaned + upstream-gone
@@ -191,29 +187,15 @@ func TestCollectCleanTargets_DedupSimulation(t *testing.T) {
 		{Path: "/p/gone", Branch: "gone"}, // only upstream-gone
 	}
 	repo := &wt.RepoInfo{MainRoot: "/p/main"}
-
-	// "alive" branches (everything else is orphaned)
 	branchExists := func(b string) (bool, error) { return b == "gone", nil }
+	listGone := func() ([]string, error) { return []string{"dual", "gone"}, nil }
 
-	orph, err := findOrphanedWorktrees(wts, repo, branchExists)
+	targets, err := collectCleanTargets(wts, repo, true, true, branchExists, listGone)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone := findUpstreamGoneWorktrees(wts, repo, goneSetFromList([]string{"dual", "gone"}))
-
-	// Replicate collectCleanTargets' merge-with-dedup logic.
-	targets := append([]taggedTarget(nil), orph...)
-	seen := pathSet(targets)
-	for _, t := range gone {
-		if _, dup := seen[t.wt.Path]; !dup {
-			targets = append(targets, t)
-		}
-	}
-
-	// Expect three distinct paths: /p/dual (orphaned wins, no dup),
-	// /p/orph (orphaned), /p/gone (upstream-gone).
 	wantPaths := map[string]string{
-		"/p/dual": "branch deleted", // orphaned check ran first
+		"/p/dual": "branch deleted",
 		"/p/orph": "branch deleted",
 		"/p/gone": "upstream gone",
 	}
@@ -227,7 +209,65 @@ func TestCollectCleanTargets_DedupSimulation(t *testing.T) {
 			continue
 		}
 		if tg.reason != want {
-			t.Errorf("reason for %s: got %q, want %q (the orphaned check should win)", tg.wt.Path, tg.reason, want)
+			t.Errorf("reason for %s: got %q, want %q", tg.wt.Path, tg.reason, want)
 		}
+	}
+}
+
+func TestCollectCleanTargets_OrphanedOnly(t *testing.T) {
+	wts := []wt.Worktree{
+		{Path: "/p/main", Branch: "main"},
+		{Path: "/p/orph", Branch: "orph"},
+		{Path: "/p/gone", Branch: "gone"},
+	}
+	repo := &wt.RepoInfo{MainRoot: "/p/main"}
+	branchExists := func(b string) (bool, error) { return b == "gone", nil }
+	listGone := func() ([]string, error) {
+		t.Fatal("listGone should not be called when doGone=false")
+		return nil, nil
+	}
+	targets, err := collectCleanTargets(wts, repo, true, false, branchExists, listGone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].wt.Path != "/p/orph" {
+		t.Errorf("got %+v, want [/p/orph]", targets)
+	}
+}
+
+func TestCollectCleanTargets_UpstreamGoneOnly(t *testing.T) {
+	wts := []wt.Worktree{
+		{Path: "/p/main", Branch: "main"},
+		{Path: "/p/orph", Branch: "orph"},
+		{Path: "/p/gone", Branch: "gone"},
+	}
+	repo := &wt.RepoInfo{MainRoot: "/p/main"}
+	branchExists := func(b string) (bool, error) {
+		t.Fatal("branchExists should not be called when doOrphaned=false")
+		return false, nil
+	}
+	listGone := func() ([]string, error) { return []string{"gone"}, nil }
+	targets, err := collectCleanTargets(wts, repo, false, true, branchExists, listGone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].wt.Path != "/p/gone" {
+		t.Errorf("got %+v, want [/p/gone]", targets)
+	}
+}
+
+func TestCollectCleanTargets_PropagatesErrors(t *testing.T) {
+	wts := []wt.Worktree{{Path: "/p/feat", Branch: "feat"}}
+	repo := &wt.RepoInfo{MainRoot: "/p/main"}
+	wantErr := errors.New("git boom")
+	branchExists := func(b string) (bool, error) { return false, wantErr }
+	listGone := func() ([]string, error) { return nil, nil }
+	if _, err := collectCleanTargets(wts, repo, true, false, branchExists, listGone); !errors.Is(err, wantErr) {
+		t.Errorf("orphaned err = %v, want wraps %v", err, wantErr)
+	}
+	branchExists = func(b string) (bool, error) { return true, nil }
+	listGone = func() ([]string, error) { return nil, wantErr }
+	if _, err := collectCleanTargets(wts, repo, false, true, branchExists, listGone); !errors.Is(err, wantErr) {
+		t.Errorf("gone err = %v, want wraps %v", err, wantErr)
 	}
 }

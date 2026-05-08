@@ -65,19 +65,32 @@ func IsClean(ctx context.Context, dir string) (bool, string, error) {
 		}
 		commonDir = filepath.Join(root, commonDir)
 	}
-	for _, op := range []struct{ marker, name string }{
+	if op := inProgressOp(commonDir); op != "" {
+		return false, op, nil
+	}
+	return true, "", nil
+}
+
+// inProgressOp returns the name of a git operation in progress at commonDir
+// (the path of `.git` for the main worktree), or "" if the repo is clean.
+// Pure: only stats well-known marker files. Order is fixed so tests stay
+// deterministic when multiple markers are present (shouldn't happen in
+// practice — git refuses to start a second operation while one is active).
+func inProgressOp(commonDir string) string {
+	markers := []struct{ file, name string }{
 		{"MERGE_HEAD", "merge"},
 		{"rebase-merge", "rebase"},
 		{"rebase-apply", "rebase"},
 		{"CHERRY_PICK_HEAD", "cherry-pick"},
 		{"REVERT_HEAD", "revert"},
 		{"BISECT_LOG", "bisect"},
-	} {
-		if pathExists(filepath.Join(commonDir, op.marker)) {
-			return false, op.name, nil
+	}
+	for _, m := range markers {
+		if pathExists(filepath.Join(commonDir, m.file)) {
+			return m.name
 		}
 	}
-	return true, "", nil
+	return ""
 }
 
 // BranchExists reports whether a local branch with this name exists.
