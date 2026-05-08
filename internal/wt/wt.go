@@ -67,16 +67,13 @@ func SortByModTime(wts []Worktree) {
 	sort.SliceStable(wts, func(i, j int) bool {
 		zi := wts[i].ModTime.IsZero()
 		zj := wts[j].ModTime.IsZero()
-		switch {
-		case zi && zj:
-			return false
-		case zi:
-			return false
-		case zj:
-			return true
-		default:
-			return wts[i].ModTime.After(wts[j].ModTime)
+		if zi {
+			return false // zero on the left always loses (covers zi&&zj too)
 		}
+		if zj {
+			return true
+		}
+		return wts[i].ModTime.After(wts[j].ModTime)
 	})
 }
 

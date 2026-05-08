@@ -20,15 +20,6 @@ func Initialize() {
 	}
 }
 
-// Style is a thin wrapper that returns a no-op style when Plain is set.
-// Use this for any text we'd color.
-func Style() lipgloss.Style {
-	if Plain {
-		return lipgloss.NewStyle()
-	}
-	return lipgloss.NewStyle()
-}
-
 // Predefined styles. Each respects Plain by lazily checking the flag.
 var (
 	current = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // green + bold

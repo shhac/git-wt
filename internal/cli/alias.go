@@ -8,11 +8,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// "bakeX" names emphasize that these flags get baked into the generated shell
+// wrapper at alias-generation time — distinct from the global flagX variables
+// in root.go which control the current invocation.
 var (
-	aliasFD             int
-	aliasPlain          bool
-	aliasNonInteractive bool
-	aliasDebug          bool
+	bakeFD             int
+	bakePlain          bool
+	bakeNonInteractive bool
+	bakeDebug          bool
 )
 
 var aliasCmd = &cobra.Command{
@@ -32,24 +35,24 @@ commands pass through untouched.`,
 		if !validIdentifier(name) {
 			return fmt.Errorf("invalid alias name %q: must be a valid shell identifier", name)
 		}
-		if aliasFD < 3 || aliasFD > 9 {
-			return fmt.Errorf("--fd must be in 3-9 (got %d)", aliasFD)
+		if bakeFD < 3 || bakeFD > 9 {
+			return fmt.Errorf("--fd must be in 3-9 (got %d)", bakeFD)
 		}
 		exe, err := os.Executable()
 		if err != nil {
 			return fmt.Errorf("locate git-wt binary: %w", err)
 		}
-		fmt.Print(renderAlias(name, exe, aliasFD, aliasPlain, aliasNonInteractive, aliasDebug))
+		fmt.Print(renderAlias(name, exe, bakeFD, bakePlain, bakeNonInteractive, bakeDebug))
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(aliasCmd)
-	aliasCmd.Flags().IntVar(&aliasFD, "fd", 3, "file descriptor for the wrapper protocol (3-9)")
-	aliasCmd.Flags().BoolVar(&aliasPlain, "plain", false, "bake --plain into the wrapper")
-	aliasCmd.Flags().BoolVarP(&aliasNonInteractive, "non-interactive", "n", false, "bake --non-interactive into the wrapper")
-	aliasCmd.Flags().BoolVar(&aliasDebug, "debug", false, "include debug logging in the wrapper")
+	aliasCmd.Flags().IntVar(&bakeFD, "fd", 3, "fd to bake into the wrapper protocol (3-9)")
+	aliasCmd.Flags().BoolVar(&bakePlain, "plain", false, "bake --plain into the wrapper")
+	aliasCmd.Flags().BoolVarP(&bakeNonInteractive, "non-interactive", "n", false, "bake --non-interactive into the wrapper")
+	aliasCmd.Flags().BoolVar(&bakeDebug, "debug", false, "bake debug logging into the wrapper")
 }
 
 func validIdentifier(s string) bool {

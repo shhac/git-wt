@@ -65,7 +65,7 @@ var rmCmd = &cobra.Command{
 			return nil // user cancelled the picker
 		}
 
-		action, err := chooseRmAction(targets)
+		action, err := chooseRmAction(targets, rmKeepBranch, rmDeleteBranch)
 		if err != nil {
 			return err
 		}
@@ -122,11 +122,12 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]w
 	return out, nil
 }
 
-// chooseRmAction implements the confirmation step. Flags pre-narrow the
-// options; non-interactive mode picks the default and skips the prompt.
-func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
+// chooseRmAction implements the confirmation step. The keep/delete flags
+// pre-narrow the option list; non-interactive mode picks the default and
+// skips the prompt entirely.
+func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAction, error) {
 	defaultAction := rmTreeOnly
-	if rmDeleteBranch {
+	if deleteBranch {
 		defaultAction = rmTreeAndBranch
 	}
 	if !interactive() {
@@ -139,24 +140,10 @@ func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
 		summary.WriteString("\n    " + t.Display())
 	}
 
-	options := []huh.Option[rmAction]{}
-	switch {
-	case rmKeepBranch:
-		options = append(options, huh.NewOption("Worktree only (keep branch)", rmTreeOnly))
-	case rmDeleteBranch:
-		options = append(options, huh.NewOption("Worktree and branch", rmTreeAndBranch))
-	default:
-		options = append(options,
-			huh.NewOption("Worktree only (keep branch)", rmTreeOnly),
-			huh.NewOption("Worktree and branch", rmTreeAndBranch),
-		)
-	}
-	options = append(options, huh.NewOption("Cancel", rmCancel))
-
 	var choice rmAction
 	err := huh.NewSelect[rmAction]().
 		Title(summary.String()).
-		Options(options...).
+		Options(rmOptions(keepBranch, deleteBranch)...).
 		Value(&choice).
 		WithTheme(huh.ThemeBase()).
 		Run()
@@ -164,6 +151,23 @@ func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
 		return rmCancel, err
 	}
 	return choice, nil
+}
+
+// rmOptions builds the option list shown by chooseRmAction. Pure: only the
+// flag combination matters. Cancel is always last.
+func rmOptions(keepBranch, deleteBranch bool) []huh.Option[rmAction] {
+	keepOpt := huh.NewOption("Worktree only (keep branch)", rmTreeOnly)
+	delOpt := huh.NewOption("Worktree and branch", rmTreeAndBranch)
+	cancelOpt := huh.NewOption("Cancel", rmCancel)
+
+	switch {
+	case keepBranch:
+		return []huh.Option[rmAction]{keepOpt, cancelOpt}
+	case deleteBranch:
+		return []huh.Option[rmAction]{delOpt, cancelOpt}
+	default:
+		return []huh.Option[rmAction]{keepOpt, delOpt, cancelOpt}
+	}
 }
 
 // executeRm performs the removals. If the current worktree is one of the

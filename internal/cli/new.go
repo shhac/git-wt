@@ -48,14 +48,18 @@ var newCmd = &cobra.Command{
 		if repo.Bare {
 			return fmt.Errorf("cannot create worktrees in a bare repository")
 		}
-		if clean, op, err := wt.IsClean(ctx, ""); err != nil {
+		clean, op, err := wt.IsClean(ctx, "")
+		if err != nil {
 			return err
-		} else if !clean {
+		}
+		if !clean {
 			return fmt.Errorf("repository has a %s in progress; complete or abort it first", op)
 		}
-		if exists, err := wt.BranchExists(ctx, "", branch); err != nil {
+		exists, err := wt.BranchExists(ctx, "", branch)
+		if err != nil {
 			return err
-		} else if exists {
+		}
+		if exists {
 			return fmt.Errorf("branch %q already exists", branch)
 		}
 
@@ -73,9 +77,11 @@ var newCmd = &cobra.Command{
 			return fmt.Errorf("worktree path already exists: %s", path)
 		}
 
-		if conflict, err := wt.FindCaseCollision(parent, branch); err != nil {
+		conflict, err := wt.FindCaseCollision(parent, branch)
+		if err != nil {
 			return fmt.Errorf("check case collision: %w", err)
-		} else if conflict != "" {
+		}
+		if conflict != "" {
 			return fmt.Errorf(
 				"case-insensitive conflict: %q already exists; this filesystem would treat it as the same path as %q. Choose a branch name that doesn't collide.",
 				conflict, path,
@@ -91,7 +97,11 @@ var newCmd = &cobra.Command{
 		}
 
 		if !newNoCopy {
-			if err := copyConfigs(repo.MainRoot, path); err != nil {
+			specPath := newCopyFileConfig
+			if specPath == "" {
+				specPath = filepath.Join(repo.MainRoot, DefaultCopyFile)
+			}
+			if err := copyConfigs(repo.MainRoot, path, specPath); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: copy configs: %v\n", err)
 			}
 		}
@@ -118,14 +128,10 @@ func createWorktree(ctx context.Context, path, branch, fromRef string) error {
 	return err
 }
 
-// copyConfigs loads the copy spec and copies the matching paths into dst.
-// Spec resolution: --copy-file-config flag if set, else <repoRoot>/.git-wt-copy-files,
-// else built-in defaults (when neither file exists).
-func copyConfigs(repoRoot, dst string) error {
-	specPath := newCopyFileConfig
-	if specPath == "" {
-		specPath = filepath.Join(repoRoot, DefaultCopyFile)
-	}
+// copyConfigs loads the copy spec at specPath (falling back to built-in
+// defaults when the file is absent) and copies the matching paths from
+// repoRoot into dst.
+func copyConfigs(repoRoot, dst, specPath string) error {
 	spec, err := copyspec.Load(specPath)
 	if err != nil {
 		return err

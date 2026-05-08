@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/shhac/git-wt/internal/git"
 )
@@ -82,16 +81,11 @@ func IsClean(ctx context.Context, dir string) (bool, string, error) {
 }
 
 // BranchExists reports whether a local branch with this name exists.
+// `git show-ref --verify --quiet` exits 0 when the ref exists and 1 (with
+// no stderr) when it doesn't, so any error from RunIn means "not found".
 func BranchExists(ctx context.Context, dir, name string) (bool, error) {
 	_, err := git.RunIn(ctx, dir, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
-	if err == nil {
-		return true, nil
-	}
-	if strings.Contains(err.Error(), "not a valid ref") || strings.Contains(err.Error(), "exit status 1") {
-		return false, nil
-	}
-	// `git show-ref --verify --quiet` exits 1 silently when the ref doesn't exist; treat that as not-found.
-	return false, nil
+	return err == nil, nil
 }
 
 // TreesDirFor returns the conventional sibling worktree directory:
