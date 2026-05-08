@@ -1,6 +1,6 @@
 BINARY := git-wt
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/shhac/git-wt/internal/version.Version=$(VERSION)
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/git-wt

@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/ui"
-	"github.com/shhac/git-wt/internal/version"
 )
 
 // Global flag values, populated by Cobra before any command runs.
@@ -23,7 +22,6 @@ var rootCmd = &cobra.Command{
 	Use:           "git-wt",
 	Short:         "Manage git worktrees with enhanced features",
 	Long:          "git-wt creates worktrees in a sibling directory, copies project config, and offers interactive navigation between them.",
-	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -43,7 +41,9 @@ func init() {
 }
 
 // Execute runs the root command and exits with a non-zero status on error.
-func Execute() {
+// version is supplied by main (overridden via ldflags at release time).
+func Execute(version string) {
+	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

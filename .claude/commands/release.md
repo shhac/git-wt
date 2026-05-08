@@ -56,7 +56,7 @@ Otherwise build manually:
 ```bash
 rm -rf dist/
 mkdir -p dist
-LDFLAGS="-s -w -X github.com/shhac/git-wt/internal/version.Version=${new_version}"
+LDFLAGS="-s -w -X main.version=${new_version}"
 
 GOOS=darwin  GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "dist/git-wt-darwin-arm64"      ./cmd/git-wt
 GOOS=darwin  GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "dist/git-wt-darwin-amd64"      ./cmd/git-wt
@@ -190,6 +190,6 @@ Show the user:
 - Homebrew tap commit URL (if updated)
 - Install command for new users:    `brew install shhac/tap/git-wt`
 - Upgrade command for existing users: `brew upgrade shhac/tap/git-wt`
-- Reminder to bump `internal/version/version.go`'s `0.7.0-dev` default if
-  the next development cycle has started (optional; the build always uses
-  ldflags so this only affects `go run` and unbuilt invocations).
+No source bump is needed after release — `cmd/git-wt/main.go::version`
+stays as the literal `"dev"` forever; releases come from tags via
+ldflags (`-X main.version=X.Y.Z`).
