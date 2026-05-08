@@ -74,7 +74,7 @@ var rmCmd = &cobra.Command{
 			return nil
 		}
 
-		return executeRm(ctx, repo, targets, cur, action)
+		return executeRm(ctx, repo, targets, cur, action, rmForce)
 	},
 }
 
@@ -213,7 +213,7 @@ func chooseRmAction(targets []wt.Worktree) (rmAction, error) {
 // executeRm performs the removals. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
 // follows.
-func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction) error {
+func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction, force bool) error {
 	bouncing := false
 	if cur != nil {
 		for _, t := range targets {
@@ -231,7 +231,7 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 
 	for _, t := range targets {
 		args := []string{"worktree", "remove", t.Path}
-		if rmForce {
+		if force {
 			args = append(args, "--force")
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
@@ -241,7 +241,7 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 
 		if action == rmTreeAndBranch && t.Branch != "" {
 			delArgs := []string{"branch"}
-			if rmForce {
+			if force {
 				delArgs = append(delArgs, "-D")
 			} else {
 				delArgs = append(delArgs, "-d")
