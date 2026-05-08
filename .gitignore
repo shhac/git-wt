@@ -44,6 +44,9 @@ CLAUDE.local.md
 .e2e-test/
 test-claude-script.sh
 
+# Zig-era ad-hoc scratch — kept locally, not tracked
+archived-zig/
+
 # Release artifacts
 /release/
 git-wt-*-darwin*
