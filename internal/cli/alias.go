@@ -85,6 +85,7 @@ func validIdentifier(s string) bool {
 //	{{DBG_LOAD}} optional `echo "[name] loaded …" >&2` line
 //	{{DBG_RUN}}  optional `echo "[name] running …" >&2` line
 //	{{DBG_CAP}}  optional `echo "[name] captured …" >&2` line
+//
 // The fd number ({{FD}}) is baked literally into the redirect because bash
 // expands variables AFTER parsing the redirect token — `"$fd">&1` would be
 // read as a positional arg, not a redirect.
@@ -139,4 +140,3 @@ func renderAlias(name, exe string, fdN int, plain, nonInteractive, debug bool) s
 	)
 	return r.Replace(aliasTemplate)
 }
-

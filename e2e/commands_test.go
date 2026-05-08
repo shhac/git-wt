@@ -84,7 +84,7 @@ func TestNew_NoCopySkipsConfig(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt","feat-b")
+	wtPath := filepath.Join(repo, ".gwt", "feat-b")
 	mustNotExist(t, filepath.Join(wtPath, ".env"))
 }
 
@@ -98,7 +98,7 @@ func TestNew_CopySpecExcludes(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt","feat-c")
+	wtPath := filepath.Join(repo, ".gwt", "feat-c")
 	mustExist(t, filepath.Join(wtPath, ".env"))
 	mustNotExist(t, filepath.Join(wtPath, ".env.production"))
 }
@@ -238,7 +238,7 @@ func TestClean_Orphaned(t *testing.T) {
 	if !strings.Contains(res.Stderr, "branch deleted") {
 		t.Errorf("expected `branch deleted` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt","orphan")
+	wtPath := filepath.Join(repo, ".gwt", "orphan")
 	mustNotExist(t, wtPath)
 }
 
@@ -262,7 +262,7 @@ func TestClean_UpstreamGone(t *testing.T) {
 	if !strings.Contains(res.Stderr, "upstream gone") {
 		t.Errorf("expected `upstream gone` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt","doomed-tree")
+	wtPath := filepath.Join(repo, ".gwt", "doomed-tree")
 	mustNotExist(t, wtPath)
 }
 

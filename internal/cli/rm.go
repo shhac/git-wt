@@ -135,7 +135,7 @@ func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAct
 	}
 
 	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("Remove %d worktree(s):", len(targets)))
+	fmt.Fprintf(&summary, "Remove %d worktree(s):", len(targets))
 	for _, t := range targets {
 		summary.WriteString("\n    " + t.Display())
 	}

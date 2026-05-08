@@ -5,7 +5,7 @@
 //   - "# comment" — line is ignored
 //   - "" (blank) — line is ignored
 //   - "<pattern>" — include; pattern is glob-expanded from the repo root
-//                   (* ? [...] supported, no **)
+//     (* ? [...] supported, no **)
 //   - "!<pattern>" — exclude; subtracts matches from the include set
 //   - trailing "/" — accepted, stripped before matching (informational only)
 //
@@ -49,7 +49,7 @@ func Load(path string) (*Spec, error) {
 		}
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return Parse(f)
 }
 

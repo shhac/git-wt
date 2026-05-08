@@ -49,8 +49,8 @@ var cleanCmd = &cobra.Command{
 // of the global flagXxx vars so runClean is callable from tests without
 // touching package state.
 type cleanFlags struct {
-	dryRun, noFetch          bool
-	orphanedOnly, goneOnly   bool
+	dryRun, noFetch        bool
+	orphanedOnly, goneOnly bool
 }
 
 // runClean is the body of `git-wt clean`. Steps: setup → discover targets
@@ -148,9 +148,9 @@ func collectCleanTargets(ctx context.Context, wts []wt.Worktree, repo *wt.RepoIn
 
 // printCleanTargets writes the human-readable target list. Pure: takes any io.Writer.
 func printCleanTargets(w io.Writer, targets []taggedTarget) {
-	fmt.Fprintln(w, "worktrees to remove:")
+	_, _ = fmt.Fprintln(w, "worktrees to remove:")
 	for _, t := range targets {
-		fmt.Fprintf(w, "  %s  [%s]  (%s)\n", t.wt.Display(), t.reason, t.wt.Path)
+		_, _ = fmt.Fprintf(w, "  %s  [%s]  (%s)\n", t.wt.Display(), t.reason, t.wt.Path)
 	}
 }
 

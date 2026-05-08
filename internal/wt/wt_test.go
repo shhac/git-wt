@@ -135,11 +135,8 @@ func TestCurrent_DeepestNestedWins(t *testing.T) {
 		{Path: inner},
 	}
 	got := Current(wts, deepest)
-	if got == nil {
-		t.Fatalf("expected a match, got nil")
-	}
-	if got.Path != inner {
-		t.Errorf("expected deepest match %s, got %s", inner, got.Path)
+	if got == nil || got.Path != inner {
+		t.Errorf("expected deepest match %q, got %+v", inner, got)
 	}
 }
 

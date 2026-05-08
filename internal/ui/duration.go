@@ -32,11 +32,12 @@ var durationUnits = []durationUnit{
 // joined with a single space — total width 9.
 //
 // Always two units, even when one is zero, for visual consistency:
-//   "12h  5m"   "1h  0m"
-//   " 1d 12h"   " 1d  0h"
-//   " 1wk 6d"   " 1wk 0d"
-//   " 3mo 2wk"  " 1mo 0wk"
-//   " 1y  0mo"
+//
+//	"12h  5m"   "1h  0m"
+//	" 1d 12h"   " 1d  0h"
+//	" 1wk 6d"   " 1wk 0d"
+//	" 3mo 2wk"  " 1mo 0wk"
+//	" 1y  0mo"
 //
 // Sub-minute durations render as " 0m XXs" (zero minutes + seconds), keeping
 // the same width. Non-positive input renders as "0m  0s" (also width 9).

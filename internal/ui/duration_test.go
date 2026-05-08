@@ -6,7 +6,9 @@ import (
 )
 
 // All HumanDuration outputs are exactly 9 chars wide:
-//   `%2d%-2s %2d%-2s`  →  2 + 2 + 1 + 2 + 2 = 9
+//
+//	`%2d%-2s %2d%-2s`  →  2 + 2 + 1 + 2 + 2 = 9
+//
 // 1-char unit suffixes are padded to 2 chars by `%-2s`, so output may end
 // with a trailing space when the last unit is single-char (m/s/h/d/y).
 func TestHumanDuration(t *testing.T) {

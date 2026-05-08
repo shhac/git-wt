@@ -86,7 +86,7 @@ var newCmd = &cobra.Command{
 		}
 		if conflict != "" {
 			return fmt.Errorf(
-				"case-insensitive conflict: %q already exists; this filesystem would treat it as the same path as %q. Choose a branch name that doesn't collide.",
+				"case-insensitive conflict: %q already exists; this filesystem would treat it as the same path as %q — choose a branch name that doesn't collide",
 				conflict, path,
 			)
 		}

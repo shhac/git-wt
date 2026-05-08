@@ -42,7 +42,7 @@ func (w Worktree) Display() string {
 //
 //  1. Main worktree         → repo basename            (e.g. "backend")
 //  2. Inside treesDir       → "#" + rel-to-treesDir    (e.g. "#abuja",
-//                                                        "#paul/feat/aaa")
+//     "#paul/feat/aaa")
 //  3. Inside repo (outside) → rel-to-repo              (e.g. ".conductor/abuja")
 //  4. Outside repo          → absolute path            (e.g. "/tmp/dddd")
 //

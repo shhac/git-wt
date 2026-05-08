@@ -43,7 +43,7 @@ func init() {
 // trees dir, rel-to-repo when inside the repo, absolute when outside).
 func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, treesDir string) {
 	if len(wts) == 0 {
-		fmt.Fprintln(w, "no worktrees")
+		_, _ = fmt.Fprintln(w, "no worktrees")
 		return
 	}
 
@@ -65,7 +65,7 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, trees
 		} else {
 			row = fmt.Sprintf("%s%s  %s  %s", marker, ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime))
 		}
-		fmt.Fprintln(w, row)
+		_, _ = fmt.Fprintln(w, row)
 	}
 }
 

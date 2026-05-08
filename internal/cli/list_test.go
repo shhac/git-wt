@@ -82,4 +82,3 @@ func TestPrintList_ColumnAlignment(t *testing.T) {
 		t.Errorf("location column not aligned:\n  row0=%q\n  row1=%q", lines[0], lines[1])
 	}
 }
-

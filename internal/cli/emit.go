@@ -14,21 +14,23 @@ import (
 // hint on stderr.
 func emitTarget(path string) error {
 	if w, ok := fd.Open(flagFD); ok {
-		defer w.Close()
+		defer func() { _ = w.Close() }()
 		_, err := fmt.Fprintln(w, path)
 		return err
 	}
-	fmt.Println(path)
+	if _, err := fmt.Println(path); err != nil {
+		return err
+	}
 	arrow := "→"
 	if ui.Plain {
 		arrow = "->"
 	}
-	fmt.Fprintf(os.Stderr, "%s cd %s\n", arrow, shellQuote(path))
+	_, _ = fmt.Fprintf(os.Stderr, "%s cd %s\n", arrow, shellQuote(path))
 	return nil
 }
 
 // shellQuote single-quotes s for safe inclusion in a POSIX shell command.
-// Single quotes inside s are emitted as `'\''`. Used by emitTarget and the
+// Single quotes inside s are emitted as `'\”`. Used by emitTarget and the
 // alias generator.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"

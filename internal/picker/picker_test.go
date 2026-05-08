@@ -12,14 +12,14 @@ func key(s string) tea.KeyMsg {
 
 // Special keys we use must come from typed messages, not Runes.
 var (
-	keyUp     = tea.KeyMsg{Type: tea.KeyUp}
-	keyDown   = tea.KeyMsg{Type: tea.KeyDown}
-	keyEnter  = tea.KeyMsg{Type: tea.KeyEnter}
-	keyEsc    = tea.KeyMsg{Type: tea.KeyEsc}
-	keyCtrlC  = tea.KeyMsg{Type: tea.KeyCtrlC}
-	keyHome   = tea.KeyMsg{Type: tea.KeyHome}
-	keyEnd    = tea.KeyMsg{Type: tea.KeyEnd}
-	keySpace  = tea.KeyMsg{Type: tea.KeySpace}
+	keyUp    = tea.KeyMsg{Type: tea.KeyUp}
+	keyDown  = tea.KeyMsg{Type: tea.KeyDown}
+	keyEnter = tea.KeyMsg{Type: tea.KeyEnter}
+	keyEsc   = tea.KeyMsg{Type: tea.KeyEsc}
+	keyCtrlC = tea.KeyMsg{Type: tea.KeyCtrlC}
+	keyHome  = tea.KeyMsg{Type: tea.KeyHome}
+	keyEnd   = tea.KeyMsg{Type: tea.KeyEnd}
+	keySpace = tea.KeyMsg{Type: tea.KeySpace}
 )
 
 // step delivers one key press, returning the resulting model and whether

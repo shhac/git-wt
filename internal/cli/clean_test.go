@@ -63,11 +63,11 @@ func TestParseGoneBranches(t *testing.T) {
 
 func TestFindOrphanedWorktrees_Classification(t *testing.T) {
 	wts := []wt.Worktree{
-		{Path: "/p/main", Branch: "main"},                  // skipped: main repo
-		{Path: "/p/prune", Branch: "p", Prunable: true},    // prunable
-		{Path: "/p/det", Branch: "", Detached: true},       // detached (no branch)
-		{Path: "/p/alive", Branch: "alive"},                // branch exists → kept
-		{Path: "/p/dead", Branch: "dead"},                  // branch gone → orphan
+		{Path: "/p/main", Branch: "main"},               // skipped: main repo
+		{Path: "/p/prune", Branch: "p", Prunable: true}, // prunable
+		{Path: "/p/det", Branch: "", Detached: true},    // detached (no branch)
+		{Path: "/p/alive", Branch: "alive"},             // branch exists → kept
+		{Path: "/p/dead", Branch: "dead"},               // branch gone → orphan
 	}
 	repo := &wt.RepoInfo{MainRoot: "/p/main"}
 	branchExists := func(b string) (bool, error) {
@@ -231,4 +231,3 @@ func TestCollectCleanTargets_DedupSimulation(t *testing.T) {
 		}
 	}
 }
-
