@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -106,16 +109,60 @@ var newCmd = &cobra.Command{
 			}
 		}
 
+		warnIfParentNotIgnored(ctx, repo.MainRoot, parent)
 		return emitTarget(path)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(newCmd)
-	newCmd.Flags().StringVarP(&newParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>-trees/)")
+	newCmd.Flags().StringVarP(&newParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.gwt/)")
 	newCmd.Flags().StringVar(&newFromRef, "from", "", "ref to branch from (default: current HEAD)")
 	newCmd.Flags().BoolVar(&newNoCopy, "no-copy", false, "skip copying project config files")
 	newCmd.Flags().StringVar(&newCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")
+}
+
+// warnIfParentNotIgnored prints a one-line stderr hint when parentDir lives
+// inside the main repo but isn't covered by any .gitignore rule. Worktrees
+// inside an unignored path show up as untracked content in `git status` on
+// the main worktree, which is almost always not what the user wants.
+//
+// Silent when:
+//   - parentDir is outside the repo (no concern)
+//   - parentDir resolves to the repo root itself (we'd be telling the user
+//     to ignore their own working tree)
+//   - `git check-ignore` reports the path as ignored (exit 0)
+//   - any other git error (we don't want to be noisy on edge cases)
+func warnIfParentNotIgnored(ctx context.Context, mainRoot, parentDir string) {
+	// Resolve symlinks on both sides so /tmp vs /private/tmp on macOS doesn't
+	// throw off the relative-path comparison. Fall back to the input on error.
+	if r, err := filepath.EvalSymlinks(mainRoot); err == nil {
+		mainRoot = r
+	}
+	if r, err := filepath.EvalSymlinks(parentDir); err == nil {
+		parentDir = r
+	}
+	rel, err := filepath.Rel(mainRoot, parentDir)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return
+	}
+	// `git check-ignore`:
+	//   exit 0 → at least one path is ignored
+	//   exit 1 → none of the paths are ignored (this is the case we warn on)
+	//   other  → an actual error; stay silent
+	cmd := exec.CommandContext(ctx, "git", "check-ignore", "--quiet", rel)
+	cmd.Dir = mainRoot
+	err = cmd.Run()
+	if err == nil {
+		return
+	}
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 1 {
+		return
+	}
+	rel = filepath.ToSlash(rel)
+	fmt.Fprintf(os.Stderr, "note: %s/ is not in .gitignore — `git status` in the main worktree will show worktree contents as untracked\n", rel)
+	fmt.Fprintf(os.Stderr, "      add `%s/` to .gitignore to silence this\n", rel)
 }
 
 // createWorktree runs `git worktree add` at the given path with a new branch.

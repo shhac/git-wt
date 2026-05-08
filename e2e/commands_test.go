@@ -40,14 +40,39 @@ func TestNew_CreatesWorktree(t *testing.T) {
 		t.Fatalf("new exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	// trees dir is sibling of repo
-	wtPath := filepath.Join(repo, ".gwt","feat-a")
+	// default trees dir is <repo>/.gwt
+	wtPath := filepath.Join(repo, ".gwt", "feat-a")
 	mustExist(t, wtPath)
 	mustExist(t, filepath.Join(wtPath, ".env"))
 
 	// path printed on stdout (bare mode)
 	if !strings.Contains(res.Stdout, wtPath) {
 		t.Errorf("expected stdout to include %s, got: %s", wtPath, res.Stdout)
+	}
+}
+
+func TestNew_HintsWhenParentDirNotIgnored(t *testing.T) {
+	repo := newRepo(t)
+	// No .gitignore — default .gwt/ parent is unignored.
+	res := runWT(t, repo, "new", "feat-hint", "--non-interactive", "--no-copy")
+	if res.ExitCode != 0 {
+		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, ".gwt/") || !strings.Contains(res.Stderr, ".gitignore") {
+		t.Errorf("expected gitignore hint mentioning `.gwt/` and `.gitignore`; got:\n%s", res.Stderr)
+	}
+}
+
+func TestNew_NoHintWhenParentIgnored(t *testing.T) {
+	repo := newRepo(t)
+	mustWrite(t, filepath.Join(repo, ".gitignore"), ".gwt/\n")
+
+	res := runWT(t, repo, "new", "feat-noh", "--non-interactive", "--no-copy")
+	if res.ExitCode != 0 {
+		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	if strings.Contains(res.Stderr, "not in .gitignore") {
+		t.Errorf("expected silence when .gwt/ is ignored; got:\n%s", res.Stderr)
 	}
 }
 
