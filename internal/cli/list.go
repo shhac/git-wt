@@ -50,8 +50,9 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, trees
 	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	for i := range wts {
 		t := &wts[i]
+		isCurrent := cur != nil && t.Path == cur.Path
 		marker := "  "
-		if cur != nil && t.Path == cur.Path {
+		if isCurrent {
 			marker = "* "
 		}
 		branch := padRight(t.Display(), branchW)
@@ -60,7 +61,7 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, trees
 		// Current row gets the current/green style applied to the whole row so
 		// it stays visually consistent. Other rows get cyan branch + dim loc/mtime.
 		var row string
-		if cur != nil && t.Path == cur.Path {
+		if isCurrent {
 			row = ui.Current(fmt.Sprintf("%s%s  %s  %s", marker, branch, loc, mtime))
 		} else {
 			row = fmt.Sprintf("%s%s  %s  %s", marker, ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime))

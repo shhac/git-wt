@@ -178,6 +178,11 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 		}
 	}
 
+	branchFlag := "-d"
+	if force {
+		branchFlag = "-D"
+	}
+
 	for _, t := range targets {
 		args := []string{"worktree", "remove", t.Path}
 		if force {
@@ -189,14 +194,7 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
 
 		if action == rmTreeAndBranch && t.Branch != "" {
-			delArgs := []string{"branch"}
-			if force {
-				delArgs = append(delArgs, "-D")
-			} else {
-				delArgs = append(delArgs, "-d")
-			}
-			delArgs = append(delArgs, t.Branch)
-			if _, err := git.Run(ctx, delArgs...); err != nil {
+			if _, err := git.Run(ctx, "branch", branchFlag, t.Branch); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: delete branch %s: %v\n", t.Branch, err)
 				continue
 			}
