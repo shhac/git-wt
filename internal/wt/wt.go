@@ -84,9 +84,11 @@ func Current(wts []Worktree, dir string) *Worktree {
 	if err != nil {
 		return nil
 	}
-	abs, _ = filepath.EvalSymlinks(abs)
-	if abs == "" {
-		return nil
+	// EvalSymlinks fails for non-existent paths (returns "" + err). Fall back
+	// to the un-resolved absolute path so we still match worktrees correctly
+	// from a directory the user is just about to create.
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
 	}
 
 	// Pick the deepest match — handles nested worktrees (the Bug #36 / v0.6.2 case).

@@ -30,6 +30,9 @@ func CopyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
 		return os.Symlink(target, dst)
 	case info.IsDir():
 		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {

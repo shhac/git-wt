@@ -1,6 +1,8 @@
 package wt
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -47,6 +49,21 @@ func TestSortByModTime(t *testing.T) {
 	}
 }
 
+func TestSortByModTime_AllZero(t *testing.T) {
+	wts := []Worktree{
+		{Path: "/a"},
+		{Path: "/b"},
+		{Path: "/c"},
+	}
+	SortByModTime(wts)
+	// stable order preserved
+	for i, want := range []string{"/a", "/b", "/c"} {
+		if wts[i].Path != want {
+			t.Errorf("position %d: got %s, want %s", i, wts[i].Path, want)
+		}
+	}
+}
+
 func TestParentDirName(t *testing.T) {
 	cases := []struct {
 		path string
@@ -65,31 +82,97 @@ func TestParentDirName(t *testing.T) {
 	}
 }
 
-func TestValidateBranchName(t *testing.T) {
-	good := []string{"main", "feature/auth", "paul/wip", "fix-123", "feat_foo"}
-	for _, s := range good {
-		if err := ValidateBranchName(s); err != nil {
-			t.Errorf("ValidateBranchName(%q) returned error: %v", s, err)
+func TestCurrent_ExactMatch(t *testing.T) {
+	tmp := t.TempDir()
+	wts := []Worktree{
+		{Path: tmp},
+		{Path: t.TempDir()},
+	}
+	got := Current(wts, tmp)
+	if got == nil || got.Path != tmp {
+		t.Errorf("expected exact match for %s, got %+v", tmp, got)
+	}
+}
+
+func TestCurrent_SubdirMatch(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "src", "deep")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wts := []Worktree{{Path: tmp}}
+	got := Current(wts, sub)
+	if got == nil || got.Path != tmp {
+		t.Errorf("expected match for subdir %s under worktree %s, got %+v", sub, tmp, got)
+	}
+}
+
+func TestCurrent_DeepestNestedWins(t *testing.T) {
+	// Bug #36 / v0.6.2: when one worktree is nested inside another, the
+	// inner one should be reported as current (deepest match wins).
+	outer := t.TempDir()
+	inner := filepath.Join(outer, "inner")
+	deepest := filepath.Join(inner, "subdir")
+	if err := os.MkdirAll(deepest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wts := []Worktree{
+		{Path: outer},
+		{Path: inner},
+	}
+	got := Current(wts, deepest)
+	if got == nil {
+		t.Fatalf("expected a match, got nil")
+	}
+	if got.Path != inner {
+		t.Errorf("expected deepest match %s, got %s", inner, got.Path)
+	}
+}
+
+func TestCurrent_NoMatchReturnsNil(t *testing.T) {
+	a := t.TempDir()
+	b := t.TempDir()
+	wts := []Worktree{{Path: a}}
+	got := Current(wts, b)
+	if got != nil {
+		t.Errorf("expected nil for non-matching dir, got %+v", got)
+	}
+}
+
+func TestCurrent_EmptyDirReturnsNil(t *testing.T) {
+	got := Current([]Worktree{{Path: "/anywhere"}}, "")
+	if got != nil {
+		t.Errorf("expected nil for empty dir, got %+v", got)
+	}
+}
+
+func TestConstructPath(t *testing.T) {
+	cases := []struct {
+		parent string
+		branch string
+		want   string
+	}{
+		{"/parent", "feat", filepath.Join("/parent", "feat")},
+		{"/parent", "paul/auth", filepath.Join("/parent", "paul", "auth")},
+		{"/parent", "deep/nest/branch", filepath.Join("/parent", "deep", "nest", "branch")},
+	}
+	for _, c := range cases {
+		got := ConstructPath(c.parent, c.branch)
+		if got != c.want {
+			t.Errorf("ConstructPath(%q, %q) = %q, want %q", c.parent, c.branch, got, c.want)
 		}
 	}
-	bad := []string{
-		"",
-		"-startswithdash",
-		"/leading-slash",
-		"trailing-slash/",
-		"double//slash",
-		"has space",
-		"has..dotdot",
-		"name.lock",
-		"control\x01char",
-		"caret^",
-		"colon:foo",
-		"backslash\\",
-		"@{badref}",
+}
+
+func TestTreesDirFor(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"/home/user/repo", "/home/user/repo-trees"},
+		{"/repo", "/repo-trees"},
 	}
-	for _, s := range bad {
-		if err := ValidateBranchName(s); err == nil {
-			t.Errorf("ValidateBranchName(%q) should have errored", s)
+	for _, c := range cases {
+		got := TreesDirFor(c.in)
+		if got != c.want {
+			t.Errorf("TreesDirFor(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

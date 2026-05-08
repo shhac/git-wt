@@ -29,12 +29,21 @@ func CaseInsensitiveFilesystem() bool {
 // component case-insensitively but not exactly. Returns the offending path,
 // or "" if no collision.
 //
+// Returns "" without scanning on case-sensitive filesystems (Linux), where
+// "Paul" and "paul" can legitimately coexist.
+//
 // Branch names with slashes are walked component-by-component so we catch
 // "Paul/feat" colliding with an existing "paul/" directory.
 func FindCaseCollision(parent, branch string) (string, error) {
 	if !CaseInsensitiveFilesystem() {
 		return "", nil
 	}
+	return walkCaseCollision(parent, branch)
+}
+
+// walkCaseCollision is the OS-independent inner loop, exposed so tests can
+// exercise the logic directly without the OS gate.
+func walkCaseCollision(parent, branch string) (string, error) {
 	parts := strings.Split(filepath.FromSlash(branch), string(filepath.Separator))
 	cur := parent
 	for _, part := range parts {

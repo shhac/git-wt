@@ -69,17 +69,19 @@ var cleanCmd = &cobra.Command{
 
 		var targets []taggedTarget
 		if doOrphaned {
-			ts, err := findOrphanedWorktrees(ctx, wts, repo)
+			branchExists := func(b string) (bool, error) { return wt.BranchExists(ctx, "", b) }
+			ts, err := findOrphanedWorktrees(wts, repo, branchExists)
 			if err != nil {
 				return err
 			}
 			targets = append(targets, ts...)
 		}
 		if doGone {
-			ts, err := findUpstreamGoneWorktrees(ctx, wts, repo)
+			gone, err := goneBranches(ctx)
 			if err != nil {
 				return err
 			}
+			ts := findUpstreamGoneWorktrees(wts, repo, goneSetFromList(gone))
 			// Don't double-count: skip targets already added by the orphaned check.
 			seen := pathSet(targets)
 			for _, t := range ts {
@@ -153,9 +155,15 @@ func pathSet(ts []taggedTarget) map[string]struct{} {
 	return out
 }
 
+// branchExistsFn is the dependency-injection seam for BranchExists. The cli
+// uses wt.BranchExists; tests pass a fake.
+type branchExistsFn func(branch string) (bool, error)
+
 // findOrphanedWorktrees returns worktrees whose local branch no longer exists,
 // or who report as detached/prunable (i.e. the branch is gone or never was).
-func findOrphanedWorktrees(ctx context.Context, wts []wt.Worktree, repo *wt.RepoInfo) ([]taggedTarget, error) {
+// branchExists is injected so the classification logic is testable without
+// running git.
+func findOrphanedWorktrees(wts []wt.Worktree, repo *wt.RepoInfo, branchExists branchExistsFn) ([]taggedTarget, error) {
 	var out []taggedTarget
 	for _, t := range wts {
 		if t.Path == repo.MainRoot {
@@ -171,7 +179,7 @@ func findOrphanedWorktrees(ctx context.Context, wts []wt.Worktree, repo *wt.Repo
 			out = append(out, taggedTarget{wt: t, reason: "detached"})
 			continue
 		}
-		exists, err := wt.BranchExists(ctx, "", t.Branch)
+		exists, err := branchExists(t.Branch)
 		if err != nil {
 			return nil, err
 		}
@@ -182,32 +190,23 @@ func findOrphanedWorktrees(ctx context.Context, wts []wt.Worktree, repo *wt.Repo
 	return out, nil
 }
 
-// findUpstreamGoneWorktrees returns worktrees whose branch has [gone] tracking.
-func findUpstreamGoneWorktrees(ctx context.Context, wts []wt.Worktree, repo *wt.RepoInfo) ([]taggedTarget, error) {
-	gone, err := goneBranches(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(gone) == 0 {
-		return nil, nil
-	}
-	set := make(map[string]struct{}, len(gone))
-	for _, b := range gone {
-		set[b] = struct{}{}
-	}
+// findUpstreamGoneWorktrees returns worktrees whose branch is in goneSet.
+// Pure: caller computes goneSet (typically via goneBranches→parseGoneBranches).
+func findUpstreamGoneWorktrees(wts []wt.Worktree, repo *wt.RepoInfo, goneSet map[string]struct{}) []taggedTarget {
 	var out []taggedTarget
 	for _, t := range wts {
 		if t.Path == repo.MainRoot || t.Branch == "" {
 			continue
 		}
-		if _, ok := set[t.Branch]; ok {
+		if _, ok := goneSet[t.Branch]; ok {
 			out = append(out, taggedTarget{wt: t, reason: "upstream gone"})
 		}
 	}
-	return out, nil
+	return out
 }
 
-// goneBranches returns local branches whose upstream has been pruned (`[gone]`).
+// goneBranches returns local branches whose upstream has been pruned ([gone]).
+// Wraps the git call + the pure parser; tests target parseGoneBranches.
 func goneBranches(ctx context.Context) ([]string, error) {
 	out, err := git.Run(ctx,
 		"for-each-ref",
@@ -217,8 +216,14 @@ func goneBranches(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseGoneBranches(out), nil
+}
+
+// parseGoneBranches extracts branch names whose tracking column contains
+// "gone" from the output of `git for-each-ref --format=…\t%(upstream:track)`.
+func parseGoneBranches(output string) []string {
 	var gone []string
-	for _, line := range strings.Split(out, "\n") {
+	for _, line := range strings.Split(output, "\n") {
 		if line == "" {
 			continue
 		}
@@ -227,5 +232,15 @@ func goneBranches(ctx context.Context) ([]string, error) {
 			gone = append(gone, name)
 		}
 	}
-	return gone, nil
+	return gone
+}
+
+// goneSetFromList is a small helper for tests and callers that need the
+// gone-branches list as a set.
+func goneSetFromList(names []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		out[n] = struct{}{}
+	}
+	return out
 }
