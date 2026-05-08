@@ -64,5 +64,6 @@ func resolveGoTarget(wts []wt.Worktree, cur *wt.Worktree, args []string, mainRoo
 	if !interactive() {
 		return nil, fmt.Errorf("no branch specified (use a branch arg in non-interactive mode)")
 	}
-	return pickWorktree("Choose a worktree", choices, mainRoot, treesDir)
+	// No title — for go, the cursor + options are self-explanatory.
+	return pickWorktree("", choices, mainRoot, treesDir)
 }

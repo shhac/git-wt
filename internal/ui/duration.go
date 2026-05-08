@@ -11,35 +11,41 @@ type durationUnit struct {
 	suffix string
 }
 
-// units is ordered largest-first. We use 30d for "month" and 365d for "year"
-// — close enough for "how stale is this worktree" labelling, and it keeps
-// boundaries predictable. Seconds are included so the second-unit slot can
-// show "1m 30s".
+// Units are ordered largest-first. 30d for "month" and 365d for "year" —
+// close enough for "how stale is this worktree" labelling, and it keeps
+// boundaries predictable.
+//
+// Suffixes are 1- or 2-char so the "%-2s" format below produces a fixed
+// 4-char-wide unit cell (`%2d` + `%-2s`).
 var durationUnits = []durationUnit{
 	{365 * 24 * time.Hour, "y"},
 	{30 * 24 * time.Hour, "mo"},
-	{7 * 24 * time.Hour, "w"},
+	{7 * 24 * time.Hour, "wk"},
 	{24 * time.Hour, "d"},
 	{time.Hour, "h"},
 	{time.Minute, "m"},
 	{time.Second, "s"},
 }
 
-// HumanDuration formats a duration as a short label suitable for picker rows.
+// HumanDuration formats a duration as a fixed-width 9-char label suitable
+// for column-aligned picker rows. Each unit cell is `%2d%-2s` (4 chars),
+// joined with a single space — total width 9.
 //
-// Sub-minute durations render as a single seconds count ("30s") because
-// there's nothing finer than seconds to show in the second slot. Anything
-// longer always renders TWO units — the largest fitting unit and the unit
-// immediately below it, even when the second slot is zero:
-//   "5h 27m", "5h 0m", "1d 0h", "1y 0mo", "1mo 0w".
+// Always two units, even when one is zero, for visual consistency:
+//   "12h  5m"   "1h  0m"
+//   " 1d 12h"   " 1d  0h"
+//   " 1wk 6d"   " 1wk 0d"
+//   " 3mo 2wk"  " 1mo 0wk"
+//   " 1y  0mo"
 //
-// Negative or zero durations render as "now".
+// Sub-minute durations render as " 0m XXs" (zero minutes + seconds), keeping
+// the same width. Non-positive input renders as "0m  0s" (also width 9).
 func HumanDuration(d time.Duration) string {
-	if d <= 0 {
-		return "now"
+	if d < 0 {
+		d = 0
 	}
 	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
+		return fmt.Sprintf("%2d%-2s %2d%-2s", 0, "m", int(d.Seconds()), "s")
 	}
 	for i, u := range durationUnits {
 		if d < u.amount {
@@ -47,22 +53,20 @@ func HumanDuration(d time.Duration) string {
 		}
 		top := int(d / u.amount)
 		rem := d - time.Duration(top)*u.amount
-		// Always emit the next-smaller unit if one exists, even at zero,
-		// for consistent two-unit output.
-		if i+1 < len(durationUnits) {
-			next := durationUnits[i+1]
-			second := int(rem / next.amount)
-			return fmt.Sprintf("%d%s %d%s", top, u.suffix, second, next.suffix)
-		}
-		return fmt.Sprintf("%d%s", top, u.suffix)
+		// `s` is the smallest unit; below `m` we drop into the sub-minute path
+		// above, so we always have an i+1 here.
+		next := durationUnits[i+1]
+		second := int(rem / next.amount)
+		return fmt.Sprintf("%2d%-2s %2d%-2s", top, u.suffix, second, next.suffix)
 	}
-	return "now"
+	return fmt.Sprintf("%2d%-2s %2d%-2s", 0, "m", 0, "s")
 }
 
-// HumanSince formats time.Since(t) via HumanDuration. Zero t yields "—".
+// HumanSince formats time.Since(t) via HumanDuration. Zero t yields a
+// 9-char-wide em-dash placeholder so column alignment stays consistent.
 func HumanSince(t time.Time) string {
 	if t.IsZero() {
-		return "—"
+		return "        —"
 	}
 	return HumanDuration(time.Since(t))
 }

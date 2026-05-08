@@ -12,12 +12,22 @@ import (
 )
 
 // pickerTheme returns the huh theme for interactive prompts. ThemeBase is
-// used in --plain mode (no color); ThemeCharm otherwise.
+// used in --plain mode (no color); ThemeCharm with two adjustments otherwise:
+//
+//  1. Option foreground colors are unset so per-column ANSI in the option
+//     text (e.g. cyan branch + dim location) survives huh's outer styling.
+//  2. The title is dimmed (bright black, not bold) — for an experienced
+//     user the title is the least interesting part of the screen.
 func pickerTheme() *huh.Theme {
 	if ui.Plain {
 		return huh.ThemeBase()
 	}
-	return huh.ThemeCharm()
+	t := huh.ThemeCharm()
+	t.Focused.Option = t.Focused.Option.UnsetForeground()
+	t.Focused.UnselectedOption = t.Focused.UnselectedOption.UnsetForeground()
+	t.Focused.Title = t.Focused.Title.Foreground(lipgloss.Color("8")).Bold(false)
+	t.Focused.NoteTitle = t.Focused.NoteTitle.Foreground(lipgloss.Color("8")).Bold(false)
+	return t
 }
 
 // silentIfAborted maps huh.ErrUserAborted (ESC / Ctrl-C) to nil so callers
