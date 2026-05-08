@@ -9,6 +9,18 @@ import (
 	"testing"
 )
 
+// hermeticGit configures the test environment so `git check-ignore` (and
+// any other git invocation) doesn't pick up the developer's global or
+// system gitignore. Required because some users include `.gwt/` in their
+// global gitignore — which is the *correct* user-side fix this test is
+// trying to suggest, but it would mask the warning we're testing.
+func hermeticGit(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
 // captureStderr runs fn with os.Stderr replaced by a pipe, returns the
 // captured bytes as a string.
 func captureStderr(t *testing.T, fn func()) string {
@@ -80,6 +92,7 @@ func mkParent(t *testing.T, parent string) {
 }
 
 func TestWarnIfParentNotIgnored_NotIgnored_Fires(t *testing.T) {
+	hermeticGit(t)
 	repo := initRepo(t) // no .gitignore
 	parent := filepath.Join(repo, ".gwt")
 	mkParent(t, parent)
@@ -126,6 +139,7 @@ func TestWarnIfParentNotIgnored_RepoRootItself_Silent(t *testing.T) {
 }
 
 func TestWarnIfParentNotIgnored_NestedPath_FiresWithRelative(t *testing.T) {
+	hermeticGit(t)
 	repo := initRepo(t)
 	parent := filepath.Join(repo, "foo", "bar")
 	mkParent(t, parent)

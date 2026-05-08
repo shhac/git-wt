@@ -112,8 +112,10 @@ func doRun(t *testing.T, cwd string, withFD bool, args ...string) runResult {
 }
 
 // hermeticEnv returns a minimal env that lets git run without depending on
-// the developer's user.name/user.email and without the user's $HOME being
-// scanned for hooks/gitconfig. PATH is preserved (we still need git).
+// the developer's user.name/user.email and without picking up the global or
+// system gitignore (which on developer machines often includes things like
+// `.gwt/` — exactly the path our tests want to assert is *not* covered).
+// PATH is preserved (we still need git).
 func hermeticEnv() []string {
 	keep := []string{"PATH", "HOME", "USER", "TMPDIR", "LANG", "LC_ALL"}
 	env := []string{
@@ -123,6 +125,11 @@ func hermeticEnv() []string {
 		"GIT_COMMITTER_EMAIL=test@example.com",
 		// Quiet down git's hint output that would otherwise flood stderr
 		"GIT_TERMINAL_PROMPT=0",
+		// Ignore developer-side gitconfig + gitignore_global so check-ignore
+		// behaviour is reproducible.
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_NOSYSTEM=1",
 	}
 	for _, k := range keep {
 		if v, ok := os.LookupEnv(k); ok {

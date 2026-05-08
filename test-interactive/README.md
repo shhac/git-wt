@@ -1,71 +1,41 @@
-# Interactive Tests for git-wt
+# Interactive Tests for git-wt (legacy)
 
-This directory contains expect-based interactive tests for the git-wt CLI tool. These tests verify the arrow-key navigation, multi-select functionality, and other interactive features.
+> **Status: not currently runnable.** These `expect`-based scripts were
+> written against the Zig implementation and target its key bindings,
+> output format, and (in places) the now-removed `--show-command` flag.
+> They have **not** been ported to the Go rewrite. Kept as historical
+> reference only.
+>
+> The Go E2E suite — which exercises the built binary against fresh
+> `/tmp/` repos via `os/exec` — lives in `e2e/` and runs as part of
+> `go test -race -count=1 ./...`. New E2E tests should go there.
 
-## Prerequisites
+## Original purpose
 
-- `expect` must be installed:
-  - macOS: `brew install expect`
-  - Linux: `apt-get install expect` or `yum install expect`
+These tests verified the Zig version's interactive features:
 
-## Running Tests
+- Arrow-key navigation in `gwt go` (single-select)
+- Multi-select with space-toggles in `gwt rm`
+- Confirmation prompts
+- ESC cancellation
+- The Zig-era `--show-command` flag
 
-### Run all tests
-```bash
-./run-all-tests.sh
-```
+They drive the binary through a pseudo-tty using
+[`expect`](https://core.tcl-lang.org/expect/) with human-like keystroke
+timing.
 
-### Run individual test suites
-```bash
-./test-navigation.exp  # Test arrow-key navigation in `go` command
-./test-removal.exp     # Test multi-select removal in `rm` command
-```
+## Re-using these for the Go binary
 
-## Test Coverage
+If you want to bring them back:
 
-### Navigation Tests (`test-navigation.exp`)
-- ✅ Arrow-key navigation (up/down arrows)
-- ✅ Selection with Enter key
-- ✅ Cancellation with ESC key
-- ✅ Navigation from within a worktree
-- ✅ --show-command flag behavior
+1. Update the binary path (was `./zig-out/bin/git-wt`, now `./git-wt`).
+2. Replace `--show-command` references — the Go rewrite always emits the
+   wrapper-protocol path on fd N when fd N is open.
+3. Replace `GWT_USE_FD3=1` env var — the Go rewrite uses the `--fd N`
+   flag; the wrapper from `git-wt alias` baking it in.
+4. Re-time the keystroke delays — bubbletea's input loop has different
+   timing characteristics from the hand-rolled Zig terminal handling.
 
-### Removal Tests (`test-removal.exp`)
-- ✅ Multi-select with arrow keys and space bar
-- ✅ Selective removal (keeping some worktrees)
-- ✅ Confirmation prompts
-- ✅ ESC cancellation in multi-select mode
-- ✅ --force flag skipping uncommitted changes check
-
-## Test Design
-
-The tests use expect scripts with human-like timing:
-- 25ms delay between keystrokes
-- 200-500ms reaction time before actions
-- Screen capture capability for debugging
-
-### Key Features
-- **Human-like timing**: Tests simulate real user interaction speeds
-- **Screen capture**: Can capture terminal state at any point for debugging
-- **Fallback handling**: Tests handle both arrow-key and number-based modes
-- **Cleanup**: All tests clean up their temporary repositories
-
-## Adding New Tests
-
-1. Create a new `.exp` file following the existing patterns
-2. Use the helper procedures:
-   - `capture_screen` - Capture and display terminal state
-   - `send_key` - Send a single key with human delay
-   - `send_human` - Type text with human-like speed
-   - `test_failed` - Mark a test as failed
-
-3. Add the test to `run-all-tests.sh`
-
-## Debugging Failed Tests
-
-Run individual test files directly to see detailed output:
-```bash
-./test-navigation.exp  # Shows all screen captures and step-by-step progress
-```
-
-The screen capture functionality shows exactly what the terminal displayed at each step, making it easy to debug UI issues.
+Most teams will be better served by writing new tests in `e2e/` using
+Go's `os/exec` and `os.Pipe` (see `e2e/main_test.go::runWTFD` for the
+fd-3 capture pattern).
