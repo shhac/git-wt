@@ -27,10 +27,11 @@ var durationUnits = []durationUnit{
 
 // HumanDuration formats a duration as a short label suitable for picker rows.
 //
-// Sub-minute durations render as a single seconds count ("30s"). Anything
-// longer renders the largest non-zero unit and the next non-zero smaller
-// unit beneath it: "5h 27m", "4w 1d", "1mo 1w", "2y 3mo". When the remainder
-// rounds out exactly, only the top unit appears: "5h", "1d", "1y".
+// Sub-minute durations render as a single seconds count ("30s") because
+// there's nothing finer than seconds to show in the second slot. Anything
+// longer always renders TWO units — the largest fitting unit and the unit
+// immediately below it, even when the second slot is zero:
+//   "5h 27m", "5h 0m", "1d 0h", "1y 0mo", "1mo 0w".
 //
 // Negative or zero durations render as "now".
 func HumanDuration(d time.Duration) string {
@@ -46,11 +47,12 @@ func HumanDuration(d time.Duration) string {
 		}
 		top := int(d / u.amount)
 		rem := d - time.Duration(top)*u.amount
-		for j := i + 1; j < len(durationUnits); j++ {
-			if rem >= durationUnits[j].amount {
-				second := int(rem / durationUnits[j].amount)
-				return fmt.Sprintf("%d%s %d%s", top, u.suffix, second, durationUnits[j].suffix)
-			}
+		// Always emit the next-smaller unit if one exists, even at zero,
+		// for consistent two-unit output.
+		if i+1 < len(durationUnits) {
+			next := durationUnits[i+1]
+			second := int(rem / next.amount)
+			return fmt.Sprintf("%d%s %d%s", top, u.suffix, second, next.suffix)
 		}
 		return fmt.Sprintf("%d%s", top, u.suffix)
 	}
