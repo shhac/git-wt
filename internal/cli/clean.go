@@ -154,7 +154,9 @@ func printCleanTargets(w io.Writer, targets []taggedTarget) {
 	}
 }
 
-// confirmClean prompts the user for final approval (interactive only).
+// confirmClean prompts the user for final approval (interactive only). ESC /
+// Ctrl-C are treated as a cancel response (returns false, nil) rather than
+// an error.
 func confirmClean(n int) (bool, error) {
 	var ok bool
 	err := huh.NewConfirm().
@@ -162,9 +164,9 @@ func confirmClean(n int) (bool, error) {
 		Affirmative("Remove").
 		Negative("Cancel").
 		Value(&ok).
-		WithTheme(huh.ThemeBase()).
+		WithTheme(pickerTheme()).
 		Run()
-	return ok, err
+	return ok, silentIfAborted(err)
 }
 
 func init() {

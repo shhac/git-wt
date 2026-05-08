@@ -145,9 +145,9 @@ func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAct
 		Title(summary.String()).
 		Options(rmOptions(keepBranch, deleteBranch)...).
 		Value(&choice).
-		WithTheme(huh.ThemeBase()).
+		WithTheme(pickerTheme()).
 		Run()
-	if err != nil {
+	if err := silentIfAborted(err); err != nil {
 		return rmCancel, err
 	}
 	return choice, nil

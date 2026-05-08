@@ -24,6 +24,7 @@ func Initialize() {
 var (
 	current = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // green + bold
 	dim     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))             // bright black
+	branch  = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))            // cyan
 )
 
 // Current renders text in the "current worktree" style.
@@ -40,4 +41,12 @@ func Dim(s string) string {
 		return s
 	}
 	return dim.Render(s)
+}
+
+// Branch renders text in the "branch name" style (cyan).
+func Branch(s string) string {
+	if Plain {
+		return s
+	}
+	return branch.Render(s)
 }

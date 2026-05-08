@@ -36,6 +36,9 @@ var goCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if target == nil {
+			return nil // user cancelled the picker (ESC / Ctrl-C)
+		}
 		return emitTarget(target.Path)
 	},
 }

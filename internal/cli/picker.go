@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/huh"
@@ -10,8 +11,27 @@ import (
 	"github.com/shhac/git-wt/internal/wt"
 )
 
+// pickerTheme returns the huh theme for interactive prompts. ThemeBase is
+// used in --plain mode (no color); ThemeCharm otherwise.
+func pickerTheme() *huh.Theme {
+	if ui.Plain {
+		return huh.ThemeBase()
+	}
+	return huh.ThemeCharm()
+}
+
+// silentIfAborted maps huh.ErrUserAborted (ESC / Ctrl-C) to nil so callers
+// can distinguish "user cancelled, exit cleanly" from "real error".
+func silentIfAborted(err error) error {
+	if errors.Is(err, huh.ErrUserAborted) {
+		return nil
+	}
+	return err
+}
+
 // pickWorktree opens an interactive single-select over wts and returns the
-// chosen entry. Caller is responsible for ensuring wts is non-empty.
+// chosen entry, or (nil, nil) if the user cancelled (ESC / Ctrl-C).
+// Caller is responsible for ensuring wts is non-empty.
 func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*wt.Worktree, error) {
 	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	options := make([]huh.Option[string], len(wts))
@@ -24,10 +44,13 @@ func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*
 		Title(title).
 		Options(options...).
 		Value(&pickedPath).
-		WithTheme(huh.ThemeBase()).
+		WithTheme(pickerTheme()).
 		Run()
-	if err != nil {
+	if err := silentIfAborted(err); err != nil {
 		return nil, err
+	}
+	if pickedPath == "" {
+		return nil, nil // user cancelled
 	}
 	for i := range wts {
 		if wts[i].Path == pickedPath {
@@ -38,8 +61,8 @@ func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*
 }
 
 // pickWorktreesToRemove opens an interactive multi-select for the rm command.
-// Returns the chosen worktrees in display order. An empty selection (user
-// pressed enter without toggling anything) is returned as nil.
+// Returns the chosen worktrees in display order; an empty selection (user
+// cancelled or pressed enter without toggling) returns nil.
 func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) ([]wt.Worktree, error) {
 	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	options := make([]huh.Option[string], len(wts))
@@ -52,9 +75,9 @@ func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) ([]wt.W
 		Title("Select worktrees to remove (space to toggle, enter to continue)").
 		Options(options...).
 		Value(&picked).
-		WithTheme(huh.ThemeBase()).
+		WithTheme(pickerTheme()).
 		Run()
-	if err != nil {
+	if err := silentIfAborted(err); err != nil {
 		return nil, err
 	}
 	if len(picked) == 0 {
@@ -79,7 +102,7 @@ func formatPickerRow(t wt.Worktree, mainRoot, treesDir string, branchW, parentW 
 	branch := padRight(t.Display(), branchW)
 	loc := padRight(t.DisplayPath(mainRoot, treesDir), parentW)
 	mtime := ui.HumanSince(t.ModTime)
-	return fmt.Sprintf("%s  %s  %s", branch, ui.Dim(loc), ui.Dim(mtime))
+	return fmt.Sprintf("%s  %s  %s", ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime))
 }
 
 // columnWidths returns the maximum widths of the branch and location columns
