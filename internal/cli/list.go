@@ -18,13 +18,17 @@ var listCmd = &cobra.Command{
 	Long:    "Show every worktree with its branch, parent directory, and last-modified time. The current worktree is marked with `*`.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		repo, err := wt.Inspect(ctx, "")
+		if err != nil {
+			return err
+		}
 		wts, err := wt.List(ctx, "")
 		if err != nil {
 			return err
 		}
 		wt.SortByModTime(wts)
 		cur := wt.Current(wts, mustWD())
-		printList(os.Stdout, wts, cur)
+		printList(os.Stdout, wts, cur, repo.MainRoot, wt.TreesDirFor(repo.MainRoot))
 		return nil
 	},
 }
@@ -34,14 +38,16 @@ func init() {
 }
 
 // printList renders the table to w using the user's --plain preference.
-// Columns: marker | branch | parent dir | mtime
-func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree) {
+// Columns: marker | branch | location | mtime. The "location" column follows
+// Worktree.DisplayPath rules (basename for main, # prefix when inside the
+// trees dir, rel-to-repo when inside the repo, absolute when outside).
+func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, treesDir string) {
 	if len(wts) == 0 {
 		fmt.Fprintln(w, "no worktrees")
 		return
 	}
 
-	branchW, parentW := columnWidths(wts)
+	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	for i := range wts {
 		t := &wts[i]
 		marker := "  "
@@ -49,9 +55,9 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree) {
 			marker = "* "
 		}
 		branch := padRight(t.Display(), branchW)
-		parent := padRight(t.ParentDirName(), parentW)
+		loc := padRight(t.DisplayPath(mainRoot, treesDir), parentW)
 		mtime := ui.HumanSince(t.ModTime)
-		row := fmt.Sprintf("%s%s  %s  %s", marker, branch, ui.Dim(parent), ui.Dim(mtime))
+		row := fmt.Sprintf("%s%s  %s  %s", marker, branch, ui.Dim(loc), ui.Dim(mtime))
 		if cur != nil && t.Path == cur.Path {
 			row = ui.Current(row)
 		}

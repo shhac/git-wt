@@ -64,21 +64,35 @@ func TestSortByModTime_AllZero(t *testing.T) {
 	}
 }
 
-func TestParentDirName(t *testing.T) {
+func TestDisplayPath(t *testing.T) {
+	const main = "/Users/paul/projects/backend"
+	const trees = "/Users/paul/projects/backend/.gwt"
 	cases := []struct {
-		path string
-		want string
+		name, path, want string
 	}{
-		{"/Users/paul/projects/repo", "projects"},
-		{"/Users/paul/projects/repo-trees/feat", "repo-trees"},
-		{"/Users/paul/projects/repo-trees/paul/feat", "paul"},
-		{"/foo", "/"},
+		{"main worktree → repo basename", main, "backend"},
+		{"inside trees dir, flat → #abuja", trees + "/abuja", "#abuja"},
+		{"inside trees dir, namespaced → #paul/feat/aaa", trees + "/paul/feat/aaa", "#paul/feat/aaa"},
+		{"inside repo, outside trees → rel-to-repo", main + "/.conductor/abuja", ".conductor/abuja"},
+		{"inside repo, deeper outside trees → rel-to-repo", main + "/sub/dir/x", "sub/dir/x"},
+		{"outside repo → absolute", "/tmp/dddd", "/tmp/dddd"},
 	}
 	for _, c := range cases {
-		got := Worktree{Path: c.path}.ParentDirName()
-		if got != c.want {
-			t.Errorf("%s: got %q, want %q", c.path, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			got := Worktree{Path: c.path}.DisplayPath(main, trees)
+			if got != c.want {
+				t.Errorf("got %q, want %q (path=%s)", got, c.want, c.path)
+			}
+		})
+	}
+}
+
+func TestDisplayPath_NoTreesDirGate(t *testing.T) {
+	// If treesDir is empty, the # rule is skipped — falls through to repo-rel.
+	const main = "/repo"
+	got := Worktree{Path: main + "/sub"}.DisplayPath(main, "")
+	if got != "sub" {
+		t.Errorf("got %q, want sub", got)
 	}
 }
 
@@ -166,8 +180,8 @@ func TestConstructPath(t *testing.T) {
 
 func TestTreesDirFor(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"/home/user/repo", "/home/user/repo-trees"},
-		{"/repo", "/repo-trees"},
+		{"/home/user/repo", "/home/user/repo/.gwt"},
+		{"/repo", "/repo/.gwt"},
 	}
 	for _, c := range cases {
 		got := TreesDirFor(c.in)

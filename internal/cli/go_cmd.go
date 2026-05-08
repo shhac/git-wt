@@ -21,6 +21,10 @@ var goCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		repo, err := wt.Inspect(ctx, "")
+		if err != nil {
+			return err
+		}
 		wts, err := wt.List(ctx, "")
 		if err != nil {
 			return err
@@ -28,7 +32,7 @@ var goCmd = &cobra.Command{
 		wt.SortByModTime(wts)
 		cur := wt.Current(wts, mustWD())
 
-		target, err := resolveGoTarget(wts, cur, args)
+		target, err := resolveGoTarget(wts, cur, args, repo.MainRoot, wt.TreesDirFor(repo.MainRoot))
 		if err != nil {
 			return err
 		}
@@ -41,7 +45,7 @@ func init() {
 }
 
 // resolveGoTarget returns the worktree the user wants to navigate to.
-func resolveGoTarget(wts []wt.Worktree, cur *wt.Worktree, args []string) (*wt.Worktree, error) {
+func resolveGoTarget(wts []wt.Worktree, cur *wt.Worktree, args []string, mainRoot, treesDir string) (*wt.Worktree, error) {
 	if len(args) == 1 {
 		t := findByBranch(wts, args[0])
 		if t == nil {
@@ -57,5 +61,5 @@ func resolveGoTarget(wts []wt.Worktree, cur *wt.Worktree, args []string) (*wt.Wo
 	if !interactive() {
 		return nil, fmt.Errorf("no branch specified (use a branch arg in non-interactive mode)")
 	}
-	return pickWorktree("Choose a worktree", choices)
+	return pickWorktree("Choose a worktree", choices, mainRoot, treesDir)
 }

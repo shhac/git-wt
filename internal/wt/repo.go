@@ -88,10 +88,12 @@ func BranchExists(ctx context.Context, dir, name string) (bool, error) {
 	return err == nil, nil
 }
 
-// TreesDirFor returns the conventional sibling worktree directory:
-// "<mainRoot>-trees" lives next to the main repo.
+// TreesDirFor returns the default worktree-parent directory: a `.gwt`
+// directory inside the main repo. Users will typically want to add `.gwt/`
+// to their .gitignore to keep `git status` clean. Override with
+// `git-wt new --parent-dir <path>`.
 func TreesDirFor(mainRoot string) string {
-	return mainRoot + "-trees"
+	return filepath.Join(mainRoot, ".gwt")
 }
 
 // ConstructPath builds the worktree path for a branch under parent (or the

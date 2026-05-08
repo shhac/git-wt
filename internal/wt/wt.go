@@ -37,13 +37,45 @@ func (w Worktree) Display() string {
 	}
 }
 
-// ParentDirName is the name of the directory that contains the worktree.
-// It disambiguates branches that share a basename across namespaces:
-//   /repo                                   -> "projects"
-//   /repo-trees/paul/feature-auth           -> "paul"
-//   /repo-trees/foo                         -> "repo-trees"
-func (w Worktree) ParentDirName() string {
-	return filepath.Base(filepath.Dir(w.Path))
+// DisplayPath returns the human-readable location string shown in list/picker
+// rows. Rules (in priority order):
+//
+//  1. Main worktree         → repo basename            (e.g. "backend")
+//  2. Inside treesDir       → "#" + rel-to-treesDir    (e.g. "#abuja",
+//                                                        "#paul/feat/aaa")
+//  3. Inside repo (outside) → rel-to-repo              (e.g. ".conductor/abuja")
+//  4. Outside repo          → absolute path            (e.g. "/tmp/dddd")
+//
+// All slashes are normalized to forward slashes for cross-platform consistency.
+func (w Worktree) DisplayPath(mainRoot, treesDir string) string {
+	if w.Path == mainRoot {
+		return filepath.Base(mainRoot)
+	}
+	if rel, ok := relUnder(treesDir, w.Path); ok {
+		return "#" + rel
+	}
+	if rel, ok := relUnder(mainRoot, w.Path); ok {
+		return rel
+	}
+	return w.Path
+}
+
+// relUnder returns the path of target relative to base (slash-separated)
+// and ok=true iff target is at or under base. The "or under" check requires
+// the result to not start with "..", which filepath.Rel emits for upward
+// traversal.
+func relUnder(base, target string) (string, bool) {
+	if base == "" || target == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return "", false
+	}
+	if rel == "." || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
 }
 
 // List returns all worktrees for the repository containing dir.

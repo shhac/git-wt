@@ -41,7 +41,7 @@ func TestNew_CreatesWorktree(t *testing.T) {
 	}
 
 	// trees dir is sibling of repo
-	wtPath := filepath.Join(filepath.Dir(repo), "demo-trees", "feat-a")
+	wtPath := filepath.Join(repo, ".gwt","feat-a")
 	mustExist(t, wtPath)
 	mustExist(t, filepath.Join(wtPath, ".env"))
 
@@ -59,7 +59,7 @@ func TestNew_NoCopySkipsConfig(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "demo-trees", "feat-b")
+	wtPath := filepath.Join(repo, ".gwt","feat-b")
 	mustNotExist(t, filepath.Join(wtPath, ".env"))
 }
 
@@ -73,7 +73,7 @@ func TestNew_CopySpecExcludes(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "demo-trees", "feat-c")
+	wtPath := filepath.Join(repo, ".gwt","feat-c")
 	mustExist(t, filepath.Join(wtPath, ".env"))
 	mustNotExist(t, filepath.Join(wtPath, ".env.production"))
 }
@@ -122,8 +122,8 @@ func TestGo_DirectViaFD(t *testing.T) {
 	}
 	got := strings.TrimSpace(res.FD3)
 	// On macOS /var → /private/var, so git canonicalizes paths. Compare the suffix.
-	if !strings.HasSuffix(got, "/demo-trees/feat-go") {
-		t.Errorf("fd3 = %q, want path ending in /demo-trees/feat-go", got)
+	if !strings.HasSuffix(got, "/demo/.gwt/feat-go") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-go", got)
 	}
 	if got == "" {
 		t.Errorf("fd3 was empty (binary did not write to fd 3)")
@@ -138,8 +138,8 @@ func TestGo_BareModePrintsToStdout(t *testing.T) {
 	}
 	res := runWT(t, repo, "go", "feat-bare")
 	got := strings.TrimSpace(res.Stdout)
-	if !strings.HasSuffix(got, "/demo-trees/feat-bare") {
-		t.Errorf("bare-mode stdout = %q, want path ending in /demo-trees/feat-bare", got)
+	if !strings.HasSuffix(got, "/demo/.gwt/feat-bare") {
+		t.Errorf("bare-mode stdout = %q, want path ending in /demo/.gwt/feat-bare", got)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestClean_Orphaned(t *testing.T) {
 	if !strings.Contains(res.Stderr, "branch deleted") {
 		t.Errorf("expected `branch deleted` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "demo-trees", "orphan")
+	wtPath := filepath.Join(repo, ".gwt","orphan")
 	mustNotExist(t, wtPath)
 }
 
@@ -237,7 +237,7 @@ func TestClean_UpstreamGone(t *testing.T) {
 	if !strings.Contains(res.Stderr, "upstream gone") {
 		t.Errorf("expected `upstream gone` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(filepath.Dir(repo), "demo-trees", "doomed-tree")
+	wtPath := filepath.Join(repo, ".gwt","doomed-tree")
 	mustNotExist(t, wtPath)
 }
 

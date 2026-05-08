@@ -10,7 +10,7 @@ import (
 
 func TestPrintList_Empty(t *testing.T) {
 	var buf strings.Builder
-	printList(&buf, nil, nil)
+	printList(&buf, nil, nil, "/repo", "/repo/.gwt")
 	got := buf.String()
 	if !strings.Contains(got, "no worktrees") {
 		t.Errorf("expected `no worktrees`, got %q", got)
@@ -26,7 +26,7 @@ func TestPrintList_NoCurrentMarker(t *testing.T) {
 		{Path: "/p/a", Branch: "a"},
 		{Path: "/p/b", Branch: "b"},
 	}
-	printList(&buf, wts, nil)
+	printList(&buf, wts, nil, "/repo", "/repo/.gwt")
 	out := buf.String()
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if strings.HasPrefix(line, "* ") {
@@ -47,7 +47,7 @@ func TestPrintList_MarkerOnCurrentRow(t *testing.T) {
 	cur := &wts[1]
 
 	var buf strings.Builder
-	printList(&buf, wts, cur)
+	printList(&buf, wts, cur, "/repo", "/repo/.gwt")
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
 	if len(lines) != 3 {
@@ -65,21 +65,21 @@ func TestPrintList_ColumnAlignment(t *testing.T) {
 	ui.Plain = true
 	defer func() { ui.Plain = false }()
 
-	// Branches of varying widths. With aligned columns, the parent-dir
+	// Branches of varying widths. With aligned columns, the location
 	// column should start at the same column index across rows.
 	wts := []wt.Worktree{
-		{Path: "/repo-trees/short", Branch: "short"},
-		{Path: "/repo-trees/much-longer-name", Branch: "much-longer-name"},
+		{Path: "/repo/.gwt/short", Branch: "short"},
+		{Path: "/repo/.gwt/much-longer-name", Branch: "much-longer-name"},
 	}
 	var buf strings.Builder
-	printList(&buf, wts, nil)
+	printList(&buf, wts, nil, "/repo", "/repo/.gwt")
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(lines))
 	}
-	idx := func(line string) int { return strings.Index(line, "repo-trees") }
+	idx := func(line string) int { return strings.Index(line, "#") }
 	if idx(lines[0]) != idx(lines[1]) {
-		t.Errorf("parent-dir column not aligned:\n  row0=%q\n  row1=%q", lines[0], lines[1])
+		t.Errorf("location column not aligned:\n  row0=%q\n  row1=%q", lines[0], lines[1])
 	}
 }
 

@@ -12,11 +12,11 @@ import (
 
 // pickWorktree opens an interactive single-select over wts and returns the
 // chosen entry. Caller is responsible for ensuring wts is non-empty.
-func pickWorktree(title string, wts []wt.Worktree) (*wt.Worktree, error) {
-	branchW, parentW := columnWidths(wts)
+func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*wt.Worktree, error) {
+	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	options := make([]huh.Option[string], len(wts))
 	for i, t := range wts {
-		options[i] = huh.NewOption(formatPickerRow(t, branchW, parentW), t.Path)
+		options[i] = huh.NewOption(formatPickerRow(t, mainRoot, treesDir, branchW, parentW), t.Path)
 	}
 
 	var pickedPath string
@@ -40,11 +40,11 @@ func pickWorktree(title string, wts []wt.Worktree) (*wt.Worktree, error) {
 // pickWorktreesToRemove opens an interactive multi-select for the rm command.
 // Returns the chosen worktrees in display order. An empty selection (user
 // pressed enter without toggling anything) is returned as nil.
-func pickWorktreesToRemove(wts []wt.Worktree) ([]wt.Worktree, error) {
-	branchW, parentW := columnWidths(wts)
+func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) ([]wt.Worktree, error) {
+	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
 	options := make([]huh.Option[string], len(wts))
 	for i, t := range wts {
-		options[i] = huh.NewOption(formatPickerRow(t, branchW, parentW), t.Path)
+		options[i] = huh.NewOption(formatPickerRow(t, mainRoot, treesDir, branchW, parentW), t.Path)
 	}
 
 	var picked []string
@@ -72,24 +72,25 @@ func pickWorktreesToRemove(wts []wt.Worktree) ([]wt.Worktree, error) {
 	return out, nil
 }
 
-// formatPickerRow lays out one worktree row as "branch  parent  mtime" with
-// aligned columns. Used by pickers and by `list`.
-func formatPickerRow(t wt.Worktree, branchW, parentW int) string {
+// formatPickerRow lays out one worktree row as "branch  location  mtime"
+// with aligned columns. Used by pickers and by `list`. The "location" column
+// is the worktree's DisplayPath (see Worktree.DisplayPath for rules).
+func formatPickerRow(t wt.Worktree, mainRoot, treesDir string, branchW, parentW int) string {
 	branch := padRight(t.Display(), branchW)
-	parent := padRight(t.ParentDirName(), parentW)
+	loc := padRight(t.DisplayPath(mainRoot, treesDir), parentW)
 	mtime := ui.HumanSince(t.ModTime)
-	return fmt.Sprintf("%s  %s  %s", branch, ui.Dim(parent), ui.Dim(mtime))
+	return fmt.Sprintf("%s  %s  %s", branch, ui.Dim(loc), ui.Dim(mtime))
 }
 
-// columnWidths returns the maximum widths of the branch and parent-dir columns
+// columnWidths returns the maximum widths of the branch and location columns
 // across wts. lipgloss.Width is used so ANSI escape codes don't inflate the
 // measurement.
-func columnWidths(wts []wt.Worktree) (branchW, parentW int) {
+func columnWidths(wts []wt.Worktree, mainRoot, treesDir string) (branchW, parentW int) {
 	for _, t := range wts {
 		if n := lipgloss.Width(t.Display()); n > branchW {
 			branchW = n
 		}
-		if n := lipgloss.Width(t.ParentDirName()); n > parentW {
+		if n := lipgloss.Width(t.DisplayPath(mainRoot, treesDir)); n > parentW {
 			parentW = n
 		}
 	}

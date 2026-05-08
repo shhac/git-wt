@@ -57,7 +57,7 @@ var rmCmd = &cobra.Command{
 		wt.SortByModTime(wts)
 		cur := wt.Current(wts, mustWD())
 
-		targets, err := resolveRmTargets(wts, repo, args)
+		targets, err := resolveRmTargets(wts, repo, args, wt.TreesDirFor(repo.MainRoot))
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func init() {
 
 // resolveRmTargets returns the worktrees to remove. It excludes the main
 // worktree and refuses if the user explicitly named it.
-func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]wt.Worktree, error) {
+func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string) ([]wt.Worktree, error) {
 	if len(args) > 0 {
 		return resolveRmFromArgs(wts, repo, args)
 	}
@@ -100,7 +100,7 @@ func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]wt
 	if !interactive() {
 		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
 	}
-	picked, err := pickWorktreesToRemove(pickable)
+	picked, err := pickWorktreesToRemove(pickable, repo.MainRoot, treesDir)
 	if err != nil {
 		return nil, err
 	}
