@@ -8,25 +8,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/git-wt/internal/copyspec"
 	"github.com/shhac/git-wt/internal/git"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
-// configFiles are the project-local files copied from the main repo into a
-// freshly-created worktree. Glob-style patterns are expanded against the main
-// repo root; only files/dirs that exist are copied.
-var configFiles = []string{
-	".env",
-	".env.*",
-	".claude",
-	"CLAUDE.local.md",
-	".ai-cache",
-}
+// DefaultCopyFile is the conventional location of the per-project copy spec.
+// Override with `--copy-file-config <path>`.
+const DefaultCopyFile = ".git-wt-copy-files"
 
 var (
-	newParentDir string
-	newFromRef   string
-	newNoCopy    bool
+	newParentDir      string
+	newFromRef        string
+	newNoCopy         bool
+	newCopyFileConfig string
 )
 
 var newCmd = &cobra.Command{
@@ -34,8 +29,9 @@ var newCmd = &cobra.Command{
 	Short: "Create a new worktree with branch <branch>",
 	Long: "Create a new worktree at <repo>-trees/<branch>/, branching from the\n" +
 		"current HEAD (or --from <ref>). After creation, copies project-local\n" +
-		"config files (.env*, .claude/, CLAUDE.local.md, .ai-cache/) and emits\n" +
-		"the worktree path so the wrapper can cd into it.",
+		"files according to <repo>/.git-wt-copy-files (override path with\n" +
+		"--copy-file-config). Built-in defaults are used when no spec file\n" +
+		"is present. Skip the copy entirely with --no-copy.",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
@@ -109,6 +105,7 @@ func init() {
 	newCmd.Flags().StringVarP(&newParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>-trees/)")
 	newCmd.Flags().StringVar(&newFromRef, "from", "", "ref to branch from (default: current HEAD)")
 	newCmd.Flags().BoolVar(&newNoCopy, "no-copy", false, "skip copying project config files")
+	newCmd.Flags().StringVar(&newCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")
 }
 
 // createWorktree runs `git worktree add` at the given path with a new branch.
@@ -121,41 +118,28 @@ func createWorktree(ctx context.Context, path, branch, fromRef string) error {
 	return err
 }
 
-// copyConfigs copies each entry in configFiles from src to dst (best-effort).
-// Glob patterns are expanded.
-func copyConfigs(src, dst string) error {
-	for _, pat := range configFiles {
-		matches, err := filepath.Glob(filepath.Join(src, pat))
-		if err != nil {
-			return err
-		}
-		// If the literal name doesn't contain a glob char and didn't match, also
-		// try a direct stat — `filepath.Glob` returns no error for nonexistent
-		// non-glob paths.
-		if len(matches) == 0 && !containsGlobChar(pat) {
-			matches = []string{filepath.Join(src, pat)}
-		}
-		for _, m := range matches {
-			if !wt.PathExists(m) {
-				continue
-			}
-			rel, err := filepath.Rel(src, m)
-			if err != nil {
-				return err
-			}
-			if err := wt.CopyTree(m, filepath.Join(dst, rel)); err != nil {
-				return fmt.Errorf("copy %s: %w", rel, err)
-			}
+// copyConfigs loads the copy spec and copies the matching paths into dst.
+// Spec resolution: --copy-file-config flag if set, else <repoRoot>/.git-wt-copy-files,
+// else built-in defaults (when neither file exists).
+func copyConfigs(repoRoot, dst string) error {
+	specPath := newCopyFileConfig
+	if specPath == "" {
+		specPath = filepath.Join(repoRoot, DefaultCopyFile)
+	}
+	spec, err := copyspec.Load(specPath)
+	if err != nil {
+		return err
+	}
+	rels, err := spec.Match(repoRoot)
+	if err != nil {
+		return err
+	}
+	for _, rel := range rels {
+		src := filepath.Join(repoRoot, rel)
+		out := filepath.Join(dst, rel)
+		if err := wt.CopyTree(src, out); err != nil {
+			return fmt.Errorf("copy %s: %w", rel, err)
 		}
 	}
 	return nil
-}
-
-func containsGlobChar(s string) bool {
-	for _, r := range s {
-		if r == '*' || r == '?' || r == '[' {
-			return true
-		}
-	}
-	return false
 }

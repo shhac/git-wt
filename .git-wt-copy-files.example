@@ -1,0 +1,34 @@
+# .git-wt-copy-files
+#
+# When you run `git-wt new <branch>`, git-wt copies the files matching these
+# patterns from the main repo into the new worktree. Copy this file to
+# `.git-wt-copy-files` (without the .example extension) at the repo root and
+# commit it so your team shares the same setup.
+#
+# Format
+#   - one pattern per line
+#   - blank lines and lines starting with `#` are ignored
+#   - patterns are matched at the top level of the repo (no `**` recursion)
+#   - glob characters: *, ?, [...]
+#   - `!pattern` excludes matches (applied after includes)
+#   - trailing `/` is ignored (you can write it for clarity)
+#
+# When this file is absent, git-wt falls back to the built-in defaults below.
+
+# Local-only env files
+.env
+.env.*
+
+# Claude / AI tooling configuration
+.claude/
+CLAUDE.local.md
+.ai-cache/
+
+# Examples — uncomment to opt in
+# .vscode/settings.json
+# .idea/
+# docker-compose.override.yml
+
+# Examples of exclusions — applied after the includes above
+# !.env.production
+# !.env.secrets
