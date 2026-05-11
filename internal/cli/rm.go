@@ -124,7 +124,7 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]w
 // chooseRmAction implements the confirmation step. The keep/delete flags
 // pre-narrow the option list; non-interactive mode picks the default and
 // skips the prompt entirely.
-func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAction, error) {
+func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (action rmAction, err error) {
 	defaultAction := rmTreeOnly
 	if deleteBranch {
 		defaultAction = rmTreeAndBranch
@@ -132,6 +132,9 @@ func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (rmAct
 	if !interactive() {
 		return defaultAction, nil
 	}
+
+	end := debug.Op("pick.confirm", "rm-action")
+	defer func() { end(err) }()
 
 	var summary strings.Builder
 	fmt.Fprintf(&summary, "Remove %d worktree(s):", len(targets))

@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"fmt"
+
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/ui"
 	"github.com/shhac/git-wt/internal/wt"
@@ -8,7 +11,10 @@ import (
 
 // pickWorktree opens an interactive single-select over wts. Returns
 // (nil, nil) on cancel (ESC, Ctrl-C, q).
-func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*wt.Worktree, error) {
+func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (_ *wt.Worktree, err error) {
+	end := debug.Op("pick.one", fmt.Sprintf("%d-row(s)", len(wts)))
+	defer func() { end(err) }()
+
 	rows := buildWorktreeRows(wts, mainRoot, treesDir)
 	value, ok, err := picker.SelectOne(title, rows)
 	if err != nil {
@@ -27,7 +33,10 @@ func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (*
 
 // pickWorktreesToRemove opens an interactive multi-select for the rm command.
 // Returns nil on cancel.
-func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) ([]wt.Worktree, error) {
+func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) (_ []wt.Worktree, err error) {
+	end := debug.Op("pick.many", fmt.Sprintf("%d-row(s)", len(wts)))
+	defer func() { end(err) }()
+
 	rows := buildWorktreeRows(wts, mainRoot, treesDir)
 	values, ok, err := picker.SelectMany(
 		"Select worktrees to remove (space to toggle, enter to continue, esc to cancel)",

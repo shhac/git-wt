@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/git"
 	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/wt"
@@ -169,7 +170,10 @@ func printCleanTargets(w io.Writer, targets []taggedTarget) {
 // confirmClean prompts the user for final approval (interactive only). ESC /
 // Ctrl-C are treated as a cancel response (returns false, nil) rather than
 // an error.
-func confirmClean(n int) (bool, error) {
+func confirmClean(n int) (_ bool, err error) {
+	end := debug.Op("pick.confirm", "clean")
+	defer func() { end(err) }()
+
 	choice, ok, err := picker.Confirm(
 		fmt.Sprintf("Remove these %d worktree(s) and their branches?", n),
 		[]picker.Option[bool]{

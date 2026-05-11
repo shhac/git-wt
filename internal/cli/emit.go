@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/fd"
 	"github.com/shhac/git-wt/internal/ui"
 )
@@ -12,13 +13,16 @@ import (
 // emitTarget delivers a worktree path to the caller. Used by go/new/rm —
 // wrapper mode writes to fd N; bare mode prints to stdout with a copy/paste
 // hint on stderr.
-func emitTarget(path string) error {
+func emitTarget(path string) (err error) {
+	end := debug.Op("emit-target", path)
+	defer func() { end(err) }()
+
 	if w, ok := fd.Open(flagFD); ok {
 		defer func() { _ = w.Close() }()
-		_, err := fmt.Fprintln(w, path)
+		_, err = fmt.Fprintln(w, path)
 		return err
 	}
-	if _, err := fmt.Println(path); err != nil {
+	if _, err = fmt.Println(path); err != nil {
 		return err
 	}
 	arrow := "→"
