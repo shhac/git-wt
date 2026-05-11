@@ -23,7 +23,7 @@ func Initialize() {
 // Predefined styles. Each respects Plain by lazily checking the flag.
 var (
 	current = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // green + bold
-	dim     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))             // bright black
+	dim     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).TabWidth(-1) // bright black; preserve embedded tabs (lipgloss otherwise expands them to spaces)
 	branch  = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))            // cyan
 )
 

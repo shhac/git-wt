@@ -55,23 +55,42 @@ func outcome(err error) string {
 	return "done"
 }
 
+// writeLine emits a single tab-separated line:
+//
+//	[elapsed]  op#N  status  took  name  detail  [err]
+//
+// Non-trailing empty columns are filled with "-" so positional awk
+// (`awk '{print $5}'`) stays consistent across start/done/failed rows.
+// Trailing empties (e.g. `err` on a success) are omitted entirely.
+// Tabs let downstream tools (`awk -F'\t'`, `cut`, `sort -k`) extract
+// columns cleanly without worrying about spaces in detail args.
 func writeLine(id uint64, name string, detail []any, status string, elapsed, took time.Duration, err error) {
-	var b strings.Builder
-	fmt.Fprintf(&b, "[%s] op#%d %s", elapsed.Truncate(time.Millisecond), id, name)
-	if d := renderDetail(detail); d != "" {
-		b.WriteByte(' ')
-		b.WriteString(d)
-	}
-	b.WriteByte(' ')
-	b.WriteString(status)
+	tookStr := ""
 	if status != "start" {
-		fmt.Fprintf(&b, " in %s", took.Truncate(time.Millisecond))
+		tookStr = took.Truncate(time.Millisecond).String()
 	}
+	errStr := ""
 	if err != nil {
-		fmt.Fprintf(&b, ": %s", oneLine(err.Error()))
+		errStr = oneLine(err.Error())
 	}
-
-	line := b.String()
+	cols := []string{
+		"[" + elapsed.Truncate(time.Millisecond).String() + "]",
+		fmt.Sprintf("op#%d", id),
+		status,
+		tookStr,
+		name,
+		renderDetail(detail),
+		errStr,
+	}
+	for len(cols) > 0 && cols[len(cols)-1] == "" {
+		cols = cols[:len(cols)-1]
+	}
+	for i, c := range cols {
+		if c == "" {
+			cols[i] = "-"
+		}
+	}
+	line := strings.Join(cols, "\t")
 	if !ui.Plain {
 		line = ui.Dim(line)
 	}
