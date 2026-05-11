@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/git"
 	"github.com/shhac/git-wt/internal/picker"
 	"github.com/shhac/git-wt/internal/wt"
@@ -168,10 +169,16 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 // executeRm performs the removals. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
 // follows.
-func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction, force bool) error {
+func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction, force bool) (err error) {
+	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
+	defer func() { end(err) }()
+
 	bouncing := needsBounce(cur, targets)
 	if bouncing {
-		if err := os.Chdir(repo.MainRoot); err != nil {
+		bounceEnd := debug.Op("chdir", repo.MainRoot)
+		err = os.Chdir(repo.MainRoot)
+		bounceEnd(err)
+		if err != nil {
 			return fmt.Errorf("chdir to main repo: %w", err)
 		}
 	}

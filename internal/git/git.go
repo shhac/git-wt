@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/shhac/git-wt/internal/debug"
 )
 
 // Run executes git with args from the current working directory.
@@ -16,12 +18,15 @@ func Run(ctx context.Context, args ...string) (string, error) {
 }
 
 // RunIn runs git in dir (use "" for the current working directory).
-func RunIn(ctx context.Context, dir string, args ...string) (string, error) {
+func RunIn(ctx context.Context, dir string, args ...string) (out string, err error) {
+	end := debug.Op("git", args)
+	defer func() { end(err) }()
+
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	out, err := cmd.Output()
+	stdout, err := cmd.Output()
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
@@ -29,9 +34,11 @@ func RunIn(ctx context.Context, dir string, args ...string) (string, error) {
 			if msg == "" {
 				msg = err.Error()
 			}
-			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+			err = fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+			return "", err
 		}
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		err = fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		return "", err
 	}
-	return strings.TrimRight(string(out), "\n"), nil
+	return strings.TrimRight(string(stdout), "\n"), nil
 }

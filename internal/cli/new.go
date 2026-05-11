@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/copyspec"
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/git"
 	"github.com/shhac/git-wt/internal/wt"
 )
@@ -104,7 +105,10 @@ var newCmd = &cobra.Command{
 			if specPath == "" {
 				specPath = filepath.Join(repo.MainRoot, DefaultCopyFile)
 			}
-			if err := copyConfigs(repo.MainRoot, path, specPath); err != nil {
+			copyEnd := debug.Op("copy-configs", specPath)
+			err := copyConfigs(repo.MainRoot, path, specPath)
+			copyEnd(err)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: copy configs: %v\n", err)
 			}
 		}
@@ -150,9 +154,14 @@ func warnIfParentNotIgnored(ctx context.Context, mainRoot, parentDir string) {
 	//   exit 0 → at least one path is ignored
 	//   exit 1 → none of the paths are ignored (this is the case we warn on)
 	//   other  → an actual error; stay silent
-	cmd := exec.CommandContext(ctx, "git", "check-ignore", "--quiet", rel)
+	checkArgs := []string{"check-ignore", "--quiet", rel}
+	end := debug.Op("git", checkArgs)
+	cmd := exec.CommandContext(ctx, "git", checkArgs...)
 	cmd.Dir = mainRoot
 	err = cmd.Run()
+	// exit 1 is expected (not ignored); the timeline records it as failed but
+	// it's the path we act on rather than treat as an error.
+	end(err)
 	if err == nil {
 		return
 	}

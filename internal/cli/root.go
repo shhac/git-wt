@@ -7,6 +7,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/ui"
 )
 
@@ -29,6 +30,7 @@ var rootCmd = &cobra.Command{
 			ui.Plain = true
 		}
 		ui.Initialize()
+		debug.Enabled = flagDebug
 	},
 }
 
