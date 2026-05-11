@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"bytes"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -271,10 +273,75 @@ func TestAlias_GeneratesValidShell(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("alias exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	for _, want := range []string{"mygwt() {", "case \"$1\" in", "go|new|rm)", "3>&1 1>&2"} {
+	for _, want := range []string{"mygwt() {", "case \"$_sub\" in", "go|new|rm)", "3>&1 1>&2"} {
 		if !strings.Contains(res.Stdout, want) {
 			t.Errorf("alias output missing %q\n--- output ---\n%s", want, res.Stdout)
 		}
+	}
+}
+
+// TestAlias_WrapperCdWorksWithLeadingGlobalFlag pins the fix for the case
+// where `gwt --debug go <branch>` (any pre-subcommand global flag) was
+// falling through to the pass-through branch of the wrapper and skipping
+// the cd. The wrapper now walks args to find the real subcommand.
+func TestAlias_WrapperCdWorksWithLeadingGlobalFlag(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not on PATH; wrapper-shell test requires bash")
+	}
+
+	repo := newRepo(t)
+	if res := runWT(t, repo, "new", "feature", "--non-interactive", "--no-copy"); res.ExitCode != 0 {
+		t.Fatalf("new: exit %d, stderr: %s", res.ExitCode, res.Stderr)
+	}
+	wtPath := filepath.Join(repo, ".gwt", "feature")
+	mustExist(t, wtPath)
+
+	// The generated wrapper bakes in os.Executable(), which during the test
+	// is the freshly-built binPath — so eval+invoke will hit the test binary.
+	aliasRes := runWT(t, repo, "alias", "gwt")
+	if aliasRes.ExitCode != 0 {
+		t.Fatalf("alias: exit %d, stderr: %s", aliasRes.ExitCode, aliasRes.Stderr)
+	}
+
+	// Note: a user-supplied `--fd N` is intentionally out of scope. The wrapper
+	// bakes its fd redirect at generation time; overriding the fd via CLI flag
+	// would need a matching shell-side redirect the wrapper can't know about.
+	cases := []struct {
+		name   string
+		invoke string
+	}{
+		// Each of these has a pre-subcommand global flag that previously caused
+		// the wrapper's `case "$1"` to miss the subcommand and skip the cd.
+		{"leading --debug", `gwt --debug go feature`},
+		{"leading --plain", `gwt --plain go feature`},
+		{"leading -n", `gwt -n go feature`},
+		// Trailing flag — always worked, regression guard.
+		{"trailing --debug", `gwt go feature --debug`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			script := aliasRes.Stdout + "\n" + tc.invoke + "\npwd\n"
+			cmd := exec.Command("bash", "-c", script)
+			cmd.Dir = repo
+			cmd.Env = hermeticEnv()
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("bash run: %v\nstderr: %s", err, stderr.String())
+			}
+
+			gotPwd := strings.TrimSpace(stdout.String())
+			got, _ := filepath.EvalSymlinks(gotPwd)
+			want, _ := filepath.EvalSymlinks(wtPath)
+			if got == "" || want == "" {
+				t.Fatalf("evalSymlinks failed: got=%q want=%q (gotPwd=%q)", got, want, gotPwd)
+			}
+			if got != want {
+				t.Errorf("after %q:\n  pwd  = %q\n  want = %q\nstderr:\n%s",
+					tc.invoke, got, want, stderr.String())
+			}
+		})
 	}
 }
 

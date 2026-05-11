@@ -46,6 +46,11 @@ func TestRenderAlias_Defaults(t *testing.T) {
 	mustContain(t, got, `--fd 3`)
 	mustContain(t, got, `3>&1 1>&2`)
 	mustContain(t, got, "go|new|rm)")
+	// The wrapper walks args so leading global flags (--debug, --plain, etc.)
+	// don't bypass the cd-capable branch.
+	mustContain(t, got, `for _arg in "$@"`)
+	mustContain(t, got, `case "$_sub" in`)
+	mustNotContain(t, got, `case "$1" in`)
 	mustNotContain(t, got, "echo \"[gwt]") // no debug
 	mustNotContain(t, got, "--plain")
 	mustNotContain(t, got, "--non-interactive")
