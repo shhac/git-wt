@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -19,8 +20,19 @@ type runResult struct {
 }
 
 // runWT invokes the test binary in cwd with args. Stdin is /dev/null.
+//
+// We pin --fd 9 across all subcommands so tests probe an fd that is
+// reliably closed, independent of any environment fd leak. (Linux
+// container runtimes commonly leak a read-only /sys/fs/cgroup/cpu.max as
+// fd 3 — see internal/fd/fd_posix.go.) For `alias`, --fd is also the
+// flag that controls which fd gets baked into the generated wrapper, so
+// the wrapper bakes 9 too — keeping every test consistent. A separate
+// test bypasses this prepend to pin the user-facing default of fd 3.
 func runWT(t *testing.T, cwd string, args ...string) runResult {
 	t.Helper()
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append([]string{"--fd", "9"}, args...)
+	}
 	return doRun(t, cwd, false, args...)
 }
 

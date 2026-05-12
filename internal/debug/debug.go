@@ -29,6 +29,23 @@ var (
 	mu     sync.Mutex // serializes writes so concurrent ops don't interleave lines
 )
 
+// Logf emits a one-shot debug line for stateless observations (e.g. "fell
+// back to bare mode"). For measurable operations use Op. The line carries
+// the elapsed-time prefix so it interleaves cleanly with Op output.
+func Logf(format string, args ...any) {
+	if !Enabled {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	line := fmt.Sprintf("[%s] note\t-\t-\t-\t%s", time.Since(start).Truncate(time.Millisecond), oneLine(msg))
+	if !ui.Plain {
+		line = ui.Dim(line)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	_, _ = fmt.Fprintln(Out, line)
+}
+
 // Op records the start of a named operation and returns a closer. Call the
 // closer with the operation's error (nil on success) to record its duration.
 // The detail args are rendered after the name and are usually the subprocess

@@ -22,6 +22,7 @@ func emitTarget(path string) (err error) {
 		_, err = fmt.Fprintln(w, path)
 		return err
 	}
+	debug.Logf("wrapper fd %d not writable; falling back to bare mode", flagFD)
 	if _, err = fmt.Println(path); err != nil {
 		return err
 	}

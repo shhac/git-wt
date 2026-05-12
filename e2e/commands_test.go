@@ -273,10 +273,26 @@ func TestAlias_GeneratesValidShell(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("alias exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	for _, want := range []string{"mygwt() {", "case \"$_sub\" in", "go|new|rm)", "3>&1 1>&2"} {
+	// runWT pins --fd 9, so the wrapper bakes 9 too.
+	for _, want := range []string{"mygwt() {", "case \"$_sub\" in", "go|new|rm)", "9>&1 1>&2"} {
 		if !strings.Contains(res.Stdout, want) {
 			t.Errorf("alias output missing %q\n--- output ---\n%s", want, res.Stdout)
 		}
+	}
+}
+
+// TestAlias_DefaultFD pins the user-facing default fd of 3. It bypasses
+// runWT (which prepends --fd 9 for test-isolation reasons) and calls the
+// binary with no --fd override, exercising the default that ships in
+// real-world `eval "$(git-wt alias gwt)"` installs.
+func TestAlias_DefaultFD(t *testing.T) {
+	repo := newRepo(t)
+	res := doRun(t, repo, false, "alias", "mygwt")
+	if res.ExitCode != 0 {
+		t.Fatalf("alias exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "3>&1 1>&2") {
+		t.Errorf("alias default fd should be 3, got:\n%s", res.Stdout)
 	}
 }
 
