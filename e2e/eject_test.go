@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -237,6 +239,132 @@ func TestEject_DropsStashOnSuccess(t *testing.T) {
 	// Post-condition: stash entry was dropped after a clean apply.
 	if got := mustGit(t, repo, "stash", "list"); got != "" {
 		t.Errorf("expected empty stash list post-eject, got: %q", got)
+	}
+}
+
+// TestEject_RollbackAfterSwitchFailure engineers a failure in the `git
+// switch <base>` step (by stealing the base branch into a sibling worktree)
+// and asserts the rollback put everything back. Pins the inner rollback
+// branch ahead of the rollback-helper refactor.
+func TestEject_RollbackAfterSwitchFailure(t *testing.T) {
+	repo := newRepo(t)
+	mustWrite(t, filepath.Join(repo, "tracked.txt"), "v1\n")
+	mustGit(t, repo, "add", "tracked.txt")
+	mustGit(t, repo, "commit", "-q", "-m", "v1")
+	mustGit(t, repo, "checkout", "-q", "-b", "feat-rb-switch")
+	mustWrite(t, filepath.Join(repo, "tracked.txt"), "v2-dirty\n")
+
+	// Steal `main` into a sibling worktree so eject's `git switch main` fails.
+	sibling := filepath.Join(filepath.Dir(repo), "sibling")
+	mustGit(t, repo, "worktree", "add", "-q", sibling, "main")
+
+	res := runWT(t, repo, "eject", "--non-interactive")
+	if res.ExitCode == 0 {
+		t.Errorf("expected non-zero exit when base is checked out elsewhere")
+	}
+
+	// Rollback: back on feat-rb-switch, dirty modification restored, no stash leak.
+	if head := mustGit(t, repo, "rev-parse", "--abbrev-ref", "HEAD"); head != "feat-rb-switch" {
+		t.Errorf("HEAD after rollback = %q, want feat-rb-switch", head)
+	}
+	contents, err := readFile(filepath.Join(repo, "tracked.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(contents, "v2-dirty") {
+		t.Errorf("tracked.txt after rollback = %q, want v2-dirty restored", contents)
+	}
+	if list := mustGit(t, repo, "stash", "list"); list != "" {
+		t.Errorf("stash list after rollback = %q, want empty (stash should have been popped)", list)
+	}
+}
+
+// TestEject_RollbackAfterWorktreeAddFailure engineers a failure in the
+// `git worktree add` step by making the path's parent directory read-only,
+// and asserts both rollback steps (switch-back AND stash-pop) fired.
+//
+// Unix-only: relies on chmod semantics that Windows handles differently.
+func TestEject_RollbackAfterWorktreeAddFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("relies on Unix chmod write-protection semantics")
+	}
+	repo := newRepo(t)
+	// Pre-create the read-only parent with a tracked file so the directory
+	// survives `git stash push --include-untracked` (otherwise stash would
+	// remove an empty untracked dir before the worktree-add even runs).
+	if err := os.MkdirAll(filepath.Join(repo, "trees-a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(repo, "trees-a", "b", ".keep"), "x\n")
+	mustGit(t, repo, "add", "trees-a/b/.keep")
+	mustGit(t, repo, "commit", "-q", "-m", "add tracked anchor")
+
+	mustWrite(t, filepath.Join(repo, "tracked.txt"), "v1\n")
+	mustGit(t, repo, "add", "tracked.txt")
+	mustGit(t, repo, "commit", "-q", "-m", "v1")
+	mustGit(t, repo, "checkout", "-q", "-b", "feat-rb-add")
+	mustWrite(t, filepath.Join(repo, "tracked.txt"), "v2-dirty\n")
+
+	// Lock the parent so prepareWorktreeSite passes (MkdirAll sees it exists)
+	// but `git worktree add` itself fails when it tries to create the leaf
+	// directory inside it.
+	parent := filepath.Join(repo, "trees-a", "b")
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	res := runWT(t, repo, "eject", "b/c",
+		"--parent-dir", filepath.Join(repo, "trees-a"), "--non-interactive")
+	if res.ExitCode == 0 {
+		t.Errorf("expected non-zero exit when worktree add cannot create the leaf")
+	}
+
+	// Rollback: HEAD back on feat-rb-add, dirty modification restored, no stash leak.
+	if head := mustGit(t, repo, "rev-parse", "--abbrev-ref", "HEAD"); head != "feat-rb-add" {
+		t.Errorf("HEAD after rollback = %q, want feat-rb-add", head)
+	}
+	contents, err := readFile(filepath.Join(repo, "tracked.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(contents, "v2-dirty") {
+		t.Errorf("tracked.txt after rollback = %q, want v2-dirty restored", contents)
+	}
+	if list := mustGit(t, repo, "stash", "list"); list != "" {
+		t.Errorf("stash list after rollback = %q, want empty", list)
+	}
+}
+
+// TestEject_DropsOnlyOwnStashBySHA pins the by-SHA drop semantics — a
+// sentinel stash pushed before eject must survive, and only eject's own
+// stash must be dropped. Guards against a refactor that drops `stash@{0}`
+// (which might be the sentinel) instead of matching the captured SHA.
+func TestEject_DropsOnlyOwnStashBySHA(t *testing.T) {
+	repo := newRepo(t)
+	mustWrite(t, filepath.Join(repo, "sentinel.txt"), "s1\n")
+	mustGit(t, repo, "add", "sentinel.txt")
+	mustGit(t, repo, "commit", "-q", "-m", "add sentinel")
+
+	// Push a sentinel stash that must survive eject.
+	mustWrite(t, filepath.Join(repo, "sentinel.txt"), "s2\n")
+	mustGit(t, repo, "stash", "push", "-m", "SENTINEL-do-not-drop")
+
+	// Eject feat-sha with its own dirty file.
+	mustGit(t, repo, "checkout", "-q", "-b", "feat-sha")
+	mustWrite(t, filepath.Join(repo, "feat.txt"), "f1\n")
+
+	res := runWT(t, repo, "eject", "--non-interactive")
+	if res.ExitCode != 0 {
+		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
+	}
+
+	list := mustGit(t, repo, "stash", "list")
+	if !strings.Contains(list, "SENTINEL-do-not-drop") {
+		t.Errorf("sentinel stash missing after eject; list = %q", list)
+	}
+	if strings.Contains(list, "git-wt eject") {
+		t.Errorf("eject's own stash should have been dropped; list = %q", list)
 	}
 }
 

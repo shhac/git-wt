@@ -187,10 +187,8 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 	}
 
 	if _, err := git.Run(ctx, "switch", base); err != nil {
-		// Rollback: unstash so we're back where we started.
-		if stashRef != "" {
-			_, _ = git.Run(ctx, "stash", "pop", "--index", stashRef)
-		}
+		// Rollback: restore the stash so we're back where we started.
+		rollbackStash(ctx, "", stashRef)
 		return fmt.Errorf("switch to %s: %w", base, err)
 	}
 
@@ -200,11 +198,11 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 		LocalName: branch,
 	}
 	if err := checkoutWorktree(ctx, path, resolved); err != nil {
-		// Rollback: switch back to original branch + unstash.
-		_, _ = git.Run(ctx, "switch", branch)
-		if stashRef != "" {
-			_, _ = git.Run(ctx, "stash", "pop", "--index", stashRef)
+		// Rollback: switch back to original branch + restore the stash.
+		if _, swErr := git.Run(ctx, "switch", branch); swErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: rollback switch to %s failed: %v\n", branch, swErr)
 		}
+		rollbackStash(ctx, "", stashRef)
 		return fmt.Errorf("create worktree: %w", err)
 	}
 
@@ -221,6 +219,32 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 
 	warnIfParentNotIgnored(ctx, repo.MainRoot, parent)
 	return emitTarget(path)
+}
+
+// rollbackStash restores a previously-pushed stash to the working tree.
+// `git stash pop` only accepts stash@{N} references, not raw SHAs, so we
+// use apply --index + drop-by-SHA — the latter survives concurrent stash
+// pushes that would shift the @{N} index. Best-effort: errors are logged
+// but not returned, since we're already on an error path.
+func rollbackStash(ctx context.Context, dir, stashRef string) {
+	if stashRef == "" {
+		return
+	}
+	var err error
+	if dir == "" {
+		_, err = git.Run(ctx, "stash", "apply", "--index", stashRef)
+	} else {
+		_, err = git.RunIn(ctx, dir, "stash", "apply", "--index", stashRef)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: rollback stash apply (%s) failed: %v\n",
+			shortStashRef(stashRef), err)
+		return
+	}
+	if err := dropStashBySHA(ctx, stashRef); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: rollback stash drop (%s) failed: %v\n",
+			shortStashRef(stashRef), err)
+	}
 }
 
 // stashUncommitted pushes a stash including untracked files and returns
