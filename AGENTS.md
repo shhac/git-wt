@@ -24,7 +24,7 @@ cmd/git-wt/main.go                 # entry point
 internal/
   cli/                             # cobra subcommands + per-command helpers
     root.go                        # global flags, Execute()
-    list.go new.go add.go          # the seven commands
+    list.go new.go add.go eject.go # the eight commands
     go_cmd.go rm.go clean.go alias.go
     emit.go                        # fd<N> / bare-mode path emission
     picker.go                      # adapts internal/picker to worktrees
@@ -62,6 +62,7 @@ time because bash parses redirect operators before variable expansion.
 |---|---|
 | `new <branch>` | Create worktree at `<repo>/.gwt/<branch>/` (or `--parent-dir`). Copies files matching `.git-wt-copy-files` (or built-in defaults). Hints if `<parent>/` isn't gitignored when it lives inside the repo. |
 | `add [<leaf>] <branch\|remote-ref>` | Worktree for an *existing* branch. Resolver: `<remote>/<rest>` (with matching remote ref) ⇒ remote DWIM via `--track -b <rest>`; else local branch lookup. Optional `<leaf>` overrides the leaf directory name (defaults to the local branch name). Never creates new branches. |
+| `eject [<leaf>]` | Move HEAD's branch out of the main working tree into a new worktree. Stashes (incl. untracked), switches main tree to `main`/`master`/`--base`, runs the add pipeline, then `stash apply --index` in the new worktree. Interactive confirm by default. Must run from the main tree, must be on a branch, current branch must not be the base. |
 | `rm [branch...]` | Remove worktree(s). Interactive multi-select if no args. Confirm step is also the type-of-rm choice (worktree only / worktree+branch / cancel). Bounces to main if you remove your current worktree. |
 | `go [branch]` | Navigate. Direct branch lookup with unique-suffix fallback (`auth` → `paul/auth`). Interactive picker if no arg. |
 | `list` (`ls`) | Print the table. Columns: marker, branch, location (`#name` inside `.gwt/`, rel-to-repo elsewhere, abs outside), mtime. |
