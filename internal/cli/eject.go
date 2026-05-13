@@ -179,7 +179,7 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 
 	stashRef := ""
 	if dirty {
-		ref, err := stashUncommitted(ctx, fmt.Sprintf("git-wt eject of %s", branch))
+		ref, err := wt.StashPush(ctx, fmt.Sprintf("git-wt eject of %s", branch))
 		if err != nil {
 			return fmt.Errorf("stash: %w", err)
 		}
@@ -207,13 +207,18 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 	}
 
 	if stashRef != "" {
-		applied := applyStashInWorktree(ctx, path, stashRef)
-		if !applied {
+		switch outcome, applyErr := wt.StashApply(ctx, path, stashRef); outcome {
+		case wt.StashApplied:
+			// success, nothing to do
+		case wt.StashAppliedKeptStash:
 			fmt.Fprintf(os.Stderr,
-				"warning: stash apply did not complete cleanly. Your changes are preserved as %s; "+
+				"warning: stash applied but failed to drop entry %s: %v\n",
+				wt.ShortStashRef(stashRef), applyErr)
+		case wt.StashApplyFailed:
+			fmt.Fprintf(os.Stderr,
+				"warning: stash apply did not complete cleanly: %v. Your changes are preserved as %s; "+
 					"inspect with `git -C %s status` and recover with `git -C %s stash apply --index %s`\n",
-				shortStashRef(stashRef), path, path, stashRef,
-			)
+				applyErr, wt.ShortStashRef(stashRef), path, path, stashRef)
 		}
 	}
 
@@ -222,90 +227,22 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 }
 
 // rollbackStash restores a previously-pushed stash to the working tree.
-// `git stash pop` only accepts stash@{N} references, not raw SHAs, so we
-// use apply --index + drop-by-SHA — the latter survives concurrent stash
-// pushes that would shift the @{N} index. Best-effort: errors are logged
-// but not returned, since we're already on an error path.
+// Best-effort: errors are surfaced as warnings rather than returned, since
+// we're already on an error path. dir == "" runs in the caller's cwd.
 func rollbackStash(ctx context.Context, dir, stashRef string) {
 	if stashRef == "" {
 		return
 	}
-	var err error
-	if dir == "" {
-		_, err = git.Run(ctx, "stash", "apply", "--index", stashRef)
-	} else {
-		_, err = git.RunIn(ctx, dir, "stash", "apply", "--index", stashRef)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: rollback stash apply (%s) failed: %v\n",
-			shortStashRef(stashRef), err)
-		return
-	}
-	if err := dropStashBySHA(ctx, stashRef); err != nil {
+	outcome, err := wt.StashApply(ctx, dir, stashRef)
+	switch outcome {
+	case wt.StashApplied:
+		// success
+	case wt.StashAppliedKeptStash:
 		fmt.Fprintf(os.Stderr, "warning: rollback stash drop (%s) failed: %v\n",
-			shortStashRef(stashRef), err)
+			wt.ShortStashRef(stashRef), err)
+	case wt.StashApplyFailed:
+		fmt.Fprintf(os.Stderr, "warning: rollback stash apply (%s) failed: %v\n",
+			wt.ShortStashRef(stashRef), err)
 	}
-}
-
-// stashUncommitted pushes a stash including untracked files and returns
-// the stash's commit SHA so we can apply it explicitly later (independent
-// of the @{N} index, which can shift if other stashes get pushed).
-func stashUncommitted(ctx context.Context, message string) (string, error) {
-	if _, err := git.Run(ctx, "stash", "push", "--include-untracked", "-m", message); err != nil {
-		return "", err
-	}
-	sha, err := git.Run(ctx, "rev-parse", "stash@{0}")
-	if err != nil {
-		return "", fmt.Errorf("capture stash ref: %w", err)
-	}
-	return strings.TrimSpace(sha), nil
-}
-
-// applyStashInWorktree applies the stash by SHA inside worktreeDir.
-// Returns true if applied cleanly (and the stash entry was dropped) and
-// false on any failure — including merge conflicts. The stash is left
-// intact on failure so the user can recover.
-func applyStashInWorktree(ctx context.Context, worktreeDir, stashRef string) bool {
-	_, err := git.RunIn(ctx, worktreeDir, "stash", "apply", "--index", stashRef)
-	if err != nil {
-		// stash apply prints conflicts to stderr and exits non-zero. We
-		// don't try to distinguish conflicts from harder failures — the
-		// caller's warning tells the user the stash is preserved either way.
-		return false
-	}
-	// Clean apply — find the stash entry by SHA and drop it.
-	if err := dropStashBySHA(ctx, stashRef); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: applied cleanly but failed to drop stash %s: %v\n",
-			shortStashRef(stashRef), err)
-	}
-	return true
-}
-
-// dropStashBySHA scans `git stash list` for an entry matching sha and
-// drops it. Matching by SHA (not by @{N}) avoids dropping the wrong stash
-// if another process pushed in the meantime.
-func dropStashBySHA(ctx context.Context, sha string) error {
-	out, err := git.Run(ctx, "stash", "list", "--format=%H %gd")
-	if err != nil {
-		return err
-	}
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.SplitN(line, " ", 2)
-		if len(fields) != 2 {
-			continue
-		}
-		if fields[0] == sha {
-			_, err := git.Run(ctx, "stash", "drop", fields[1])
-			return err
-		}
-	}
-	return fmt.Errorf("stash %s not found in stash list", shortStashRef(sha))
-}
-
-func shortStashRef(sha string) string {
-	if len(sha) > 8 {
-		return sha[:8]
-	}
-	return sha
 }
 
