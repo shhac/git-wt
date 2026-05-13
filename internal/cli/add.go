@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/wt"
@@ -49,12 +47,9 @@ var addCmd = &cobra.Command{
 			return err
 		}
 
-		leaf := leafOverride
-		if leaf == "" {
-			leaf = resolved.LocalName
-		}
-		if err := wt.ValidateBranchName(leaf); err != nil {
-			return fmt.Errorf("invalid leaf %q: %w", leaf, err)
+		leaf, err := defaultedLeaf(leafOverride, resolved.LocalName)
+		if err != nil {
+			return err
 		}
 
 		parent, err := wt.ResolveParentDir(repo.MainRoot, addParentDir)

@@ -46,6 +46,21 @@ func requireMutableRepo(ctx context.Context) (*wt.RepoInfo, error) {
 	return repo, nil
 }
 
+// defaultedLeaf picks the leaf for a worktree-creation command: the
+// caller's override if non-empty, otherwise the fallback. Either way
+// the chosen value is run through wt.ValidateBranchName so callers
+// don't repeat the wrap.
+func defaultedLeaf(override, fallback string) (string, error) {
+	leaf := override
+	if leaf == "" {
+		leaf = fallback
+	}
+	if err := wt.ValidateBranchName(leaf); err != nil {
+		return "", fmt.Errorf("invalid leaf %q: %w", leaf, err)
+	}
+	return leaf, nil
+}
+
 // prepareWorktreeSite computes the destination path under parent for the
 // given leaf, refuses if the path is already in use, runs the case-
 // insensitive collision check, and creates the parent directory chain.

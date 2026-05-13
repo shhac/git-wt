@@ -69,12 +69,9 @@ func runEject(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("current branch %q is the base branch; nothing to eject", currentBranch)
 	}
 
-	leaf := leafOverride
-	if leaf == "" {
-		leaf = currentBranch
-	}
-	if err := wt.ValidateBranchName(leaf); err != nil {
-		return fmt.Errorf("invalid leaf %q: %w", leaf, err)
+	leaf, err := defaultedLeaf(leafOverride, currentBranch)
+	if err != nil {
+		return err
 	}
 
 	parent, err := wt.ResolveParentDir(repo.MainRoot, ejectParentDir)
