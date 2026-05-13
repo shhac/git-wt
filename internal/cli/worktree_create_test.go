@@ -91,6 +91,35 @@ func mkParent(t *testing.T, parent string) {
 	}
 }
 
+func TestRelInsideRepo(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "sub", "deep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name      string
+		parentDir string
+		wantRel   string
+		wantOK    bool
+	}{
+		{"direct child", filepath.Join(repo, "sub"), "sub", true},
+		{"nested child", filepath.Join(repo, "sub", "deep"), filepath.Join("sub", "deep"), true},
+		{"repo root itself", repo, "", false},
+		{"outside repo", t.TempDir(), "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotRel, gotOK := relInsideRepo(repo, c.parentDir)
+			if gotOK != c.wantOK {
+				t.Errorf("ok = %v, want %v", gotOK, c.wantOK)
+			}
+			if c.wantOK && gotRel != c.wantRel {
+				t.Errorf("rel = %q, want %q", gotRel, c.wantRel)
+			}
+		})
+	}
+}
+
 func TestWarnIfParentNotIgnored_NotIgnored_Fires(t *testing.T) {
 	hermeticGit(t)
 	repo := initRepo(t) // no .gitignore

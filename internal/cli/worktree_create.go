@@ -136,20 +136,14 @@ func copyConfigs(repoRoot, dst, specPath string) error {
 	return nil
 }
 
-// warnIfParentNotIgnored prints a one-line stderr hint when parentDir lives
-// inside the main repo but isn't covered by any .gitignore rule. Worktrees
-// inside an unignored path show up as untracked content in `git status` on
-// the main worktree, which is almost always not what the user wants.
+// relInsideRepo returns the path of parentDir relative to mainRoot and
+// whether parentDir lives at or under mainRoot.
 //
-// Silent when:
-//   - parentDir is outside the repo (no concern)
-//   - parentDir resolves to the repo root itself (we'd be telling the user
-//     to ignore their own working tree)
-//   - `git check-ignore` reports the path as ignored (exit 0)
-//   - any other git error (we don't want to be noisy on edge cases)
-func warnIfParentNotIgnored(ctx context.Context, mainRoot, parentDir string) {
-	// Resolve symlinks on both sides so /tmp vs /private/tmp on macOS doesn't
-	// throw off the relative-path comparison. Fall back to the input on error.
+// Symlinks are resolved on both sides so /tmp vs /private/tmp on macOS
+// (or any other symlink-bridged paths) don't throw off the comparison.
+// parentDir == mainRoot returns (_, false) — we don't want to tell the
+// user to gitignore their own working tree.
+func relInsideRepo(mainRoot, parentDir string) (string, bool) {
 	if r, err := filepath.EvalSymlinks(mainRoot); err == nil {
 		mainRoot = r
 	}
@@ -158,25 +152,44 @@ func warnIfParentNotIgnored(ctx context.Context, mainRoot, parentDir string) {
 	}
 	rel, err := filepath.Rel(mainRoot, parentDir)
 	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return
+		return "", false
 	}
-	// `git check-ignore`:
-	//   exit 0 → at least one path is ignored
-	//   exit 1 → none of the paths are ignored (this is the case we warn on)
-	//   other  → an actual error; stay silent
-	checkArgs := []string{"check-ignore", "--quiet", rel}
-	end := debug.Op("git", checkArgs)
-	cmd := exec.CommandContext(ctx, "git", checkArgs...)
+	return rel, true
+}
+
+// isPathIgnored asks `git check-ignore --quiet` whether rel (relative to
+// mainRoot) is matched by any .gitignore rule. check-ignore exits 0 when
+// matched, 1 when not matched, and >1 on real errors. We map the first
+// two to (matched, nil) and bubble the rest up so the caller can stay
+// silent on unrelated git failures.
+func isPathIgnored(ctx context.Context, mainRoot, rel string) (bool, error) {
+	args := []string{"check-ignore", "--quiet", rel}
+	end := debug.Op("git", args)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = mainRoot
-	err = cmd.Run()
-	// exit 1 is expected (not ignored); the timeline records it as failed but
-	// it's the path we act on rather than treat as an error.
+	err := cmd.Run()
 	end(err)
 	if err == nil {
-		return
+		return true, nil
 	}
 	var ee *exec.ExitError
-	if !errors.As(err, &ee) || ee.ExitCode() != 1 {
+	if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
+}
+
+// warnIfParentNotIgnored prints a one-line stderr hint when parentDir
+// lives inside the main repo but isn't covered by any .gitignore rule.
+// Worktrees inside an unignored path show up as untracked content in
+// `git status` on the main worktree — almost never what the user wants.
+func warnIfParentNotIgnored(ctx context.Context, mainRoot, parentDir string) {
+	rel, inside := relInsideRepo(mainRoot, parentDir)
+	if !inside {
+		return
+	}
+	ignored, err := isPathIgnored(ctx, mainRoot, rel)
+	if err != nil || ignored {
 		return
 	}
 	rel = filepath.ToSlash(rel)
