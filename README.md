@@ -70,6 +70,7 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 | Command | Description |
 |---|---|
 | `new <branch>` | Create new worktree with branch. Flags: `--from <ref>`, `--parent-dir <path>`, `--no-copy`, `--copy-file-config <path>`. |
+| `add [<leaf>] <branch\|remote-ref>` | Create a worktree for an existing local or remote branch. `<remote>/<rest>` (with a matching remote) creates a local branch tracking it; anything else resolves to a local branch. Optional `<leaf>` overrides the directory name. Flags: `--parent-dir <path>`, `--no-copy`, `--copy-file-config <path>`. |
 | `rm [branch...]` | Remove worktree(s); interactive multi-select if no args. Flags: `--keep-branch`, `--delete-branch`, `--force`. |
 | `go [branch]` | Navigate to a worktree. Suffix match works (`auth` → `paul/auth` if unique). |
 | `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. |
