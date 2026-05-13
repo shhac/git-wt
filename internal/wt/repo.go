@@ -125,6 +125,33 @@ func IsWorkingTreeDirty(ctx context.Context) (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// DetectBaseBranch returns the branch a command should treat as "the
+// trunk" — either the caller-supplied override (which must exist
+// locally) or, when override is empty, the first of "main" or "master"
+// that exists. Returns an error if nothing matches.
+func DetectBaseBranch(ctx context.Context, override string) (string, error) {
+	if override != "" {
+		exists, err := BranchExists(ctx, "", override)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return "", fmt.Errorf("base branch %q does not exist locally", override)
+		}
+		return override, nil
+	}
+	for _, candidate := range []string{"main", "master"} {
+		exists, err := BranchExists(ctx, "", candidate)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no `main` or `master` branch found; pass an explicit base")
+}
+
 // TreesDirFor returns the default worktree-parent directory: a `.gwt`
 // directory inside the main repo. Users will typically want to add `.gwt/`
 // to their .gitignore to keep `git status` clean. Override with

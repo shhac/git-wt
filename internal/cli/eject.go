@@ -61,7 +61,7 @@ func runEject(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	base, err := detectBaseBranch(ctx, ejectBase)
+	base, err := wt.DetectBaseBranch(ctx, ejectBase)
 	if err != nil {
 		return err
 	}
@@ -96,32 +96,6 @@ func runEject(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeEject(ctx, repo, currentBranch, base, path, parent, dirty)
-}
-
-// detectBaseBranch picks the branch the main tree should switch to. If
-// override is set, it must exist locally. Otherwise we try `main`, then
-// `master`. Returns an error if nothing matches.
-func detectBaseBranch(ctx context.Context, override string) (string, error) {
-	if override != "" {
-		exists, err := wt.BranchExists(ctx, "", override)
-		if err != nil {
-			return "", err
-		}
-		if !exists {
-			return "", fmt.Errorf("base branch %q does not exist locally", override)
-		}
-		return override, nil
-	}
-	for _, candidate := range []string{"main", "master"} {
-		exists, err := wt.BranchExists(ctx, "", candidate)
-		if err != nil {
-			return "", err
-		}
-		if exists {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("no `main` or `master` branch found; pass --base <name>")
 }
 
 // confirmEject prompts the user before doing anything destructive. Skipped
