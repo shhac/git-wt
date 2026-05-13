@@ -113,6 +113,18 @@ func CurrentBranch(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// IsWorkingTreeDirty reports whether `git status --porcelain` shows any
+// modifications — tracked changes, staged changes, or untracked files.
+// Distinct from [IsClean], which checks for an in-progress operation
+// (merge / rebase / cherry-pick / etc.) via marker files.
+func IsWorkingTreeDirty(ctx context.Context) (bool, error) {
+	out, err := git.Run(ctx, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // TreesDirFor returns the default worktree-parent directory: a `.gwt`
 // directory inside the main repo. Users will typically want to add `.gwt/`
 // to their .gitignore to keep `git status` clean. Override with

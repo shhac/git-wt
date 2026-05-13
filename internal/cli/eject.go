@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -87,7 +86,7 @@ func runEject(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dirty, err := workingTreeDirty(ctx)
+	dirty, err := wt.IsWorkingTreeDirty(ctx)
 	if err != nil {
 		return err
 	}
@@ -123,16 +122,6 @@ func detectBaseBranch(ctx context.Context, override string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no `main` or `master` branch found; pass --base <name>")
-}
-
-// workingTreeDirty reports whether `git status --porcelain` returns any
-// modifications (tracked, staged, or untracked).
-func workingTreeDirty(ctx context.Context) (bool, error) {
-	out, err := git.Run(ctx, "status", "--porcelain")
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(out) != "", nil
 }
 
 // confirmEject prompts the user before doing anything destructive. Skipped
