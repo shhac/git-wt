@@ -2,12 +2,9 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -71,22 +68,7 @@ var addCmd = &cobra.Command{
 		if err := checkoutWorktree(ctx, path, resolved); err != nil {
 			return err
 		}
-
-		if !addNoCopy {
-			specPath := addCopyFileConfig
-			if specPath == "" {
-				specPath = filepath.Join(repo.MainRoot, DefaultCopyFile)
-			}
-			copyEnd := debug.Op("copy-configs", specPath)
-			err := copyConfigs(repo.MainRoot, path, specPath)
-			copyEnd(err)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: copy configs: %v\n", err)
-			}
-		}
-
-		warnIfParentNotIgnored(ctx, repo.MainRoot, parent)
-		return emitTarget(path)
+		return finalizeWorktreeSite(ctx, repo, path, parent, addNoCopy, addCopyFileConfig)
 	},
 }
 
