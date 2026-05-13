@@ -24,6 +24,28 @@ import (
 // Override with `--copy-file-config <path>`.
 const DefaultCopyFile = ".git-wt-copy-files"
 
+// requireMutableRepo returns the current repo info on success. It refuses
+// when there is no git repository, when the repo is bare, or when a
+// merge/rebase/cherry-pick/etc. is in progress. Used by `new` and `add`
+// to enforce shared preconditions before any worktree mutation.
+func requireMutableRepo(ctx context.Context) (*wt.RepoInfo, error) {
+	repo, err := wt.Inspect(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	if repo.Bare {
+		return nil, fmt.Errorf("cannot create worktrees in a bare repository")
+	}
+	clean, op, err := wt.IsClean(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	if !clean {
+		return nil, fmt.Errorf("repository has a %s in progress; complete or abort it first", op)
+	}
+	return repo, nil
+}
+
 // createWorktree runs `git worktree add -b <branch> [<fromRef>]` — used by
 // the `new` command to materialise a fresh branch into a new worktree.
 func createWorktree(ctx context.Context, path, branch, fromRef string) error {

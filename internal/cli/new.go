@@ -35,19 +35,9 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		repo, err := wt.Inspect(ctx, "")
+		repo, err := requireMutableRepo(ctx)
 		if err != nil {
 			return err
-		}
-		if repo.Bare {
-			return fmt.Errorf("cannot create worktrees in a bare repository")
-		}
-		clean, op, err := wt.IsClean(ctx, "")
-		if err != nil {
-			return err
-		}
-		if !clean {
-			return fmt.Errorf("repository has a %s in progress; complete or abort it first", op)
 		}
 		exists, err := wt.BranchExists(ctx, "", branch)
 		if err != nil {

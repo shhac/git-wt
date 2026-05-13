@@ -41,19 +41,9 @@ var addCmd = &cobra.Command{
 			refArg = args[0]
 		}
 
-		repo, err := wt.Inspect(ctx, "")
+		repo, err := requireMutableRepo(ctx)
 		if err != nil {
 			return err
-		}
-		if repo.Bare {
-			return fmt.Errorf("cannot create worktrees in a bare repository")
-		}
-		clean, op, err := wt.IsClean(ctx, "")
-		if err != nil {
-			return err
-		}
-		if !clean {
-			return fmt.Errorf("repository has a %s in progress; complete or abort it first", op)
 		}
 
 		resolved, err := wt.ResolveAddRef(ctx, "", refArg)
