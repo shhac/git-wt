@@ -46,6 +46,34 @@ func requireMutableRepo(ctx context.Context) (*wt.RepoInfo, error) {
 	return repo, nil
 }
 
+// prepareWorktreeSite computes the destination path under parent for the
+// given leaf, refuses if the path is already in use, runs the case-
+// insensitive collision check, and creates the parent directory chain.
+// Returns the resolved path on success.
+//
+// noun ("branch name" / "leaf") is used in the collision error so the
+// suggestion matches the positional argument vocabulary of the caller.
+func prepareWorktreeSite(parent, leaf, noun string) (string, error) {
+	path := wt.ConstructPath(parent, leaf)
+	if wt.PathExists(path) {
+		return "", fmt.Errorf("worktree path already exists: %s", path)
+	}
+	conflict, err := wt.FindCaseCollision(parent, leaf)
+	if err != nil {
+		return "", fmt.Errorf("check case collision: %w", err)
+	}
+	if conflict != "" {
+		return "", fmt.Errorf(
+			"case-insensitive conflict: %q already exists; this filesystem would treat it as the same path as %q — choose a %s that doesn't collide",
+			conflict, path, noun,
+		)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("create parent directory: %w", err)
+	}
+	return path, nil
+}
+
 // createWorktree runs `git worktree add -b <branch> [<fromRef>]` — used by
 // the `new` command to materialise a fresh branch into a new worktree.
 func createWorktree(ctx context.Context, path, branch, fromRef string) error {

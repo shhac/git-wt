@@ -51,24 +51,9 @@ var newCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		path := wt.ConstructPath(parent, branch)
-		if wt.PathExists(path) {
-			return fmt.Errorf("worktree path already exists: %s", path)
-		}
-
-		conflict, err := wt.FindCaseCollision(parent, branch)
+		path, err := prepareWorktreeSite(parent, branch, "branch name")
 		if err != nil {
-			return fmt.Errorf("check case collision: %w", err)
-		}
-		if conflict != "" {
-			return fmt.Errorf(
-				"case-insensitive conflict: %q already exists; this filesystem would treat it as the same path as %q — choose a branch name that doesn't collide",
-				conflict, path,
-			)
-		}
-
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return fmt.Errorf("create parent directory: %w", err)
+			return err
 		}
 
 		if err := createWorktree(ctx, path, branch, newFromRef); err != nil {
