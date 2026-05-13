@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/shhac/git-wt/internal/git"
 )
@@ -99,6 +100,17 @@ func inProgressOp(commonDir string) string {
 func BranchExists(ctx context.Context, dir, name string) (bool, error) {
 	_, err := git.RunIn(ctx, dir, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
 	return err == nil, nil
+}
+
+// CurrentBranch returns the short branch name HEAD points at, or an
+// error if HEAD is detached. Useful for commands that operate on the
+// "branch you're currently on" rather than a user-supplied ref.
+func CurrentBranch(ctx context.Context) (string, error) {
+	out, err := git.Run(ctx, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("HEAD is detached or not on a branch: %w", err)
+	}
+	return strings.TrimSpace(out), nil
 }
 
 // TreesDirFor returns the default worktree-parent directory: a `.gwt`

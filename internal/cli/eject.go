@@ -57,7 +57,7 @@ func runEject(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("eject must be run from the main working tree (not a secondary worktree)")
 	}
 
-	currentBranch, err := currentBranch(ctx)
+	currentBranch, err := wt.CurrentBranch(ctx)
 	if err != nil {
 		return err
 	}
@@ -97,16 +97,6 @@ func runEject(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeEject(ctx, repo, currentBranch, base, path, parent, dirty)
-}
-
-// currentBranch returns the short branch name HEAD points at. Errors if
-// HEAD is detached (which is the failure mode we want to surface).
-func currentBranch(ctx context.Context) (string, error) {
-	out, err := git.Run(ctx, "symbolic-ref", "--short", "HEAD")
-	if err != nil {
-		return "", fmt.Errorf("HEAD is detached or not on a branch: %w", err)
-	}
-	return strings.TrimSpace(out), nil
 }
 
 // detectBaseBranch picks the branch the main tree should switch to. If
