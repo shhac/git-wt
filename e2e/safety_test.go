@@ -53,10 +53,13 @@ func TestAdd_RefusesWhenMergeInProgress(t *testing.T) {
 }
 
 // TestNew_RefusesInBareRepo and TestAdd_RefusesInBareRepo pin that the
-// commands error out in a bare repo. The current error path is wt.Inspect's
-// "not in a git repository" (since `rev-parse --show-toplevel` errors in a
-// bare repo before the explicit Bare guard fires). These tests pin observable
-// behavior — refusing to create a worktree — not the specific message.
+// commands error out in a bare repo via wt.Inspect's "not in a git
+// repository" error path. The explicit Bare guard in requireMutableRepo
+// is currently unreachable because rev-parse --show-toplevel errors out
+// first; pinning the message means that if Inspect is ever reordered so
+// the Bare guard starts firing (with the "cannot create worktrees in a
+// bare repository" wording), these tests will fail loudly and force the
+// developer to confirm the change.
 func TestNew_RefusesInBareRepo(t *testing.T) {
 	bare := filepath.Join(t.TempDir(), "bare.git")
 	mustGit(t, "", "init", "-q", "--bare", bare)
@@ -64,6 +67,9 @@ func TestNew_RefusesInBareRepo(t *testing.T) {
 	res := runWT(t, bare, "new", "feat-bare", "--non-interactive", "--no-copy")
 	if res.ExitCode == 0 {
 		t.Errorf("expected non-zero exit in bare repo")
+	}
+	if !strings.Contains(res.Stderr, "not in a git repository") {
+		t.Errorf("expected bare-repo refusal via the `not in a git repository` path, got: %s", res.Stderr)
 	}
 }
 
@@ -74,6 +80,9 @@ func TestAdd_RefusesInBareRepo(t *testing.T) {
 	res := runWT(t, bare, "add", "main", "--non-interactive", "--no-copy")
 	if res.ExitCode == 0 {
 		t.Errorf("expected non-zero exit in bare repo")
+	}
+	if !strings.Contains(res.Stderr, "not in a git repository") {
+		t.Errorf("expected bare-repo refusal via the `not in a git repository` path, got: %s", res.Stderr)
 	}
 }
 
