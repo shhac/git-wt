@@ -30,6 +30,18 @@ type AddRefResolution struct {
 	LocalName string
 }
 
+// NewLocalAddRef constructs an AddRefResolution for an already-known
+// local branch — useful when the caller doesn't need ResolveAddRef's
+// classification logic (e.g. eject already has the branch name from
+// CurrentBranch and only needs to drive checkoutWorktree).
+func NewLocalAddRef(branch string) *AddRefResolution {
+	return &AddRefResolution{
+		Kind:      AddRefLocal,
+		SourceRef: branch,
+		LocalName: branch,
+	}
+}
+
 // WorktreeAddArgs returns the argv to pass to `git worktree add` to
 // materialise this resolution at path. For local refs that's a plain
 // checkout; for remote refs we pass `--track -b <LocalName>` explicitly,

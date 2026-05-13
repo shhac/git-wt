@@ -145,12 +145,7 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 		return fmt.Errorf("switch to %s: %w", base, err)
 	}
 
-	resolved := &wt.AddRefResolution{
-		Kind:      wt.AddRefLocal,
-		SourceRef: branch,
-		LocalName: branch,
-	}
-	if err := checkoutWorktree(ctx, path, resolved); err != nil {
+	if err := checkoutWorktree(ctx, path, wt.NewLocalAddRef(branch)); err != nil {
 		// Rollback: switch back to original branch + restore the stash.
 		if _, swErr := git.Run(ctx, "switch", branch); swErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: rollback switch to %s failed: %v\n", branch, swErr)
