@@ -89,10 +89,15 @@ func TestAdd_TwoArgLeafOverrideRemote(t *testing.T) {
 	mustExist(t, filepath.Join(repo, ".gwt", "review"))
 	mustNotExist(t, filepath.Join(repo, ".gwt", "feature-x"))
 
-	// Local feature-x branch should still be created with tracking.
-	branches := mustGit(t, repo, "branch", "--list", "feature-x")
-	if !strings.Contains(branches, "feature-x") {
-		t.Errorf("expected local feature-x branch to be created; got: %q", branches)
+	// The DWIM contract: the local branch is named after the remote rest
+	// (feature-x), NOT after the leaf override (review). A refactor that
+	// accidentally passed the leaf as the -b argument would survive a
+	// "tracking is set" check, so we also assert no `review` branch exists.
+	if got := mustGit(t, repo, "branch", "--list", "feature-x"); !strings.Contains(got, "feature-x") {
+		t.Errorf("expected local feature-x branch to be created; got: %q", got)
+	}
+	if got := mustGit(t, repo, "branch", "--list", "review"); got != "" {
+		t.Errorf("did NOT expect a local `review` branch (leaf must not leak into -b); got: %q", got)
 	}
 }
 
