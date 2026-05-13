@@ -274,7 +274,7 @@ func TestAlias_GeneratesValidShell(t *testing.T) {
 		t.Fatalf("alias exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	// runWT pins --fd 9, so the wrapper bakes 9 too.
-	for _, want := range []string{"mygwt() {", "case \"$_sub\" in", "go|new|rm)", "9>&1 1>&2"} {
+	for _, want := range []string{"mygwt() {", "case \"$_sub\" in", "go|new|add|rm)", "9>&1 1>&2"} {
 		if !strings.Contains(res.Stdout, want) {
 			t.Errorf("alias output missing %q\n--- output ---\n%s", want, res.Stdout)
 		}

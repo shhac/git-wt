@@ -157,6 +157,67 @@ func TestAdd_HintsWhenParentDirNotIgnored(t *testing.T) {
 	}
 }
 
+func TestAdd_EmitsPathOnFD(t *testing.T) {
+	repo := newRepo(t)
+	mustGit(t, repo, "branch", "feat-fd")
+
+	res := runWTFD(t, repo, "add", "feat-fd", "--non-interactive", "--no-copy")
+	if res.ExitCode != 0 {
+		t.Fatalf("add exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	got := strings.TrimSpace(res.FD3)
+	if !strings.HasSuffix(got, "/demo/.gwt/feat-fd") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-fd", got)
+	}
+}
+
+func TestAdd_ThenGoFindsWorktree(t *testing.T) {
+	// End-to-end: add creates the worktree, go finds it. The worktree
+	// produced by `add` should be a fully usable, listable worktree.
+	repo := newRepo(t)
+	mustGit(t, repo, "branch", "feat-go")
+
+	if r := runWT(t, repo, "add", "feat-go", "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+		t.Fatalf("add: %s", r.Stderr)
+	}
+
+	res := runWTFD(t, repo, "go", "feat-go")
+	if res.ExitCode != 0 {
+		t.Fatalf("go exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(res.FD3), "/demo/.gwt/feat-go") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-go", res.FD3)
+	}
+}
+
+func TestAdd_CustomParentDir(t *testing.T) {
+	repo := newRepo(t)
+	mustGit(t, repo, "branch", "feat-pd")
+	custom := filepath.Join(repo, "my-trees")
+
+	res := runWT(t, repo, "add", "feat-pd", "--parent-dir", custom, "--non-interactive", "--no-copy")
+	if res.ExitCode != 0 {
+		t.Fatalf("add exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustExist(t, filepath.Join(custom, "feat-pd"))
+	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-pd"))
+}
+
+func TestAdd_InvalidLeafRejected(t *testing.T) {
+	repo := newRepo(t)
+	mustGit(t, repo, "branch", "real-branch")
+
+	// Leaf with `..` should be rejected by ValidateBranchName before any
+	// filesystem mutation.
+	res := runWT(t, repo, "add", "../escape", "real-branch", "--non-interactive", "--no-copy")
+	if res.ExitCode == 0 {
+		t.Errorf("expected non-zero exit for leaf containing `..`")
+	}
+	if !strings.Contains(res.Stderr, "invalid leaf") {
+		t.Errorf("expected `invalid leaf` error, got: %s", res.Stderr)
+	}
+}
+
 func TestAdd_BranchAlreadyCheckedOutElsewhereErrors(t *testing.T) {
 	repo := newRepo(t)
 	mustGit(t, repo, "branch", "dup")

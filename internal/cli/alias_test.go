@@ -45,7 +45,7 @@ func TestRenderAlias_Defaults(t *testing.T) {
 	mustContain(t, got, `local bin='/bin/git-wt'`)
 	mustContain(t, got, `--fd 3`)
 	mustContain(t, got, `3>&1 1>&2`)
-	mustContain(t, got, "go|new|rm)")
+	mustContain(t, got, "go|new|add|rm)")
 	// The wrapper walks args so leading global flags (--debug, --plain, etc.)
 	// don't bypass the cd-capable branch.
 	mustContain(t, got, `for _arg in "$@"`)
