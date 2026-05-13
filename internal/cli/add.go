@@ -31,11 +31,12 @@ var addCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		var leafOverride, refArg string
+		// The ref is always the last positional; the optional first
+		// positional overrides the leaf.
+		refArg := args[len(args)-1]
+		var leafOverride string
 		if len(args) == 2 {
-			leafOverride, refArg = args[0], args[1]
-		} else {
-			refArg = args[0]
+			leafOverride = args[0]
 		}
 
 		repo, err := requireMutableRepo(ctx)
