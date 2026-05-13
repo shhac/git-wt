@@ -184,3 +184,36 @@ func TestResolveAddRef_EmptyString(t *testing.T) {
 		t.Errorf("expected error for empty ref")
 	}
 }
+
+func TestAddRefResolution_WorktreeAddArgs_Local(t *testing.T) {
+	r := &AddRefResolution{Kind: AddRefLocal, SourceRef: "feat", LocalName: "feat"}
+	got := r.WorktreeAddArgs("/tmp/wt")
+	want := []string{"worktree", "add", "/tmp/wt", "feat"}
+	if !sliceEq(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestAddRefResolution_WorktreeAddArgs_Remote(t *testing.T) {
+	// Pins the DWIM-trap workaround: remote refs MUST get --track -b
+	// <LocalName> or `git worktree add origin/feat` creates a detached
+	// worktree instead of a tracking branch.
+	r := &AddRefResolution{Kind: AddRefRemote, SourceRef: "origin/feat", LocalName: "feat"}
+	got := r.WorktreeAddArgs("/tmp/wt")
+	want := []string{"worktree", "add", "--track", "-b", "feat", "/tmp/wt", "origin/feat"}
+	if !sliceEq(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func sliceEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

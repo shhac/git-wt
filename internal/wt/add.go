@@ -30,6 +30,19 @@ type AddRefResolution struct {
 	LocalName string
 }
 
+// WorktreeAddArgs returns the argv to pass to `git worktree add` to
+// materialise this resolution at path. For local refs that's a plain
+// checkout; for remote refs we pass `--track -b <LocalName>` explicitly,
+// because `git worktree add origin/foo` on its own creates a detached
+// worktree rather than a tracking branch — git's DWIM only fires when
+// the start-point is a bare branch name that doesn't yet exist locally.
+func (r *AddRefResolution) WorktreeAddArgs(path string) []string {
+	if r.Kind == AddRefRemote {
+		return []string{"worktree", "add", "--track", "-b", r.LocalName, path, r.SourceRef}
+	}
+	return []string{"worktree", "add", path, r.SourceRef}
+}
+
 // ResolveAddRef classifies a user-supplied ref for `gwt add`.
 //
 // Rules, in order:

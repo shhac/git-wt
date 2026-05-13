@@ -107,20 +107,10 @@ func createWorktree(ctx context.Context, path, branch, fromRef string) error {
 }
 
 // checkoutWorktree runs `git worktree add` for an already-resolved ref.
-// For a local branch this is a plain checkout. For a remote-tracking ref
-// we pass `--track -b <localName>` explicitly, otherwise `git worktree add`
-// treats `origin/feature` as a detached commit-ish and skips creating a
-// local tracking branch (DWIM only fires when the start-point is a bare
-// branch name that doesn't yet exist locally).
+// The args-construction (local vs remote-tracking) is encapsulated on
+// the resolution itself; see wt.AddRefResolution.WorktreeAddArgs.
 func checkoutWorktree(ctx context.Context, path string, ref *wt.AddRefResolution) error {
-	var args []string
-	switch ref.Kind {
-	case wt.AddRefRemote:
-		args = []string{"worktree", "add", "--track", "-b", ref.LocalName, path, ref.SourceRef}
-	default:
-		args = []string{"worktree", "add", path, ref.SourceRef}
-	}
-	_, err := git.Run(ctx, args...)
+	_, err := git.Run(ctx, ref.WorktreeAddArgs(path)...)
 	return err
 }
 
