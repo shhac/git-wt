@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/git-wt/internal/debug"
-	"github.com/shhac/git-wt/internal/git"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -129,20 +127,3 @@ func init() {
 	addCmd.Flags().StringVar(&addCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")
 }
 
-// checkoutWorktree runs `git worktree add` for an already-resolved ref.
-// For a local branch this is a plain checkout. For a remote-tracking ref
-// we pass `--track -b <localName>` explicitly, otherwise `git worktree add`
-// treats `origin/feature` as a detached commit-ish and skips creating a
-// local tracking branch (DWIM only fires when the start-point is a bare
-// branch name that doesn't yet exist locally).
-func checkoutWorktree(ctx context.Context, path string, ref *wt.AddRefResolution) error {
-	var args []string
-	switch ref.Kind {
-	case wt.AddRefRemote:
-		args = []string{"worktree", "add", "--track", "-b", ref.LocalName, path, ref.SourceRef}
-	default:
-		args = []string{"worktree", "add", path, ref.SourceRef}
-	}
-	_, err := git.Run(ctx, args...)
-	return err
-}
