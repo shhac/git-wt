@@ -124,36 +124,48 @@ func confirmEject(branch, base, path string, dirty bool) bool {
 }
 
 // executeEject performs the actual stash → switch → worktree-add → apply
-// flow. Rollback on intermediate failure attempts to restore the original
-// state (re-switch + unstash) so the user isn't left in a half-state.
-func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, parent string, dirty bool) error {
+// flow. Each successful mutation registers an inverse on the compensation
+// stack; on failure, we call rollback() once and it runs the inverses in
+// reverse order. Adding a new step in the middle of the pipeline only
+// requires registering its own undo — no other failure site needs to know.
+func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, parent string, dirty bool) (err error) {
 	end := debug.Op("eject.execute", branch)
-	defer func() { end(nil) }()
+	defer func() { end(err) }()
+
+	var rollbacks []func()
+	rollback := func() {
+		for i := len(rollbacks) - 1; i >= 0; i-- {
+			rollbacks[i]()
+		}
+	}
 
 	stashRef := ""
 	if dirty {
-		ref, err := wt.StashPush(ctx, fmt.Sprintf("git-wt eject of %s", branch))
-		if err != nil {
-			return fmt.Errorf("stash: %w", err)
+		ref, sErr := wt.StashPush(ctx, fmt.Sprintf("git-wt eject of %s", branch))
+		if sErr != nil {
+			return fmt.Errorf("stash: %w", sErr)
 		}
 		stashRef = ref
+		rollbacks = append(rollbacks, func() { rollbackStash(ctx, "", stashRef) })
 	}
 
-	if _, err := git.Run(ctx, "switch", base); err != nil {
-		// Rollback: restore the stash so we're back where we started.
-		rollbackStash(ctx, "", stashRef)
-		return fmt.Errorf("switch to %s: %w", base, err)
+	if _, sErr := git.Run(ctx, "switch", base); sErr != nil {
+		rollback()
+		return fmt.Errorf("switch to %s: %w", base, sErr)
 	}
-
-	if err := checkoutWorktree(ctx, path, wt.NewLocalAddRef(branch)); err != nil {
-		// Rollback: switch back to original branch + restore the stash.
+	rollbacks = append(rollbacks, func() {
 		if _, swErr := git.Run(ctx, "switch", branch); swErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: rollback switch to %s failed: %v\n", branch, swErr)
 		}
-		rollbackStash(ctx, "", stashRef)
-		return fmt.Errorf("create worktree: %w", err)
+	})
+
+	if cErr := checkoutWorktree(ctx, path, wt.NewLocalAddRef(branch)); cErr != nil {
+		rollback()
+		return fmt.Errorf("create worktree: %w", cErr)
 	}
 
+	// Past the rollback territory: the worktree is created, branch is
+	// in it, original branch's stash (if any) needs to be restored there.
 	if stashRef != "" {
 		switch outcome, applyErr := wt.StashApply(ctx, path, stashRef); outcome {
 		case wt.StashApplied:
