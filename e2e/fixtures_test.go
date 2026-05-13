@@ -58,6 +58,15 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+// readFile reads a file or fails the test.
+func readFile(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func mustExist(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); err != nil {
