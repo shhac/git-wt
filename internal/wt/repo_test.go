@@ -3,8 +3,45 @@ package wt
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestResolveParentDir_EmptyOverrideUsesDefault(t *testing.T) {
+	got, err := ResolveParentDir("/repo", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "/repo/.gwt"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveParentDir_AbsoluteOverrideUnchanged(t *testing.T) {
+	got, err := ResolveParentDir("/repo", "/elsewhere/trees")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "/elsewhere/trees"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveParentDir_RelativeOverrideResolved(t *testing.T) {
+	// Relative override gets absolutised against cwd. We can't compare to
+	// a literal path without knowing the test cwd, so just assert the
+	// result is absolute and ends with the relative bit.
+	got, err := ResolveParentDir("/repo", "trees")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("got %q, want absolute path", got)
+	}
+	if !strings.HasSuffix(got, "/trees") {
+		t.Errorf("got %q, want suffix /trees", got)
+	}
+}
 
 func TestInProgressOp_CleanRepo(t *testing.T) {
 	dir := t.TempDir()

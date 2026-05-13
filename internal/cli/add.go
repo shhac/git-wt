@@ -59,14 +59,9 @@ var addCmd = &cobra.Command{
 			return fmt.Errorf("invalid leaf %q: %w", leaf, err)
 		}
 
-		parent := addParentDir
-		if parent == "" {
-			parent = wt.TreesDirFor(repo.MainRoot)
-		} else {
-			parent, err = filepath.Abs(parent)
-			if err != nil {
-				return err
-			}
+		parent, err := wt.ResolveParentDir(repo.MainRoot, addParentDir)
+		if err != nil {
+			return err
 		}
 		path := wt.ConstructPath(parent, leaf)
 		if wt.PathExists(path) {

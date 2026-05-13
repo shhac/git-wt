@@ -109,6 +109,16 @@ func TreesDirFor(mainRoot string) string {
 	return filepath.Join(mainRoot, ".gwt")
 }
 
+// ResolveParentDir returns the worktree-parent directory for a creation
+// command. An empty override yields TreesDirFor(mainRoot); any other
+// value is resolved to an absolute path.
+func ResolveParentDir(mainRoot, override string) (string, error) {
+	if override == "" {
+		return TreesDirFor(mainRoot), nil
+	}
+	return filepath.Abs(override)
+}
+
 // ConstructPath builds the worktree path for a branch under parent (or the
 // default trees dir if parent is empty). Branch names may contain slashes —
 // they're preserved as subdirectories.

@@ -47,14 +47,9 @@ var newCmd = &cobra.Command{
 			return fmt.Errorf("branch %q already exists", branch)
 		}
 
-		parent := newParentDir
-		if parent == "" {
-			parent = wt.TreesDirFor(repo.MainRoot)
-		} else {
-			parent, err = filepath.Abs(parent)
-			if err != nil {
-				return err
-			}
+		parent, err := wt.ResolveParentDir(repo.MainRoot, newParentDir)
+		if err != nil {
+			return err
 		}
 		path := wt.ConstructPath(parent, branch)
 		if wt.PathExists(path) {
