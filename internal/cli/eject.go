@@ -40,74 +40,99 @@ func init() {
 	ejectCmd.Flags().StringVar(&ejectBase, "base", "", "branch to switch the main tree to (default: main or master)")
 }
 
+// ejectPlan captures the resolved inputs for an eject — everything
+// that's been gathered and validated before the first mutation runs.
+// Passed through confirmEject and executeEject so their signatures
+// stay small and they can be tested with synthetic plans.
+type ejectPlan struct {
+	repo          *wt.RepoInfo
+	currentBranch string
+	base          string
+	leaf          string
+	parent        string
+	path          string
+	dirty         bool
+}
+
 func runEject(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-
 	var leafOverride string
 	if len(args) == 1 {
 		leafOverride = args[0]
 	}
+	plan, err := planEject(ctx, leafOverride, ejectBase, ejectParentDir)
+	if err != nil {
+		return err
+	}
+	if !confirmEject(plan) {
+		return fmt.Errorf("cancelled")
+	}
+	return executeEject(ctx, plan)
+}
 
+// planEject gathers and validates all the inputs eject needs before
+// making any change. Effectful (reads repo + git state) but does not
+// mutate anything; returns a *ejectPlan ready to hand to confirmEject
+// and executeEject.
+func planEject(ctx context.Context, leafOverride, baseOverride, parentDirOverride string) (*ejectPlan, error) {
 	repo, err := requireMutableRepo(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if repo.Root != repo.MainRoot {
-		return fmt.Errorf("eject must be run from the main working tree (not a secondary worktree)")
+		return nil, fmt.Errorf("eject must be run from the main working tree (not a secondary worktree)")
 	}
-
 	currentBranch, err := wt.CurrentBranch(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	base, err := wt.DetectBaseBranch(ctx, ejectBase)
+	base, err := wt.DetectBaseBranch(ctx, baseOverride)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if currentBranch == base {
-		return fmt.Errorf("current branch %q is the base branch; nothing to eject", currentBranch)
+		return nil, fmt.Errorf("current branch %q is the base branch; nothing to eject", currentBranch)
 	}
-
 	leaf, err := defaultedLeaf(leafOverride, currentBranch)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	parent, err := wt.ResolveParentDir(repo.MainRoot, ejectParentDir)
+	parent, err := wt.ResolveParentDir(repo.MainRoot, parentDirOverride)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	path, err := prepareWorktreeSite(parent, leaf, "leaf")
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	dirty, err := wt.IsWorkingTreeDirty(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	if !confirmEject(currentBranch, base, path, dirty) {
-		return fmt.Errorf("cancelled")
-	}
-
-	return executeEject(ctx, repo, currentBranch, base, path, parent, dirty)
+	return &ejectPlan{
+		repo:          repo,
+		currentBranch: currentBranch,
+		base:          base,
+		leaf:          leaf,
+		parent:        parent,
+		path:          path,
+		dirty:         dirty,
+	}, nil
 }
 
 // confirmEject prompts the user before doing anything destructive. Skipped
 // when --non-interactive is set or stdin isn't a TTY.
-func confirmEject(branch, base, path string, dirty bool) bool {
+func confirmEject(p *ejectPlan) bool {
 	if !interactive() {
 		return true
 	}
 	stashMsg := "no uncommitted changes"
-	if dirty {
+	if p.dirty {
 		stashMsg = "stash uncommitted changes (incl. untracked)"
 	}
 	summary := fmt.Sprintf(
 		"Eject %q to %s:\n    %s\n    switch main tree to %q\n    restore changes in new worktree",
-		branch, path, stashMsg, base,
+		p.currentBranch, p.path, stashMsg, p.base,
 	)
 	options := []picker.Option[bool]{
 		{Label: "Proceed", Value: true},
@@ -125,8 +150,8 @@ func confirmEject(branch, base, path string, dirty bool) bool {
 // stack; on failure, we call rollback() once and it runs the inverses in
 // reverse order. Adding a new step in the middle of the pipeline only
 // requires registering its own undo — no other failure site needs to know.
-func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, parent string, dirty bool) (err error) {
-	end := debug.Op("eject.execute", branch)
+func executeEject(ctx context.Context, p *ejectPlan) (err error) {
+	end := debug.Op("eject.execute", p.currentBranch)
 	defer func() { end(err) }()
 
 	var rollbacks []func()
@@ -137,8 +162,8 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 	}
 
 	stashRef := ""
-	if dirty {
-		ref, sErr := wt.StashPush(ctx, fmt.Sprintf("git-wt eject of %s", branch))
+	if p.dirty {
+		ref, sErr := wt.StashPush(ctx, fmt.Sprintf("git-wt eject of %s", p.currentBranch))
 		if sErr != nil {
 			return fmt.Errorf("stash: %w", sErr)
 		}
@@ -146,17 +171,17 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 		rollbacks = append(rollbacks, func() { rollbackStash(ctx, "", stashRef) })
 	}
 
-	if _, sErr := git.Run(ctx, "switch", base); sErr != nil {
+	if _, sErr := git.Run(ctx, "switch", p.base); sErr != nil {
 		rollback()
-		return fmt.Errorf("switch to %s: %w", base, sErr)
+		return fmt.Errorf("switch to %s: %w", p.base, sErr)
 	}
 	rollbacks = append(rollbacks, func() {
-		if _, swErr := git.Run(ctx, "switch", branch); swErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: rollback switch to %s failed: %v\n", branch, swErr)
+		if _, swErr := git.Run(ctx, "switch", p.currentBranch); swErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: rollback switch to %s failed: %v\n", p.currentBranch, swErr)
 		}
 	})
 
-	if cErr := checkoutWorktree(ctx, path, wt.NewLocalAddRef(branch)); cErr != nil {
+	if cErr := checkoutWorktree(ctx, p.path, wt.NewLocalAddRef(p.currentBranch)); cErr != nil {
 		rollback()
 		return fmt.Errorf("create worktree: %w", cErr)
 	}
@@ -164,7 +189,7 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 	// Past the rollback territory: the worktree is created, branch is
 	// in it, original branch's stash (if any) needs to be restored there.
 	if stashRef != "" {
-		switch outcome, applyErr := wt.StashApply(ctx, path, stashRef); outcome {
+		switch outcome, applyErr := wt.StashApply(ctx, p.path, stashRef); outcome {
 		case wt.StashApplied:
 			// success, nothing to do
 		case wt.StashAppliedKeptStash:
@@ -175,12 +200,12 @@ func executeEject(ctx context.Context, repo *wt.RepoInfo, branch, base, path, pa
 			fmt.Fprintf(os.Stderr,
 				"warning: stash apply did not complete cleanly: %v. Your changes are preserved as %s; "+
 					"inspect with `git -C %s status` and recover with `git -C %s stash apply --index %s`\n",
-				applyErr, wt.ShortStashRef(stashRef), path, path, stashRef)
+				applyErr, wt.ShortStashRef(stashRef), p.path, p.path, stashRef)
 		}
 	}
 
-	warnIfParentNotIgnored(ctx, repo.MainRoot, parent)
-	return emitTarget(path)
+	warnIfParentNotIgnored(ctx, p.repo.MainRoot, p.parent)
+	return emitTarget(p.path)
 }
 
 // rollbackStash restores a previously-pushed stash to the working tree.
