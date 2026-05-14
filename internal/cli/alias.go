@@ -3,9 +3,12 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/shhac/git-wt/internal/config"
 )
 
 // "bakeX" names emphasize that these flags get baked into the generated shell
@@ -35,8 +38,8 @@ shell. Other commands pass through untouched.`,
 		if !validIdentifier(name) {
 			return fmt.Errorf("invalid alias name %q: must be a valid shell identifier", name)
 		}
-		if bakeFD < 3 || bakeFD > 9 {
-			return fmt.Errorf("--fd must be in 3-9 (got %d)", bakeFD)
+		if err := config.ValidateFD(strconv.Itoa(bakeFD)); err != nil {
+			return fmt.Errorf("--fd %w", err)
 		}
 		exe, err := os.Executable()
 		if err != nil {
@@ -49,7 +52,7 @@ shell. Other commands pass through untouched.`,
 
 func init() {
 	rootCmd.AddCommand(aliasCmd)
-	aliasCmd.Flags().IntVar(&bakeFD, "fd", 3, "fd to bake into the wrapper protocol (3-9)")
+	aliasCmd.Flags().IntVar(&bakeFD, "fd", config.FDMin, fmt.Sprintf("fd to bake into the wrapper protocol (%d-%d)", config.FDMin, config.FDMax))
 	aliasCmd.Flags().BoolVar(&bakePlain, "plain", false, "bake --plain into the wrapper")
 	aliasCmd.Flags().BoolVarP(&bakeNonInteractive, "non-interactive", "n", false, "bake --non-interactive into the wrapper")
 	aliasCmd.Flags().BoolVar(&bakeDebug, "debug", false, "bake debug logging into the wrapper")

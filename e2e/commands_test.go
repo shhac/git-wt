@@ -41,8 +41,8 @@ func TestNew_CreatesWorktree(t *testing.T) {
 		t.Fatalf("new exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	// default trees dir is <repo>/.gwt
-	wtPath := filepath.Join(repo, ".gwt", "feat-a")
+	// default trees dir is <repo>/.worktrees
+	wtPath := filepath.Join(repo, ".worktrees", "feat-a")
 	mustExist(t, wtPath)
 	mustExist(t, filepath.Join(wtPath, ".env"))
 
@@ -54,26 +54,26 @@ func TestNew_CreatesWorktree(t *testing.T) {
 
 func TestNew_HintsWhenParentDirNotIgnored(t *testing.T) {
 	repo := newRepo(t)
-	// No .gitignore — default .gwt/ parent is unignored.
+	// No .gitignore — default .worktrees/ parent is unignored.
 	res := runWT(t, repo, "new", "feat-hint", "--non-interactive", "--no-copy")
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, ".gwt/") || !strings.Contains(res.Stderr, ".gitignore") {
-		t.Errorf("expected gitignore hint mentioning `.gwt/` and `.gitignore`; got:\n%s", res.Stderr)
+	if !strings.Contains(res.Stderr, ".worktrees/") || !strings.Contains(res.Stderr, ".gitignore") {
+		t.Errorf("expected gitignore hint mentioning `.worktrees/` and `.gitignore`; got:\n%s", res.Stderr)
 	}
 }
 
 func TestNew_NoHintWhenParentIgnored(t *testing.T) {
 	repo := newRepo(t)
-	mustWrite(t, filepath.Join(repo, ".gitignore"), ".gwt/\n")
+	mustWrite(t, filepath.Join(repo, ".gitignore"), ".worktrees/\n")
 
 	res := runWT(t, repo, "new", "feat-noh", "--non-interactive", "--no-copy")
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	if strings.Contains(res.Stderr, "not in .gitignore") {
-		t.Errorf("expected silence when .gwt/ is ignored; got:\n%s", res.Stderr)
+		t.Errorf("expected silence when .worktrees/ is ignored; got:\n%s", res.Stderr)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestNew_NoCopySkipsConfig(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feat-b")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-b")
 	mustNotExist(t, filepath.Join(wtPath, ".env"))
 }
 
@@ -99,7 +99,7 @@ func TestNew_CopySpecExcludes(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feat-c")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-c")
 	mustExist(t, filepath.Join(wtPath, ".env"))
 	mustNotExist(t, filepath.Join(wtPath, ".env.production"))
 }
@@ -148,8 +148,8 @@ func TestGo_DirectViaFD(t *testing.T) {
 	}
 	got := strings.TrimSpace(res.FD3)
 	// On macOS /var → /private/var, so git canonicalizes paths. Compare the suffix.
-	if !strings.HasSuffix(got, "/demo/.gwt/feat-go") {
-		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-go", got)
+	if !strings.HasSuffix(got, "/demo/.worktrees/feat-go") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.worktrees/feat-go", got)
 	}
 	if got == "" {
 		t.Errorf("fd3 was empty (binary did not write to fd 3)")
@@ -164,8 +164,8 @@ func TestGo_BareModePrintsToStdout(t *testing.T) {
 	}
 	res := runWT(t, repo, "go", "feat-bare")
 	got := strings.TrimSpace(res.Stdout)
-	if !strings.HasSuffix(got, "/demo/.gwt/feat-bare") {
-		t.Errorf("bare-mode stdout = %q, want path ending in /demo/.gwt/feat-bare", got)
+	if !strings.HasSuffix(got, "/demo/.worktrees/feat-bare") {
+		t.Errorf("bare-mode stdout = %q, want path ending in /demo/.worktrees/feat-bare", got)
 	}
 }
 
@@ -239,7 +239,7 @@ func TestClean_Orphaned(t *testing.T) {
 	if !strings.Contains(res.Stderr, "branch deleted") {
 		t.Errorf("expected `branch deleted` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "orphan")
+	wtPath := filepath.Join(repo, ".worktrees", "orphan")
 	mustNotExist(t, wtPath)
 }
 
@@ -263,7 +263,7 @@ func TestClean_UpstreamGone(t *testing.T) {
 	if !strings.Contains(res.Stderr, "upstream gone") {
 		t.Errorf("expected `upstream gone` reason in stderr, got: %s", res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "doomed-tree")
+	wtPath := filepath.Join(repo, ".worktrees", "doomed-tree")
 	mustNotExist(t, wtPath)
 }
 
@@ -309,7 +309,7 @@ func TestAlias_WrapperCdWorksWithLeadingGlobalFlag(t *testing.T) {
 	if res := runWT(t, repo, "new", "feature", "--non-interactive", "--no-copy"); res.ExitCode != 0 {
 		t.Fatalf("new: exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feature")
+	wtPath := filepath.Join(repo, ".worktrees", "feature")
 	mustExist(t, wtPath)
 
 	// The generated wrapper bakes in os.Executable(), which during the test

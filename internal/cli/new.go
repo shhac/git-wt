@@ -44,7 +44,7 @@ var newCmd = &cobra.Command{
 			return fmt.Errorf("branch %q already exists", branch)
 		}
 
-		parent, err := wt.ResolveParentDir(repo.MainRoot, newParentDir)
+		parent, err := resolveParentDir(ctx, repo.MainRoot, newParentDir)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ var newCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(newCmd)
-	newCmd.Flags().StringVarP(&newParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.gwt/)")
+	newCmd.Flags().StringVarP(&newParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.worktrees/)")
 	newCmd.Flags().StringVar(&newFromRef, "from", "", "ref to branch from (default: current HEAD)")
 	newCmd.Flags().BoolVar(&newNoCopy, "no-copy", false, "skip copying project config files")
 	newCmd.Flags().StringVar(&newCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")

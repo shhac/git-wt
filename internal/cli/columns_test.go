@@ -60,10 +60,10 @@ func TestPadRight_IgnoresANSI(t *testing.T) {
 func TestColumnWidths(t *testing.T) {
 	wts := []wt.Worktree{
 		{Path: "/repo", Branch: "main"},                       // branch=4, loc="repo" (parent)
-		{Path: "/repo/.gwt/feat-a", Branch: "feat-a"},         // branch=6, loc="#feat-a"=7
+		{Path: "/repo/.worktrees/feat-a", Branch: "feat-a"},         // branch=6, loc="#feat-a"=7
 		{Path: "/repo/.conductor/abuja", Branch: "long-name"}, // branch=9, loc=".conductor/abuja"=16
 	}
-	branchW, parentW := columnWidths(wts, "/repo", "/repo/.gwt")
+	branchW, parentW := columnWidths(wts, "/repo", "/repo/.worktrees")
 	if branchW != 9 {
 		t.Errorf("branchW = %d, want 9 (longest is `long-name`)", branchW)
 	}
@@ -73,7 +73,7 @@ func TestColumnWidths(t *testing.T) {
 }
 
 func TestColumnWidths_EmptySlice(t *testing.T) {
-	branchW, parentW := columnWidths(nil, "/repo", "/repo/.gwt")
+	branchW, parentW := columnWidths(nil, "/repo", "/repo/.worktrees")
 	if branchW != 0 || parentW != 0 {
 		t.Errorf("got (%d, %d), want (0, 0) for empty slice", branchW, parentW)
 	}

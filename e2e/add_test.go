@@ -15,7 +15,7 @@ func TestAdd_OneArgLocalBranch(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	wtPath := filepath.Join(repo, ".gwt", "feat-local")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-local")
 	mustExist(t, wtPath)
 
 	if !strings.Contains(res.Stdout, wtPath) {
@@ -32,7 +32,7 @@ func TestAdd_OneArgLocalSlashBranchNestsUnderGwt(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	wtPath := filepath.Join(repo, ".gwt", "paul", "auth-bug")
+	wtPath := filepath.Join(repo, ".worktrees", "paul", "auth-bug")
 	mustExist(t, wtPath)
 }
 
@@ -50,9 +50,9 @@ func TestAdd_OneArgRemoteBranchCreatesTrackingLocal(t *testing.T) {
 	}
 
 	// Leaf derived from remote rest: feature-x (NOT origin/feature-x).
-	wtPath := filepath.Join(repo, ".gwt", "feature-x")
+	wtPath := filepath.Join(repo, ".worktrees", "feature-x")
 	mustExist(t, wtPath)
-	mustNotExist(t, filepath.Join(repo, ".gwt", "origin"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "origin"))
 
 	// Local branch feature-x exists and tracks origin/feature-x.
 	upstream := mustGit(t, repo, "for-each-ref", "--format=%(upstream:short)", "refs/heads/feature-x")
@@ -70,8 +70,8 @@ func TestAdd_TwoArgLeafOverrideLocal(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	mustExist(t, filepath.Join(repo, ".gwt", "custom-leaf"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "my-branch"))
+	mustExist(t, filepath.Join(repo, ".worktrees", "custom-leaf"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "my-branch"))
 }
 
 func TestAdd_TwoArgLeafOverrideRemote(t *testing.T) {
@@ -86,8 +86,8 @@ func TestAdd_TwoArgLeafOverrideRemote(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	mustExist(t, filepath.Join(repo, ".gwt", "review"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feature-x"))
+	mustExist(t, filepath.Join(repo, ".worktrees", "review"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feature-x"))
 
 	// The DWIM contract: the local branch is named after the remote rest
 	// (feature-x), NOT after the leaf override (review). A refactor that
@@ -134,7 +134,7 @@ func TestAdd_CopySpecRunsByDefault(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	mustExist(t, filepath.Join(repo, ".gwt", "feat-copy", ".env"))
+	mustExist(t, filepath.Join(repo, ".worktrees", "feat-copy", ".env"))
 }
 
 func TestAdd_NoCopyFlagSkipsCopy(t *testing.T) {
@@ -147,7 +147,7 @@ func TestAdd_NoCopyFlagSkipsCopy(t *testing.T) {
 		t.Fatalf("add exit %d, stderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-nocopy", ".env"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-nocopy", ".env"))
 }
 
 func TestAdd_HintsWhenParentDirNotIgnored(t *testing.T) {
@@ -157,8 +157,8 @@ func TestAdd_HintsWhenParentDirNotIgnored(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("add exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, ".gwt/") || !strings.Contains(res.Stderr, ".gitignore") {
-		t.Errorf("expected gitignore hint mentioning `.gwt/` and `.gitignore`; got:\n%s", res.Stderr)
+	if !strings.Contains(res.Stderr, ".worktrees/") || !strings.Contains(res.Stderr, ".gitignore") {
+		t.Errorf("expected gitignore hint mentioning `.worktrees/` and `.gitignore`; got:\n%s", res.Stderr)
 	}
 }
 
@@ -171,8 +171,8 @@ func TestAdd_EmitsPathOnFD(t *testing.T) {
 		t.Fatalf("add exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	got := strings.TrimSpace(res.FD3)
-	if !strings.HasSuffix(got, "/demo/.gwt/feat-fd") {
-		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-fd", got)
+	if !strings.HasSuffix(got, "/demo/.worktrees/feat-fd") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.worktrees/feat-fd", got)
 	}
 }
 
@@ -190,8 +190,8 @@ func TestAdd_ThenGoFindsWorktree(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("go exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.HasSuffix(strings.TrimSpace(res.FD3), "/demo/.gwt/feat-go") {
-		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-go", res.FD3)
+	if !strings.HasSuffix(strings.TrimSpace(res.FD3), "/demo/.worktrees/feat-go") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.worktrees/feat-go", res.FD3)
 	}
 }
 
@@ -205,7 +205,7 @@ func TestAdd_CustomParentDir(t *testing.T) {
 		t.Fatalf("add exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	mustExist(t, filepath.Join(custom, "feat-pd"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-pd"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-pd"))
 }
 
 func TestAdd_InvalidLeafRejected(t *testing.T) {

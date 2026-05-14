@@ -10,7 +10,7 @@ import (
 
 func TestPrintList_Empty(t *testing.T) {
 	var buf strings.Builder
-	printList(&buf, nil, nil, "/repo", "/repo/.gwt")
+	printList(&buf, nil, nil, "/repo", "/repo/.worktrees")
 	got := buf.String()
 	if !strings.Contains(got, "no worktrees") {
 		t.Errorf("expected `no worktrees`, got %q", got)
@@ -26,7 +26,7 @@ func TestPrintList_NoCurrentMarker(t *testing.T) {
 		{Path: "/p/a", Branch: "a"},
 		{Path: "/p/b", Branch: "b"},
 	}
-	printList(&buf, wts, nil, "/repo", "/repo/.gwt")
+	printList(&buf, wts, nil, "/repo", "/repo/.worktrees")
 	out := buf.String()
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if strings.HasPrefix(line, "* ") {
@@ -47,7 +47,7 @@ func TestPrintList_MarkerOnCurrentRow(t *testing.T) {
 	cur := &wts[1]
 
 	var buf strings.Builder
-	printList(&buf, wts, cur, "/repo", "/repo/.gwt")
+	printList(&buf, wts, cur, "/repo", "/repo/.worktrees")
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
 	if len(lines) != 3 {
@@ -68,11 +68,11 @@ func TestPrintList_ColumnAlignment(t *testing.T) {
 	// Branches of varying widths. With aligned columns, the location
 	// column should start at the same column index across rows.
 	wts := []wt.Worktree{
-		{Path: "/repo/.gwt/short", Branch: "short"},
-		{Path: "/repo/.gwt/much-longer-name", Branch: "much-longer-name"},
+		{Path: "/repo/.worktrees/short", Branch: "short"},
+		{Path: "/repo/.worktrees/much-longer-name", Branch: "much-longer-name"},
 	}
 	var buf strings.Builder
-	printList(&buf, wts, nil, "/repo", "/repo/.gwt")
+	printList(&buf, wts, nil, "/repo", "/repo/.worktrees")
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(lines))

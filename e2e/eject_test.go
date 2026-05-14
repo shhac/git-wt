@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Happy path: clean tree, eject default branch name → worktree at .gwt/<branch>/.
+// Happy path: clean tree, eject default branch name → worktree at .worktrees/<branch>/.
 func TestEject_CleanBranch(t *testing.T) {
 	repo := newRepo(t)
 	mustGit(t, repo, "checkout", "-q", "-b", "feat-clean")
@@ -17,7 +17,7 @@ func TestEject_CleanBranch(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	mustExist(t, filepath.Join(repo, ".gwt", "feat-clean"))
+	mustExist(t, filepath.Join(repo, ".worktrees", "feat-clean"))
 
 	// Main tree HEAD should be on main now.
 	head := mustGit(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
@@ -26,7 +26,7 @@ func TestEject_CleanBranch(t *testing.T) {
 	}
 
 	// Path emitted to stdout (bare mode).
-	if !strings.Contains(res.Stdout, filepath.Join(repo, ".gwt", "feat-clean")) {
+	if !strings.Contains(res.Stdout, filepath.Join(repo, ".worktrees", "feat-clean")) {
 		t.Errorf("expected emitted path in stdout, got: %s", res.Stdout)
 	}
 }
@@ -51,7 +51,7 @@ func TestEject_DirtyTrackedRestoresStagedAndModified(t *testing.T) {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
-	wtPath := filepath.Join(repo, ".gwt", "feat-dirty")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-dirty")
 	mustExist(t, wtPath)
 
 	// In the new worktree: staged content is in the index, working tree has the further-modified content.
@@ -91,7 +91,7 @@ func TestEject_UntrackedRestoresAsUntracked(t *testing.T) {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
-	wtPath := filepath.Join(repo, ".gwt", "feat-untracked")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-untracked")
 	mustExist(t, filepath.Join(wtPath, ".env"))
 
 	// .env should NOT be in the index in the new worktree.
@@ -113,8 +113,8 @@ func TestEject_LeafOverride(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
-	mustExist(t, filepath.Join(repo, ".gwt", "custom-leaf"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-leaf"))
+	mustExist(t, filepath.Join(repo, ".worktrees", "custom-leaf"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-leaf"))
 }
 
 func TestEject_BaseOverride(t *testing.T) {
@@ -168,7 +168,7 @@ func TestEject_RefusesInsideWorktree(t *testing.T) {
 	if r := runWT(t, repo, "new", "feat-inside", "--non-interactive", "--no-copy"); r.ExitCode != 0 {
 		t.Fatalf("new: %s", r.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feat-inside")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-inside")
 
 	res := runWT(t, wtPath, "eject", "--non-interactive")
 	if res.ExitCode == 0 {
@@ -213,8 +213,8 @@ func TestEject_EmitsPathOnFD(t *testing.T) {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	got := strings.TrimSpace(res.FD3)
-	if !strings.HasSuffix(got, "/demo/.gwt/feat-fd-eject") {
-		t.Errorf("fd3 = %q, want path ending in /demo/.gwt/feat-fd-eject", got)
+	if !strings.HasSuffix(got, "/demo/.worktrees/feat-fd-eject") {
+		t.Errorf("fd3 = %q, want path ending in /demo/.worktrees/feat-fd-eject", got)
 	}
 }
 
@@ -378,5 +378,5 @@ func TestEject_CustomParentDir(t *testing.T) {
 		t.Fatalf("eject exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	mustExist(t, filepath.Join(custom, "feat-pd-eject"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-pd-eject"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-pd-eject"))
 }

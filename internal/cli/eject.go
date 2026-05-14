@@ -36,7 +36,7 @@ var ejectCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(ejectCmd)
-	ejectCmd.Flags().StringVarP(&ejectParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.gwt/)")
+	ejectCmd.Flags().StringVarP(&ejectParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.worktrees/)")
 	ejectCmd.Flags().StringVar(&ejectBase, "base", "", "branch to switch the main tree to (default: main or master)")
 }
 
@@ -97,7 +97,7 @@ func planEject(ctx context.Context, leafOverride, baseOverride, parentDirOverrid
 	if err != nil {
 		return nil, err
 	}
-	parent, err := wt.ResolveParentDir(repo.MainRoot, parentDirOverride)
+	parent, err := resolveParentDir(ctx, repo.MainRoot, parentDirOverride)
 	if err != nil {
 		return nil, err
 	}

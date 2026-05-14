@@ -24,13 +24,15 @@ cmd/git-wt/main.go                 # entry point
 internal/
   cli/                             # cobra subcommands + per-command helpers
     root.go                        # global flags, Execute()
-    list.go new.go add.go eject.go # the eight commands
-    go_cmd.go rm.go clean.go alias.go
+    list.go new.go add.go eject.go # the nine commands
+    go_cmd.go rm.go clean.go alias.go config_cmd.go
     emit.go                        # fd<N> / bare-mode path emission
     picker.go                      # adapts internal/picker to worktrees
     worktrees.go                   # findByBranch, filterOutCurrent, ...
+    config_resolve.go              # layer git-config wt.* under CLI flags
   picker/                          # bubbletea SelectOne / SelectMany / Confirm
   wt/                              # worktree types, parsing, validation
+  config/                          # wt.* key registry + git-config IO + ${...} expansion
   copyspec/                        # .git-wt-copy-files parser
   ui/                              # lipgloss styles + duration formatting
   fd/                              # wrapper-protocol fd open/check
@@ -60,19 +62,27 @@ time because bash parses redirect operators before variable expansion.
 
 | Command | Description |
 |---|---|
-| `new <branch>` | Create worktree at `<repo>/.gwt/<branch>/` (or `--parent-dir`). Copies files matching `.git-wt-copy-files` (or built-in defaults). Hints if `<parent>/` isn't gitignored when it lives inside the repo. |
+| `new <branch>` | Create worktree at `<repo>/.worktrees/<branch>/` (or `--parent-dir`). Copies files matching `.git-wt-copy-files` (or built-in defaults). Hints if `<parent>/` isn't gitignored when it lives inside the repo. |
 | `add [<leaf>] <branch\|remote-ref>` | Worktree for an *existing* branch. Resolver: `<remote>/<rest>` (with matching remote ref) ⇒ remote DWIM via `--track -b <rest>`; else local branch lookup. Optional `<leaf>` overrides the leaf directory name (defaults to the local branch name). Never creates new branches. |
 | `eject [<leaf>]` | Move HEAD's branch out of the main working tree into a new worktree. Stashes (incl. untracked), switches main tree to `main`/`master`/`--base`, runs the add pipeline, then `stash apply --index` in the new worktree. Interactive confirm by default. Must run from the main tree, must be on a branch, current branch must not be the base. |
 | `rm [branch...]` | Remove worktree(s). Interactive multi-select if no args. Confirm step is also the type-of-rm choice (worktree only / worktree+branch / cancel). Bounces to main if you remove your current worktree. |
 | `go [branch]` | Navigate. Direct branch lookup with unique-suffix fallback (`auth` → `paul/auth`). Interactive picker if no arg. |
-| `list` (`ls`) | Print the table. Columns: marker, branch, location (`#name` inside `.gwt/`, rel-to-repo elsewhere, abs outside), mtime. |
+| `list` (`ls`) | Print the table. Columns: marker, branch, location (`#name` inside `.worktrees/`, rel-to-repo elsewhere, abs outside), mtime. |
 | `clean` | Remove worktrees whose local branch is gone OR whose upstream is gone. Both run by default; narrow with `--orphaned-only` / `--upstream-gone-only`. |
 | `alias <name>` | Print a POSIX shell function. Configurable fd (`--fd N`, range 3-9) and baked flags (`--plain`, `-n`, `--debug`). |
+| `config [<key> [<value>]]` | Show/set persistent settings stored in `git config wt.*`. List bare; show one key with template + resolved value; set with `<key> <value>` (default `--local`, `--global` flag for user-wide); `--unset` to remove. Validates type and template vars at set time. |
 
 ## Global flags
 
 `-h --help`, `-v --version`, `--debug`, `--plain` (also honours `NO_COLOR`),
 `-n --non-interactive` (auto-detected when stdin isn't a TTY), `--fd <N>`.
+
+`--plain` and `--fd` layer over their `wt.*` config defaults — when the
+user doesn't pass the flag (`cmd.Flags().Changed`), `PersistentPreRun`
+reads the corresponding key. `--parent-dir` is checked the same way in
+`cli.resolveParentDir`. Templating (`${repo}`, `${repoPath}`,
+`${repoParent}`, `${home}`) is applied by `wt.ResolveParentDir` whenever
+the value is non-empty, so values from CLI or config can both use it.
 
 ## Build / test
 

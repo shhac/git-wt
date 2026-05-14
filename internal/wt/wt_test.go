@@ -66,7 +66,7 @@ func TestSortByModTime_AllZero(t *testing.T) {
 
 func TestDisplayPath(t *testing.T) {
 	const main = "/Users/paul/projects/backend"
-	const trees = "/Users/paul/projects/backend/.gwt"
+	const trees = "/Users/paul/projects/backend/.worktrees"
 	cases := []struct {
 		name, path, want string
 	}{
@@ -177,8 +177,8 @@ func TestConstructPath(t *testing.T) {
 
 func TestTreesDirFor(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"/home/user/repo", "/home/user/repo/.gwt"},
-		{"/repo", "/repo/.gwt"},
+		{"/home/user/repo", "/home/user/repo/.worktrees"},
+		{"/repo", "/repo/.worktrees"},
 	}
 	for _, c := range cases {
 		got := TreesDirFor(c.in)

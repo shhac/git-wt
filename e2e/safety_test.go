@@ -34,7 +34,7 @@ func TestNew_RefusesWhenMergeInProgress(t *testing.T) {
 	if !strings.Contains(res.Stderr, "merge in progress") {
 		t.Errorf("expected `merge in progress` in stderr, got: %s", res.Stderr)
 	}
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-x"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-x"))
 }
 
 func TestAdd_RefusesWhenMergeInProgress(t *testing.T) {
@@ -49,7 +49,7 @@ func TestAdd_RefusesWhenMergeInProgress(t *testing.T) {
 	if !strings.Contains(res.Stderr, "merge in progress") {
 		t.Errorf("expected `merge in progress` in stderr, got: %s", res.Stderr)
 	}
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-y"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-y"))
 }
 
 // TestNew_RefusesInBareRepo and TestAdd_RefusesInBareRepo pin that the
@@ -101,7 +101,7 @@ func TestNew_CopyFailureIsNonFatal(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("expected exit 0 (copy failure should be non-fatal), got %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feat-copyfail")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-copyfail")
 	mustExist(t, wtPath)
 	if !strings.Contains(res.Stderr, "warning: copy configs") {
 		t.Errorf("expected `warning: copy configs` in stderr, got: %s", res.Stderr)
@@ -120,7 +120,7 @@ func TestAdd_CopyFailureIsNonFatal(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("expected exit 0 (copy failure should be non-fatal), got %d: %s", res.ExitCode, res.Stderr)
 	}
-	wtPath := filepath.Join(repo, ".gwt", "feat-addcopyfail")
+	wtPath := filepath.Join(repo, ".worktrees", "feat-addcopyfail")
 	mustExist(t, wtPath)
 	if !strings.Contains(res.Stderr, "warning: copy configs") {
 		t.Errorf("expected `warning: copy configs` in stderr, got: %s", res.Stderr)
@@ -138,5 +138,5 @@ func TestNew_CustomParentDir(t *testing.T) {
 		t.Fatalf("new exit %d: %s", res.ExitCode, res.Stderr)
 	}
 	mustExist(t, filepath.Join(custom, "feat-pd"))
-	mustNotExist(t, filepath.Join(repo, ".gwt", "feat-pd"))
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "feat-pd"))
 }

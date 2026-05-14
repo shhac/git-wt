@@ -11,7 +11,7 @@ import (
 
 // hermeticGit configures the test environment so `git check-ignore` (and
 // any other git invocation) doesn't pick up the developer's global or
-// system gitignore. Required because some users include `.gwt/` in their
+// system gitignore. Required because some users include `.worktrees/` in their
 // global gitignore — which is the *correct* user-side fix this test is
 // trying to suggest, but it would mask the warning we're testing.
 func hermeticGit(t *testing.T) {
@@ -123,25 +123,25 @@ func TestRelInsideRepo(t *testing.T) {
 func TestWarnIfParentNotIgnored_NotIgnored_Fires(t *testing.T) {
 	hermeticGit(t)
 	repo := initRepo(t) // no .gitignore
-	parent := filepath.Join(repo, ".gwt")
+	parent := filepath.Join(repo, ".worktrees")
 	mkParent(t, parent)
 	got := captureStderr(t, func() {
 		warnIfParentNotIgnored(context.Background(), repo, parent)
 	})
-	if !strings.Contains(got, ".gwt/") || !strings.Contains(got, ".gitignore") {
-		t.Errorf("expected hint mentioning .gwt/ and .gitignore; got:\n%s", got)
+	if !strings.Contains(got, ".worktrees/") || !strings.Contains(got, ".gitignore") {
+		t.Errorf("expected hint mentioning .worktrees/ and .gitignore; got:\n%s", got)
 	}
 }
 
 func TestWarnIfParentNotIgnored_Ignored_Silent(t *testing.T) {
-	repo := initRepo(t, ".gwt/")
-	parent := filepath.Join(repo, ".gwt")
+	repo := initRepo(t, ".worktrees/")
+	parent := filepath.Join(repo, ".worktrees")
 	mkParent(t, parent)
 	got := captureStderr(t, func() {
 		warnIfParentNotIgnored(context.Background(), repo, parent)
 	})
 	if got != "" {
-		t.Errorf("expected silence when .gwt/ is ignored; got:\n%s", got)
+		t.Errorf("expected silence when .worktrees/ is ignored; got:\n%s", got)
 	}
 }
 

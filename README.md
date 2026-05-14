@@ -51,8 +51,8 @@ everything else passes through unchanged.
 ### Basic usage
 
 ```bash
-gwt new feature-branch              # creates <repo>/.gwt/feature-branch and cds in
-gwt new paul/auth                   # nested: <repo>/.gwt/paul/auth
+gwt new feature-branch              # creates <repo>/.worktrees/feature-branch and cds in
+gwt new paul/auth                   # nested: <repo>/.worktrees/paul/auth
 gwt go                              # interactive picker
 gwt go feature-branch               # direct nav
 gwt rm                              # multi-select picker
@@ -61,8 +61,8 @@ gwt list                            # or `gwt ls`
 gwt clean --dry-run                 # show what would be removed
 ```
 
-The default trees directory is `<repo>/.gwt/` — you'll likely want to add
-`.gwt/` to your `.gitignore` (the tool prints a one-line hint when it
+The default trees directory is `<repo>/.worktrees/` — you'll likely want to add
+`.worktrees/` to your `.gitignore` (the tool prints a one-line hint when it
 isn't). Override per-invocation with `--parent-dir <path>`.
 
 ## Commands
@@ -77,6 +77,7 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 | `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. |
 | `clean` | Remove worktrees whose branch is gone (locally or upstream). Flags: `--dry-run`, `--no-fetch`, `--orphaned-only`, `--upstream-gone-only`. |
 | `alias <name>` | Print a shell function wrapper. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`. |
+| `config [<key> [<value>]]` | Show or change persistent settings (stored in `git config wt.*`). See [Configuration](#configuration). |
 
 ### Global flags
 
@@ -96,12 +97,12 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 
 ## How it works
 
-By default git-wt creates worktrees inside the main repo at `<repo>/.gwt/`:
+By default git-wt creates worktrees inside the main repo at `<repo>/.worktrees/`:
 
 ```
 my-repo/
 ├── .git/
-├── .gwt/                  # default trees dir (add to .gitignore)
+├── .worktrees/                  # default trees dir (add to .gitignore)
 │   ├── feature-a/
 │   └── paul/
 │       └── feature-auth/
@@ -115,6 +116,8 @@ gwt new feature-x --parent-dir ../sibling-trees   # outside the repo
 gwt new feature-y --parent-dir ~/scratch          # absolute path
 ```
 
+Or set a persistent default — see [Configuration](#configuration) below.
+
 ### Project-config copy
 
 When you run `gwt new`, the tool copies project-local files from the main
@@ -124,6 +127,52 @@ gitignore-ish: `#` comments, glob patterns, `!`-prefixed exclusions. When
 the file is absent, a built-in default copies `.env*`, `.claude/`,
 `CLAUDE.local.md`, `.ai-cache/`. See `.git-wt-copy-files.example` in the
 repo for the schema.
+
+### Configuration
+
+Persistent settings live under the `wt.*` namespace in `git config`, so
+they're scope-aware (per-clone via `--local`, per-user via `--global`)
+and reachable from vanilla `git config` too. The `git-wt config`
+subcommand adds type validation, template-variable resolution, and a
+schema-aware `--help`.
+
+```bash
+git-wt config                                    # list every key + effective value
+git-wt config parentDir                          # show one key (raw + resolved)
+git-wt config parentDir '../wt-${repo}'          # set in --local (current repo only)
+git-wt config --global parentDir '${repoParent}/${repo}.worktrees'
+git-wt config --unset parentDir                  # remove from --local
+```
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `wt.parentDir` | string | `${repoPath}/.worktrees` | Parent directory for new worktrees. Supports `${...}` substitution. |
+| `wt.plain` | bool | `false` | Always run with `--plain` (also honors `NO_COLOR`). |
+| `wt.fd` | int | `3` | Default fd for the wrapper protocol (`3-9`). |
+
+**Template variables** (path-shaped values only):
+
+- `${repo}` — basename of the main worktree (e.g. `git-wt`)
+- `${repoPath}` — absolute path to the main worktree
+- `${repoParent}` — directory containing the main worktree
+- `${home}` — `$HOME`
+
+Use `$$` for a literal `$`. Unknown variables error at `config` time —
+they won't sit silently in your gitconfig waiting to break a future
+`new`/`add`/`eject`.
+
+**Precedence** (most-specific wins):
+
+1. explicit CLI flag (`--parent-dir`, `--plain`, `--fd`)
+2. `git config --local wt.<key>` (this clone)
+3. `git config --global wt.<key>` (user-wide)
+4. built-in default
+
+The headline use case for templating is **one global setting that
+adapts per repo**. Set
+`git config --global wt.parentDir '${repoParent}/${repo}.worktrees'`
+once and every repo you work in gets its worktrees in a sibling
+directory like `~/code/myrepo.worktrees/`.
 
 ### Shell-wrapper protocol
 

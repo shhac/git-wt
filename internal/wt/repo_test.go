@@ -12,7 +12,7 @@ func TestResolveParentDir_EmptyOverrideUsesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if want := "/repo/.gwt"; got != want {
+	if want := "/repo/.worktrees"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -27,19 +27,59 @@ func TestResolveParentDir_AbsoluteOverrideUnchanged(t *testing.T) {
 	}
 }
 
-func TestResolveParentDir_RelativeOverrideResolved(t *testing.T) {
-	// Relative override gets absolutised against cwd. We can't compare to
-	// a literal path without knowing the test cwd, so just assert the
-	// result is absolute and ends with the relative bit.
+func TestResolveParentDir_RelativeOverrideResolvedAgainstMainRoot(t *testing.T) {
 	got, err := ResolveParentDir("/repo", "trees")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !filepath.IsAbs(got) {
-		t.Errorf("got %q, want absolute path", got)
+	if want := "/repo/trees"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
-	if !strings.HasSuffix(got, "/trees") {
-		t.Errorf("got %q, want suffix /trees", got)
+}
+
+func TestResolveParentDir_TemplateExpansion(t *testing.T) {
+	cases := []struct {
+		name, mainRoot, override, want string
+	}{
+		{
+			name:     "sibling pattern",
+			mainRoot: "/u/p/myrepo",
+			override: "${repoParent}/${repo}.worktrees",
+			want:     "/u/p/myrepo.worktrees",
+		},
+		{
+			name:     "absolute via repoPath",
+			mainRoot: "/u/p/myrepo",
+			override: "${repoPath}/subdir/wt",
+			want:     "/u/p/myrepo/subdir/wt",
+		},
+		{
+			name:     "relative post-expansion joins mainRoot",
+			mainRoot: "/u/p/myrepo",
+			override: "${repo}-trees",
+			want:     "/u/p/myrepo/myrepo-trees",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := ResolveParentDir(c.mainRoot, c.override)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestResolveParentDir_UnknownTemplateVarErrors(t *testing.T) {
+	_, err := ResolveParentDir("/repo", "${typo}/trees")
+	if err == nil {
+		t.Fatal("expected error for unknown template var")
+	}
+	if !strings.Contains(err.Error(), "typo") {
+		t.Errorf("error should name the bad var: %v", err)
 	}
 }
 

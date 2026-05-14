@@ -15,7 +15,7 @@ var (
 var addCmd = &cobra.Command{
 	Use:   "add [<leaf>] <branch|remote-ref>",
 	Short: "Create a worktree for an existing local or remote branch",
-	Long: "Create a worktree at <repo>/.gwt/<leaf>/ for an existing branch.\n" +
+	Long: "Create a worktree at <repo>/.worktrees/<leaf>/ for an existing branch.\n" +
 		"With one positional, <branch|remote-ref> serves both as the branch to\n" +
 		"check out and as the leaf directory name. With two positionals, the\n" +
 		"first overrides the leaf.\n\n" +
@@ -52,7 +52,7 @@ var addCmd = &cobra.Command{
 			return err
 		}
 
-		parent, err := wt.ResolveParentDir(repo.MainRoot, addParentDir)
+		parent, err := resolveParentDir(ctx, repo.MainRoot, addParentDir)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ var addCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(addCmd)
-	addCmd.Flags().StringVarP(&addParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.gwt/)")
+	addCmd.Flags().StringVarP(&addParentDir, "parent-dir", "p", "", "parent directory for the worktree (default: <repo>/.worktrees/)")
 	addCmd.Flags().BoolVar(&addNoCopy, "no-copy", false, "skip copying project config files")
 	addCmd.Flags().StringVar(&addCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")
 }

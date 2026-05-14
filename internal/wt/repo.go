@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shhac/git-wt/internal/config"
 	"github.com/shhac/git-wt/internal/git"
 )
 
@@ -152,22 +153,36 @@ func DetectBaseBranch(ctx context.Context, override string) (string, error) {
 	return "", fmt.Errorf("no `main` or `master` branch found; pass an explicit base")
 }
 
-// TreesDirFor returns the default worktree-parent directory: a `.gwt`
-// directory inside the main repo. Users will typically want to add `.gwt/`
+// TreesDirFor returns the default worktree-parent directory: a `.worktrees`
+// directory inside the main repo. Users will typically want to add `.worktrees/`
 // to their .gitignore to keep `git status` clean. Override with
 // `git-wt new --parent-dir <path>`.
 func TreesDirFor(mainRoot string) string {
-	return filepath.Join(mainRoot, ".gwt")
+	return filepath.Join(mainRoot, ".worktrees")
 }
 
 // ResolveParentDir returns the worktree-parent directory for a creation
-// command. An empty override yields TreesDirFor(mainRoot); any other
-// value is resolved to an absolute path.
+// command. An empty override yields TreesDirFor(mainRoot). Otherwise:
+//
+//   - ${...} template variables are expanded against mainRoot (see
+//     internal/config.ExpandPath for the vocabulary). Unknown vars
+//     error rather than landing in the resulting path silently.
+//   - Relative paths (post-expansion) are joined against mainRoot, not
+//     the caller's CWD — running `--parent-dir trees` from a subdir
+//     should still resolve relative to the repo, which is what users
+//     mean.
 func ResolveParentDir(mainRoot, override string) (string, error) {
 	if override == "" {
 		return TreesDirFor(mainRoot), nil
 	}
-	return filepath.Abs(override)
+	expanded, err := config.ExpandPath(override, config.VarsFor(mainRoot))
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(expanded) {
+		expanded = filepath.Join(mainRoot, expanded)
+	}
+	return filepath.Clean(expanded), nil
 }
 
 // ConstructPath builds the worktree path for a branch under parent (or the
