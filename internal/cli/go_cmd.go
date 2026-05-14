@@ -18,7 +18,8 @@ var goCmd = &cobra.Command{
 		"target path is written to fd N for the parent shell to cd into.\n" +
 		"In bare mode the path is printed on stdout with a copy/paste hint\n" +
 		"on stderr — supports `cd \"$(git-wt go branch)\"`.",
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeGoBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		repo, err := wt.Inspect(ctx, "")

@@ -40,6 +40,7 @@ var rmCmd = &cobra.Command{
 		"the branch as well, or --keep-branch to silence the interactive prompt\n" +
 		"that would otherwise ask. Use --force to skip the uncommitted-changes\n" +
 		"safety check.",
+	ValidArgsFunction: completeRmBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

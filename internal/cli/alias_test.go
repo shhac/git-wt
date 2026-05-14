@@ -39,7 +39,7 @@ func TestShellQuote(t *testing.T) {
 }
 
 func TestRenderAlias_Defaults(t *testing.T) {
-	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, false)
+	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, false, false)
 
 	mustContain(t, got, "gwt() {")
 	mustContain(t, got, `local bin='/bin/git-wt'`)
@@ -57,7 +57,7 @@ func TestRenderAlias_Defaults(t *testing.T) {
 }
 
 func TestRenderAlias_BakesPlainAndNonInteractive(t *testing.T) {
-	got := renderAlias("gwt", "/bin/git-wt", 3, true, true, false)
+	got := renderAlias("gwt", "/bin/git-wt", 3, true, true, false, false)
 	// Both flags appear in the wrapper invocation
 	if !strings.Contains(got, " --plain --non-interactive ") {
 		t.Errorf("expected ` --plain --non-interactive ` baked into invocation, got:\n%s", got)
@@ -65,22 +65,40 @@ func TestRenderAlias_BakesPlainAndNonInteractive(t *testing.T) {
 }
 
 func TestRenderAlias_CustomFD(t *testing.T) {
-	got := renderAlias("gwt", "/bin/git-wt", 7, false, false, false)
+	got := renderAlias("gwt", "/bin/git-wt", 7, false, false, false, false)
 	mustContain(t, got, `--fd 7`)
 	mustContain(t, got, `7>&1 1>&2`)
 	mustNotContain(t, got, `--fd 3`)
 }
 
 func TestRenderAlias_DebugAddsThreeEchoLines(t *testing.T) {
-	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, true)
+	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, true, false)
 	count := strings.Count(got, `echo "[gwt]`)
 	if count != 3 {
 		t.Errorf("expected 3 debug echo lines, got %d\n--- output ---\n%s", count, got)
 	}
 }
 
+func TestRenderAlias_CompletionBindingOnByDefault(t *testing.T) {
+	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, false, true)
+	mustContain(t, got, "compdef gwt=git-wt")
+	mustContain(t, got, "complete -o default -F __start_git-wt gwt")
+}
+
+func TestRenderAlias_CompletionBindingOffWhenDisabled(t *testing.T) {
+	got := renderAlias("gwt", "/bin/git-wt", 3, false, false, false, false)
+	mustNotContain(t, got, "compdef")
+	mustNotContain(t, got, "complete -o default")
+}
+
+func TestRenderAlias_CompletionBindingUsesAliasName(t *testing.T) {
+	got := renderAlias("myalias", "/bin/git-wt", 3, false, false, false, true)
+	mustContain(t, got, "compdef myalias=git-wt")
+	mustContain(t, got, "complete -o default -F __start_git-wt myalias")
+}
+
 func TestRenderAlias_BinPathWithSingleQuote(t *testing.T) {
-	got := renderAlias("gwt", `/Users/paul's/bin/git-wt`, 3, false, false, false)
+	got := renderAlias("gwt", `/Users/paul's/bin/git-wt`, 3, false, false, false, false)
 	// The path should be quoted with the standard single-quote escape.
 	mustContain(t, got, `'/Users/paul'\''s/bin/git-wt'`)
 }

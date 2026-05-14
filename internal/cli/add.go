@@ -25,7 +25,8 @@ var addCmd = &cobra.Command{
 		"branch — so `paul/auth-bug` (a slash-bearing local name) works as\n" +
 		"long as no remote is called `paul`.\n\n" +
 		"This command never creates new branches; for that, use `new`.",
-	Args: cobra.RangeArgs(1, 2),
+	Args:              cobra.RangeArgs(1, 2),
+	ValidArgsFunction: completeAddRef,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

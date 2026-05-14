@@ -24,12 +24,13 @@ cmd/git-wt/main.go                 # entry point
 internal/
   cli/                             # cobra subcommands + per-command helpers
     root.go                        # global flags, Execute()
-    list.go new.go add.go eject.go # the nine commands
-    go_cmd.go rm.go clean.go alias.go config_cmd.go
+    list.go new.go add.go eject.go # the ten commands
+    go_cmd.go rm.go clean.go alias.go config_cmd.go completion.go
     emit.go                        # fd<N> / bare-mode path emission
     picker.go                      # adapts internal/picker to worktrees
     worktrees.go                   # findByBranch, filterOutCurrent, ...
     config_resolve.go              # layer git-config wt.* under CLI flags
+    completion_helpers.go          # ValidArgsFunction candidates for go/rm/add
   picker/                          # bubbletea SelectOne / SelectMany / Confirm
   wt/                              # worktree types, parsing, validation
   config/                          # wt.* key registry + git-config IO + ${...} expansion
@@ -69,7 +70,8 @@ time because bash parses redirect operators before variable expansion.
 | `go [branch]` | Navigate. Direct branch lookup with unique-suffix fallback (`auth` → `paul/auth`). Interactive picker if no arg. |
 | `list` (`ls`) | Print the table. Columns: marker, branch, location (`#name` inside `.worktrees/`, rel-to-repo elsewhere, abs outside), mtime. |
 | `clean` | Remove worktrees whose local branch is gone OR whose upstream is gone. Both run by default; narrow with `--orphaned-only` / `--upstream-gone-only`. |
-| `alias <name>` | Print a POSIX shell function. Configurable fd (`--fd N`, range 3-9) and baked flags (`--plain`, `-n`, `--debug`). |
+| `alias <name>` | Print a POSIX shell function. Configurable fd (`--fd N`, range 3-9), baked flags (`--plain`, `-n`, `--debug`), and an optional tab-completion binding (default on; suppress with `--no-completion`). |
+| `completion <shell>` | Print a Cobra-generated completion script for bash/zsh/fish/powershell. Dynamic argument completion via `ValidArgsFunction` on `go` / `rm` / `add`. |
 | `config [<key> [<value>]]` | Show/set persistent settings stored in `git config wt.*`. List bare; show one key with template + resolved value; set with `<key> <value>` (default `--local`, `--global` flag for user-wide); `--unset` to remove. Validates type and template vars at set time. |
 
 ## Global flags

@@ -48,6 +48,32 @@ echo 'eval "$(git-wt alias gwt)"' >> ~/.zshrc   # or ~/.bashrc
 Now `gwt go`/`gwt new`/`gwt rm` change directory in your parent shell;
 everything else passes through unchanged.
 
+### Tab completion (optional)
+
+Install once per shell:
+
+```bash
+# zsh — path must be in $fpath
+git-wt completion zsh > "${fpath[1]}/_git-wt"
+
+# bash
+git-wt completion bash > ~/.local/share/bash-completion/completions/git-wt
+
+# fish
+git-wt completion fish > ~/.config/fish/completions/git-wt.fish
+```
+
+Then `gwt go <TAB>` lists your worktree branches, `gwt rm <TAB>` lists
+removable branches (excluding the main worktree and anything already
+typed), and `gwt add <TAB>` lists local + remote refs that don't have
+a worktree yet. Candidates carry descriptions matching the columns
+from `gwt ls` (location + recency), so shells that support
+completion-with-descriptions — zsh, fish, bash-v2, powershell — show
+e.g. `feat-x  -- #feat-x  2h  3m` next to each branch. The shell
+function from `git-wt alias gwt` binds itself to `git-wt`'s completion
+automatically — no second setup step. Opt out with
+`git-wt alias gwt --no-completion`.
+
 ### Basic usage
 
 ```bash
@@ -76,7 +102,8 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 | `go [branch]` | Navigate to a worktree. Suffix match works (`auth` → `paul/auth` if unique). |
 | `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. |
 | `clean` | Remove worktrees whose branch is gone (locally or upstream). Flags: `--dry-run`, `--no-fetch`, `--orphaned-only`, `--upstream-gone-only`. |
-| `alias <name>` | Print a shell function wrapper. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`. |
+| `alias <name>` | Print a shell function wrapper. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`, `--no-completion`. |
+| `completion <bash\|zsh\|fish\|powershell>` | Print a shell completion script. See [Tab completion](#tab-completion-optional). |
 | `config [<key> [<value>]]` | Show or change persistent settings (stored in `git config wt.*`). See [Configuration](#configuration). |
 
 ### Global flags
