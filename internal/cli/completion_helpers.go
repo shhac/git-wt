@@ -166,11 +166,7 @@ func completeGoBranches(_ *cobra.Command, args []string, _ string) ([]string, co
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	ctx := context.Background()
-	repo, err := wt.Inspect(ctx, "")
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	wts, cur, err := loadWorktrees(ctx)
+	repo, wts, cur, err := loadRepoAndWorktrees(ctx)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -183,11 +179,7 @@ func completeGoBranches(_ *cobra.Command, args []string, _ string) ([]string, co
 // the remaining branches.
 func completeRmBranches(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	ctx := context.Background()
-	repo, err := wt.Inspect(ctx, "")
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	wts, _, err := loadWorktrees(ctx)
+	repo, wts, _, err := loadRepoAndWorktrees(ctx)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

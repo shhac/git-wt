@@ -22,11 +22,7 @@ var goCmd = &cobra.Command{
 	ValidArgsFunction: completeGoBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		repo, err := wt.Inspect(ctx, "")
-		if err != nil {
-			return err
-		}
-		wts, cur, err := loadWorktrees(ctx)
+		repo, wts, cur, err := loadRepoAndWorktrees(ctx)
 		if err != nil {
 			return err
 		}

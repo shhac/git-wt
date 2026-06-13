@@ -210,6 +210,35 @@ func TestRm_DeleteBranch(t *testing.T) {
 	}
 }
 
+// TestRm_DeleteBranchSoftFailure pins the warn-and-continue path: when the
+// worktree is removable but `git branch -d` refuses (unmerged commits), rm
+// still succeeds, keeps the branch, and surfaces a warning.
+func TestRm_DeleteBranchSoftFailure(t *testing.T) {
+	repo := newRepo(t)
+	if r := runWT(t, repo, "new", "rm-soft", "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+		t.Fatalf("setup: %s", r.Stderr)
+	}
+	wtPath := filepath.Join(repo, ".worktrees", "rm-soft")
+	// An unmerged commit keeps the worktree clean (so removal proceeds)
+	// while making `git branch -d` refuse.
+	mustWrite(t, filepath.Join(wtPath, "unmerged.txt"), "x\n")
+	mustGit(t, wtPath, "add", "unmerged.txt")
+	mustGit(t, wtPath, "commit", "-q", "-m", "unmerged work")
+
+	res := runWT(t, repo, "rm", "rm-soft", "--delete-branch", "--non-interactive")
+	if res.ExitCode != 0 {
+		t.Fatalf("rm exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "warning: delete branch rm-soft") {
+		t.Errorf("expected delete-branch warning on stderr, got: %s", res.Stderr)
+	}
+	mustNotExist(t, wtPath)
+	branches := mustGit(t, repo, "branch", "--list", "--format=%(refname:short)")
+	if !strings.Contains(branches, "rm-soft") {
+		t.Errorf("expected unmerged branch to survive the soft-fail, got: %s", branches)
+	}
+}
+
 func TestRm_RefusesMain(t *testing.T) {
 	repo := newRepo(t)
 	res := runWT(t, repo, "rm", "main", "--non-interactive")

@@ -18,11 +18,7 @@ var listCmd = &cobra.Command{
 	Long:    "Show every worktree with its branch, parent directory, and last-modified time. The current worktree is marked with `*`.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		repo, err := wt.Inspect(ctx, "")
-		if err != nil {
-			return err
-		}
-		wts, cur, err := loadWorktrees(ctx)
+		repo, wts, cur, err := loadRepoAndWorktrees(ctx)
 		if err != nil {
 			return err
 		}

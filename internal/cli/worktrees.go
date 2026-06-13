@@ -21,6 +21,20 @@ func loadWorktrees(ctx context.Context) ([]wt.Worktree, *wt.Worktree, error) {
 	return wts, cur, nil
 }
 
+// loadRepoAndWorktrees combines wt.Inspect with loadWorktrees — the opening
+// move shared by go, list, rm, and the completion helpers.
+func loadRepoAndWorktrees(ctx context.Context) (*wt.RepoInfo, []wt.Worktree, *wt.Worktree, error) {
+	repo, err := wt.Inspect(ctx, "")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	wts, cur, err := loadWorktrees(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return repo, wts, cur, nil
+}
+
 // findByBranch returns the worktree whose Branch matches name exactly. If no
 // exact match is found, falls back to a unique suffix match (e.g. "auth"
 // matches "paul/auth" if it's the only candidate).
