@@ -117,7 +117,7 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 	}
 	// force=true: the branches/upstream are already gone, the user has
 	// confirmed (or asked for non-interactive cleanup).
-	return executeRm(ctx, repo, toRm, cur, rmTreeAndBranch, true)
+	return executeRm(ctx, repo, toRmTargets(toRm), cur, rmTreeAndBranch, true)
 }
 
 // goneBranchesFn is the DI seam for the upstream-gone scan, mirroring

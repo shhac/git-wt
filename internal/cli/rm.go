@@ -48,16 +48,12 @@ var rmCmd = &cobra.Command{
 			return fmt.Errorf("--keep-branch and --delete-branch are mutually exclusive")
 		}
 
-		repo, err := wt.Inspect(ctx, "")
-		if err != nil {
-			return err
-		}
-		wts, cur, err := loadWorktrees(ctx)
+		repo, wts, cur, err := loadRepoAndWorktrees(ctx)
 		if err != nil {
 			return err
 		}
 
-		targets, err := resolveRmTargets(wts, repo, args, wt.TreesDirFor(repo.MainRoot))
+		targets, err := resolveRmTargets(wts, repo, args, wt.TreesDirFor(repo.MainRoot), rmForce)
 		if err != nil {
 			return err
 		}
@@ -85,11 +81,36 @@ func init() {
 	rmCmd.Flags().BoolVar(&rmForce, "force", false, "skip uncommitted-changes safety checks")
 }
 
+// rmTarget is one removal unit: a registered worktree, or — the rescue case
+// — an unregistered leftover directory inside the trees dir (what an earlier
+// removal leaves behind when it dies mid-delete after git has already
+// dropped the worktree from its records).
+type rmTarget struct {
+	wt.Worktree
+	orphan bool
+}
+
+// label is the human-readable name used in prompts and progress output.
+func (t rmTarget) label() string {
+	if t.orphan {
+		return t.Path + " (unregistered leftover)"
+	}
+	return t.Display()
+}
+
+func toRmTargets(wts []wt.Worktree) []rmTarget {
+	out := make([]rmTarget, len(wts))
+	for i, t := range wts {
+		out[i] = rmTarget{Worktree: t}
+	}
+	return out
+}
+
 // resolveRmTargets returns the worktrees to remove. It excludes the main
 // worktree and refuses if the user explicitly named it.
-func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string) ([]wt.Worktree, error) {
+func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string, force bool) ([]rmTarget, error) {
 	if len(args) > 0 {
-		return resolveRmFromArgs(wts, repo, args)
+		return resolveRmFromArgs(wts, repo, args, treesDir, force)
 	}
 
 	pickable := filterRemovable(wts, repo)
@@ -104,20 +125,28 @@ func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, trees
 	if err != nil {
 		return nil, err
 	}
-	return picked, nil
+	return toRmTargets(picked), nil
 }
 
-func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]wt.Worktree, error) {
-	out := make([]wt.Worktree, 0, len(args))
+func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string, force bool) ([]rmTarget, error) {
+	out := make([]rmTarget, 0, len(args))
 	for _, a := range args {
 		t := findByBranch(wts, a)
 		if t == nil {
-			return nil, fmt.Errorf("no worktree for branch %q", a)
+			o, ok := orphanRmTarget(wts, treesDir, a)
+			if !ok {
+				return nil, fmt.Errorf("no worktree for branch %q", a)
+			}
+			if !interactive() && !force {
+				return nil, fmt.Errorf("%s is not a registered worktree, just a leftover directory; use --force to delete it non-interactively", o.Path)
+			}
+			out = append(out, o)
+			continue
 		}
 		if t.Path == repo.MainRoot {
 			return nil, fmt.Errorf("cannot remove the main worktree (%q)", t.Display())
 		}
-		out = append(out, *t)
+		out = append(out, rmTarget{Worktree: *t})
 	}
 	return out, nil
 }
@@ -125,7 +154,7 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string) ([]w
 // chooseRmAction implements the confirmation step. The keep/delete flags
 // pre-narrow the option list; non-interactive mode picks the default and
 // skips the prompt entirely.
-func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (action rmAction, err error) {
+func chooseRmAction(targets []rmTarget, keepBranch, deleteBranch bool) (action rmAction, err error) {
 	defaultAction := rmTreeOnly
 	if deleteBranch {
 		defaultAction = rmTreeAndBranch
@@ -140,7 +169,7 @@ func chooseRmAction(targets []wt.Worktree, keepBranch, deleteBranch bool) (actio
 	var summary strings.Builder
 	fmt.Fprintf(&summary, "Remove %d worktree(s):", len(targets))
 	for _, t := range targets {
-		summary.WriteString("\n    " + t.Display())
+		summary.WriteString("\n    " + t.label())
 	}
 
 	choice, ok, err := picker.Confirm(summary.String(), rmOptions(keepBranch, deleteBranch))
@@ -173,7 +202,7 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 // executeRm performs the removals. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
 // follows.
-func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cur *wt.Worktree, action rmAction, force bool) (err error) {
+func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, force bool) (err error) {
 	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(err) }()
 
@@ -193,11 +222,15 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 	}
 
 	for _, t := range targets {
-		args := []string{"worktree", "remove", t.Path}
-		if force {
-			args = append(args, "--force")
+		if t.orphan {
+			if err := deleteTreeWithProgress(t.label(), t.Path); err != nil {
+				return fmt.Errorf("remove %s: %w", t.Path, err)
+			}
+			fmt.Fprintf(os.Stderr, "removed %s\n", t.label())
+			continue
 		}
-		if _, err := git.Run(ctx, args...); err != nil {
+
+		if err := removeWorktree(ctx, t.Worktree, force); err != nil {
 			return fmt.Errorf("remove worktree %s: %w", t.Display(), err)
 		}
 		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
@@ -220,7 +253,7 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []wt.Worktree, cu
 // needsBounce reports whether any of targets is the current worktree, in
 // which case rm must move the parent shell back to the main repo before
 // deleting (the cwd would otherwise be invalidated).
-func needsBounce(cur *wt.Worktree, targets []wt.Worktree) bool {
+func needsBounce(cur *wt.Worktree, targets []rmTarget) bool {
 	if cur == nil {
 		return false
 	}

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shhac/git-wt/internal/wt"
@@ -37,14 +39,14 @@ func TestRmOptions_DeleteBranch(t *testing.T) {
 }
 
 func TestNeedsBounce_NilCurrent(t *testing.T) {
-	if needsBounce(nil, []wt.Worktree{{Path: "/a"}}) {
+	if needsBounce(nil, toRmTargets([]wt.Worktree{{Path: "/a"}})) {
 		t.Errorf("nil current should never bounce")
 	}
 }
 
 func TestNeedsBounce_CurrentInTargets(t *testing.T) {
 	cur := &wt.Worktree{Path: "/p/feat"}
-	targets := []wt.Worktree{{Path: "/p/other"}, {Path: "/p/feat"}}
+	targets := toRmTargets([]wt.Worktree{{Path: "/p/other"}, {Path: "/p/feat"}})
 	if !needsBounce(cur, targets) {
 		t.Errorf("expected bounce when current is among targets")
 	}
@@ -52,7 +54,7 @@ func TestNeedsBounce_CurrentInTargets(t *testing.T) {
 
 func TestNeedsBounce_CurrentNotInTargets(t *testing.T) {
 	cur := &wt.Worktree{Path: "/p/feat"}
-	targets := []wt.Worktree{{Path: "/p/other"}}
+	targets := toRmTargets([]wt.Worktree{{Path: "/p/other"}})
 	if needsBounce(cur, targets) {
 		t.Errorf("expected no bounce when current is unaffected")
 	}
@@ -65,7 +67,7 @@ func TestResolveRmFromArgs_Success(t *testing.T) {
 		{Path: "/p/other", Branch: "other"},
 	}
 	repo := &wt.RepoInfo{MainRoot: "/p/main"}
-	got, err := resolveRmFromArgs(wts, repo, []string{"feat", "other"})
+	got, err := resolveRmFromArgs(wts, repo, []string{"feat", "other"}, "/p/main/.worktrees", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +79,7 @@ func TestResolveRmFromArgs_Success(t *testing.T) {
 func TestResolveRmFromArgs_RejectsMain(t *testing.T) {
 	wts := []wt.Worktree{{Path: "/p/main", Branch: "main"}}
 	repo := &wt.RepoInfo{MainRoot: "/p/main"}
-	_, err := resolveRmFromArgs(wts, repo, []string{"main"})
+	_, err := resolveRmFromArgs(wts, repo, []string{"main"}, "/p/main/.worktrees", false)
 	if err == nil {
 		t.Errorf("expected error rejecting main worktree")
 	}
@@ -86,8 +88,50 @@ func TestResolveRmFromArgs_RejectsMain(t *testing.T) {
 func TestResolveRmFromArgs_UnknownBranch(t *testing.T) {
 	wts := []wt.Worktree{{Path: "/p/main", Branch: "main"}}
 	repo := &wt.RepoInfo{MainRoot: "/p/main"}
-	_, err := resolveRmFromArgs(wts, repo, []string{"nonexistent"})
+	_, err := resolveRmFromArgs(wts, repo, []string{"nonexistent"}, "/p/main/.worktrees", false)
 	if err == nil {
 		t.Errorf("expected error for unknown branch")
+	}
+}
+
+func TestOrphanRmTarget_ResolvesLeftoverDir(t *testing.T) {
+	treesDir := t.TempDir()
+	leftover := filepath.Join(treesDir, "ghost")
+	if err := os.MkdirAll(leftover, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := orphanRmTarget(nil, treesDir, "ghost")
+	if !ok {
+		t.Fatalf("expected leftover dir to resolve")
+	}
+	if !got.orphan || got.Path != leftover {
+		t.Errorf("got %+v, want orphan target at %s", got, leftover)
+	}
+}
+
+func TestOrphanRmTarget_SkipsRegisteredWorktree(t *testing.T) {
+	treesDir := t.TempDir()
+	p := filepath.Join(treesDir, "live")
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wts := []wt.Worktree{{Path: p, Branch: "other-name"}}
+	if _, ok := orphanRmTarget(wts, treesDir, "live"); ok {
+		t.Errorf("registered worktree must not resolve as an orphan")
+	}
+}
+
+func TestOrphanRmTarget_RefusesEscape(t *testing.T) {
+	treesDir := t.TempDir()
+	for _, arg := range []string{"../outside", "/etc", ".."} {
+		if _, ok := orphanRmTarget(nil, treesDir, arg); ok {
+			t.Errorf("arg %q must not escape the trees dir", arg)
+		}
+	}
+}
+
+func TestOrphanRmTarget_MissingDir(t *testing.T) {
+	if _, ok := orphanRmTarget(nil, t.TempDir(), "nope"); ok {
+		t.Errorf("nonexistent dir must not resolve")
 	}
 }

@@ -105,7 +105,7 @@ func planEject(ctx context.Context, leafOverride, baseOverride, parentDirOverrid
 	if err != nil {
 		return nil, err
 	}
-	dirty, err := wt.IsWorkingTreeDirty(ctx)
+	dirty, err := wt.IsWorkingTreeDirty(ctx, "")
 	if err != nil {
 		return nil, err
 	}
