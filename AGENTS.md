@@ -111,8 +111,9 @@ CI mirrors this on Linux + macOS.
 
 ## Branches and history
 
-- `main` — was the Zig implementation prior to migration. Currently
-  unchanged from the last Zig release.
-- `migrate-to-go` (current) — the Go rewrite. Will become the new `main`.
-- `zig-cli` — frozen snapshot of the Zig codebase, retained for reference.
+- `main` — the Go implementation. The Go rewrite (formerly on a
+  `migrate-to-go` branch) landed here in 2026; branch from `main` for all
+  new work.
+- `zig-cli` — frozen snapshot of the pre-migration Zig codebase, retained
+  for reference.
 - The migration spec lives at `.ai-cache/plan-go-migration.md`.
