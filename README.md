@@ -102,7 +102,7 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 | `go [branch]` | Navigate to a worktree. Suffix match works (`auth` → `paul/auth` if unique). |
 | `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. |
 | `clean` | Remove worktrees whose branch is gone (locally or upstream). Worktrees still holding uncommitted work are reported and skipped — use `gwt rm --force <branch>` to insist. Flags: `--dry-run`, `--no-fetch`, `--orphaned-only`, `--upstream-gone-only`. |
-| `alias <name>` | Print a shell function wrapper. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`, `--no-completion`. |
+| `alias <name>` | Print a shell function wrapper. It cds whenever the binary emits a path, including on a failed run, so removing the worktree you are standing in always moves you out of it. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`, `--no-completion`. |
 | `completion <bash\|zsh\|fish\|powershell>` | Print a shell completion script. See [Tab completion](#tab-completion-optional). |
 | `config [<key> [<value>]]` | Show or change persistent settings (stored in `git config wt.*`). See [Configuration](#configuration). |
 

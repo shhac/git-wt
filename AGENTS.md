@@ -25,7 +25,8 @@ internal/
   cli/                             # cobra subcommands + per-command helpers
     root.go                        # global flags, Execute()
     list.go new.go add.go eject.go # the ten commands
-    go_cmd.go rm.go rm_dirty.go clean.go alias.go config_cmd.go completion.go
+    go_cmd.go rm.go rm_dirty.go rm_remove.go clean.go alias.go
+    config_cmd.go completion.go
     emit.go                        # fd<N> / bare-mode path emission
     picker.go                      # adapts internal/picker to worktrees
     worktrees.go                   # findByBranch, filterOutCurrent, ...
@@ -55,6 +56,12 @@ via `N>&1 1>&2` and captures whatever the binary writes there. The binary:
 - **Wrapper mode** (`fd.Open(N)` succeeds): writes the destination path to fd N.
 - **Bare mode** (no fd N): writes the path to stdout with a `→ cd '...'`
   hint on stderr. Supports `cd "$(git-wt go branch)"`.
+
+The wrapper cds on a non-empty path regardless of the binary's exit code,
+and still returns that code. Writing to fd N means "move here": `new`,
+`add` and `eject` only write on success, and `rm` writes when it has
+deleted the directory the shell was standing in — which it does even when
+a later target in the same run fails.
 
 The fd number is baked literally into the redirect at alias-generation
 time because bash parses redirect operators before variable expansion.
