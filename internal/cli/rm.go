@@ -18,6 +18,7 @@ var (
 	rmKeepBranch   bool
 	rmDeleteBranch bool
 	rmForce        bool
+	rmForceBranch  bool
 )
 
 // rmAction is the disposition picked for a rm operation.
@@ -38,8 +39,10 @@ var rmCmd = &cobra.Command{
 		"interactive multi-select over the non-main worktrees.\n\n" +
 		"By default the local branch is kept. Pass --delete-branch to remove\n" +
 		"the branch as well, or --keep-branch to silence the interactive prompt\n" +
-		"that would otherwise ask. Use --force to skip the uncommitted-changes\n" +
-		"safety check.",
+		"that would otherwise ask.\n\n" +
+		"--force removes worktrees that still hold uncommitted work. It does\n" +
+		"not affect branch deletion, which uses `git branch -d` and declines to\n" +
+		"drop unmerged branches; --force-branch switches that to -D.",
 	ValidArgsFunction: completeRmBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
@@ -78,7 +81,7 @@ var rmCmd = &cobra.Command{
 			return nil
 		}
 
-		return executeRm(ctx, repo, targets, cur, action, rmForce)
+		return executeRm(ctx, repo, targets, cur, action, rmForceBranch)
 	},
 }
 
@@ -86,7 +89,8 @@ func init() {
 	rootCmd.AddCommand(rmCmd)
 	rmCmd.Flags().BoolVar(&rmKeepBranch, "keep-branch", false, "keep the local branch (default)")
 	rmCmd.Flags().BoolVar(&rmDeleteBranch, "delete-branch", false, "also delete the local branch")
-	rmCmd.Flags().BoolVar(&rmForce, "force", false, "skip uncommitted-changes safety checks")
+	rmCmd.Flags().BoolVar(&rmForce, "force", false, "remove worktrees that hold uncommitted changes")
+	rmCmd.Flags().BoolVar(&rmForceBranch, "force-branch", false, "delete branches with -D, dropping unmerged commits")
 }
 
 // rmTarget is one removal unit: a registered worktree, or — the rescue case
@@ -176,13 +180,7 @@ func chooseRmAction(targets []rmTarget, keepBranch, deleteBranch bool) (action r
 	end := debug.Op("pick.confirm", "rm-action")
 	defer func() { end(err) }()
 
-	var summary strings.Builder
-	fmt.Fprintf(&summary, "Remove %d worktree(s):", len(targets))
-	for _, t := range targets {
-		summary.WriteString("\n    " + t.label())
-	}
-
-	choice, ok, err := picker.Confirm(summary.String(), rmOptions(keepBranch, deleteBranch))
+	choice, ok, err := picker.Confirm(rmSummary(targets), rmOptions(keepBranch, deleteBranch))
 	if err != nil {
 		return rmCancel, err
 	}
@@ -190,6 +188,22 @@ func chooseRmAction(targets []rmTarget, keepBranch, deleteBranch bool) (action r
 		return rmCancel, nil
 	}
 	return choice, nil
+}
+
+// rmSummary is the target list shown above the final confirm. Worktrees
+// carrying uncommitted work are called out with their counts: this is the
+// last screen before the deletion, so it should say what is at stake rather
+// than leave the user to remember the dirty prompt two screens back.
+func rmSummary(targets []rmTarget) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Remove %d worktree(s):", len(targets))
+	for _, t := range targets {
+		b.WriteString("\n    " + t.label())
+		if t.dirty.Any() {
+			fmt.Fprintf(&b, "  [discards %s]", t.dirty.Summary())
+		}
+	}
+	return b.String()
 }
 
 // rmOptions builds the option list shown by chooseRmAction. Pure: only the

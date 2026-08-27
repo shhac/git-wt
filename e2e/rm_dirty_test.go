@@ -155,3 +155,43 @@ func TestClean_OrphanedCleanWorktreeIsNotDirty(t *testing.T) {
 		t.Errorf("clean orphan should not be skipped\n--- got ---\n%s", res.Stderr)
 	}
 }
+
+// --force is about uncommitted work in the worktree, not about branch
+// deletion: an unmerged branch still survives unless --force-branch says
+// otherwise.
+func TestRm_ForceDoesNotForceBranchDeletion(t *testing.T) {
+	repo := newRepo(t)
+	mkTrees(t, repo, "fb-a")
+	wtPath := filepath.Join(repo, ".worktrees", "fb-a")
+	mustWrite(t, filepath.Join(wtPath, "committed.txt"), "unmerged work\n")
+	mustGit(t, wtPath, "add", "committed.txt")
+	mustGit(t, wtPath, "commit", "-q", "-m", "unmerged")
+	mustWrite(t, filepath.Join(wtPath, "scratch.txt"), "wip\n")
+
+	res := runWT(t, repo, "rm", "fb-a", "--non-interactive", "--force", "--delete-branch")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, wtPath)
+	if !strings.Contains(mustGit(t, repo, "branch", "--list", "--format=%(refname:short)"), "fb-a") {
+		t.Error("unmerged branch should survive --force alone")
+	}
+}
+
+func TestRm_ForceBranchDropsUnmergedBranch(t *testing.T) {
+	repo := newRepo(t)
+	mkTrees(t, repo, "fx-a")
+	wtPath := filepath.Join(repo, ".worktrees", "fx-a")
+	mustWrite(t, filepath.Join(wtPath, "committed.txt"), "unmerged work\n")
+	mustGit(t, wtPath, "add", "committed.txt")
+	mustGit(t, wtPath, "commit", "-q", "-m", "unmerged")
+
+	res := runWT(t, repo, "rm", "fx-a", "--non-interactive", "--delete-branch", "--force-branch")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, wtPath)
+	if strings.Contains(mustGit(t, repo, "branch", "--list", "--format=%(refname:short)"), "fx-a") {
+		t.Error("--force-branch should have dropped the unmerged branch")
+	}
+}

@@ -25,7 +25,7 @@ internal/
   cli/                             # cobra subcommands + per-command helpers
     root.go                        # global flags, Execute()
     list.go new.go add.go eject.go # the ten commands
-    go_cmd.go rm.go clean.go alias.go config_cmd.go completion.go
+    go_cmd.go rm.go rm_dirty.go clean.go alias.go config_cmd.go completion.go
     emit.go                        # fd<N> / bare-mode path emission
     picker.go                      # adapts internal/picker to worktrees
     worktrees.go                   # findByBranch, filterOutCurrent, ...
@@ -66,10 +66,10 @@ time because bash parses redirect operators before variable expansion.
 | `new <branch>` | Create worktree at `<repo>/.worktrees/<branch>/` (or `--parent-dir`). Copies files matching `.git-wt-copy-files` (or built-in defaults). Hints if `<parent>/` isn't gitignored when it lives inside the repo. |
 | `add [<leaf>] <branch\|remote-ref>` | Worktree for an *existing* branch. Resolver: `<remote>/<rest>` (with matching remote ref) ⇒ remote DWIM via `--track -b <rest>`; else local branch lookup. Optional `<leaf>` overrides the leaf directory name (defaults to the local branch name). Never creates new branches. |
 | `eject [<leaf>]` | Move HEAD's branch out of the main working tree into a new worktree. Stashes (incl. untracked), switches main tree to `main`/`master`/`--base`, runs the add pipeline, then `stash apply --index` in the new worktree. Interactive confirm by default. Must run from the main tree, must be on a branch, current branch must not be the base. |
-| `rm [branch...]` | Remove worktree(s). Interactive multi-select if no args. Confirm step is also the type-of-rm choice (worktree only / worktree+branch / cancel). Bounces to main if you remove your current worktree. Fast path (`rm_remove.go`): clean-check → rename aside → `worktree prune` → parallel permission-fixing delete (`wt.DeleteTree`) with a TTY progress line; falls back to `git worktree remove` for locked/edge cases. Args also match unregistered leftover dirs under the trees dir (rescue). |
+| `rm [branch...]` | Remove worktree(s). Interactive multi-select if no args. Dirty preflight (`rm_dirty.go`) scans every target before anything is deleted: non-interactive refuses naming them all, interactive offers a multi-select over the dirty ones (toggle nothing = skip all). Confirm step is also the type-of-rm choice (worktree only / worktree+branch / cancel). Bounces to main if you remove your current worktree — emitted from a defer so a mid-list failure still moves the shell. Fast path (`rm_remove.go`): per-target clean-check → rename aside → `worktree prune` → parallel permission-fixing delete (`wt.DeleteTree`) with a TTY progress line; falls back to `git worktree remove` for locked/edge cases. Args also match unregistered leftover dirs under the trees dir (rescue). |
 | `go [branch]` | Navigate. Direct branch lookup with unique-suffix fallback (`auth` → `paul/auth`). Interactive picker if no arg. |
 | `list` (`ls`) | Print the table. Columns: marker, branch, location (`#name` inside `.worktrees/`, rel-to-repo elsewhere, abs outside), mtime. |
-| `clean` | Remove worktrees whose local branch is gone OR whose upstream is gone. Both run by default; narrow with `--orphaned-only` / `--upstream-gone-only`. |
+| `clean` | Remove worktrees whose local branch is gone OR whose upstream is gone. Both run by default; narrow with `--orphaned-only` / `--upstream-gone-only`. Dirty worktrees are reported and skipped, never prompted for — it's a bulk sweep over worktrees the user never named. |
 | `alias <name>` | Print a POSIX shell function. Configurable fd (`--fd N`, range 3-9), baked flags (`--plain`, `-n`, `--debug`), and an optional tab-completion binding (default on; suppress with `--no-completion`). |
 | `completion <shell>` | Print a Cobra-generated completion script for bash/zsh/fish/powershell. Dynamic argument completion via `ValidArgsFunction` on `go` / `rm` / `add`. |
 | `config [<key> [<value>]]` | Show/set persistent settings stored in `git config wt.*`. List bare; show one key with template + resolved value; set with `<key> <value>` (default `--local`, `--global` flag for user-wide); `--unset` to remove. Validates type and template vars at set time. |
@@ -99,6 +99,11 @@ CI mirrors this on Linux + macOS.
 
 ## Conventions
 
+- `--force` means "don't stop", not "don't look". The dirty scan runs
+  regardless; the flag only decides whether removal is refused, and the
+  scanned counts are what the warning reports. Worktree force is per-target
+  (`rmTarget.force`); `branchForce` is a separate axis governing only
+  `git branch -d` vs `-D`.
 - Branches that touch flags should make them explicit parameters of the
   helper they configure (e.g. `chooseRmAction(targets, keepBranch, deleteBranch)`).
   Avoid reading package-level flag vars from inside helpers — it makes them
