@@ -125,3 +125,26 @@ func TestWrapper_RmBouncesEvenWhenALaterTargetFails(t *testing.T) {
 		t.Errorf("expected the failure to name the locked worktree\n--- got ---\n%s", stderr)
 	}
 }
+
+// The mirror of the case above: the current worktree is queued behind a
+// target that fails, so the run never reaches it. Its directory is still
+// there, and teleporting the shell to the main repo would be wrong.
+func TestWrapper_RmDoesNotBounceWhenTheCurrentWorktreeSurvives(t *testing.T) {
+	repo := newRepo(t)
+	for _, n := range []string{"wrap-block", "wrap-stay"} {
+		if r := runWT(t, repo, "new", n, "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+			t.Fatalf("setup %s: %s", n, r.Stderr)
+		}
+	}
+	blockedPath := filepath.Join(repo, ".worktrees", "wrap-block")
+	stayPath := filepath.Join(repo, ".worktrees", "wrap-stay")
+	mustGit(t, repo, "worktree", "lock", blockedPath)
+
+	// wrap-block is first, so it fails before wrap-stay is ever touched.
+	script := "cd '" + stayPath + "'\ngwt rm wrap-block wrap-stay || true\npwd\n"
+	pwd, _ := runUnderWrapper(t, repo, repo, script)
+
+	assertSamePath(t, "pwd after a rm that never reached the current worktree", pwd, stayPath)
+	mustExist(t, stayPath)
+	mustExist(t, blockedPath)
+}

@@ -400,3 +400,26 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+
+// clean --orphaned-only selects worktrees precisely because their branch
+// ref is gone, so asking git to delete that branch afterwards is the normal
+// case there. It must not surface as a warning.
+func TestClean_OrphanedDoesNotWarnAboutTheMissingBranch(t *testing.T) {
+	repo := newRepo(t)
+	if r := runWT(t, repo, "new", "quiet-orphan", "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+		t.Fatalf("setup: %s", r.Stderr)
+	}
+	mustGit(t, repo, "checkout", "-q", "main")
+	if err := orphanBranch(repo, "quiet-orphan"); err != nil {
+		t.Fatalf("orphan: %v", err)
+	}
+
+	res := runWT(t, repo, "clean", "--non-interactive", "--orphaned-only", "--no-fetch")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, filepath.Join(repo, ".worktrees", "quiet-orphan"))
+	if strings.Contains(res.Stderr, "warning:") {
+		t.Errorf("clean of an orphan should be quiet\n--- got ---\n%s", res.Stderr)
+	}
+}

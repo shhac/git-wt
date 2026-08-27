@@ -108,7 +108,7 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 	// user asked for a sweep. `rm --force <branch>` is the way to insist.
 	toRm = skipDirty(os.Stderr, toRm)
 	if len(toRm) == 0 {
-		fmt.Fprintln(os.Stderr, "nothing to clean")
+		fmt.Fprintln(os.Stderr, "nothing left to clean")
 		return nil
 	}
 

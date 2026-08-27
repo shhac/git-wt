@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -227,9 +228,10 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 // is removed anyway is per-target (set by the dirty preflight); branchForce
 // governs only `git branch -d` vs `-D`. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
-// follows. The emit runs whether or not every removal succeeded — otherwise
-// a failure partway through the list would leave the shell sitting in a
-// directory this function has already deleted.
+// follows. The emit is decided by whether that directory actually went, not
+// by whether the run as a whole succeeded: a failure partway through the
+// list must still move a shell whose directory is now gone, and must not
+// move one whose directory the run never reached.
 func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, branchForce bool) (err error) {
 	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(err) }()
@@ -246,12 +248,20 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 
 	err = removeTargets(ctx, targets, action, branchForce)
 
-	if bouncing {
+	if bouncing && gone(cur.Path) {
 		if emitErr := emitTarget(repo.MainRoot); emitErr != nil && err == nil {
 			err = emitErr
 		}
 	}
 	return err
+}
+
+// gone reports whether path no longer exists. Used to decide the shell
+// bounce from what actually happened on disk rather than from how far down
+// the target list the run believed it got.
+func gone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 // removeTargets deletes each target in order, reporting as it goes, and
@@ -290,6 +300,13 @@ func removeTargets(ctx context.Context, targets []rmTarget, action rmAction, bra
 // not.
 func deleteBranchIfAsked(ctx context.Context, t rmTarget, action rmAction, branchFlag string) {
 	if action != rmTreeAndBranch || t.Branch == "" {
+		return
+	}
+	// A worktree records its branch name even after the ref is deleted, and
+	// that is exactly the state `clean --orphaned-only` selects for. Asking
+	// git to delete a branch that is already gone is the normal case there,
+	// not a problem worth a warning.
+	if exists, _ := wt.BranchExists(ctx, "", t.Branch); !exists {
 		return
 	}
 	if _, err := git.Run(ctx, "branch", branchFlag, t.Branch); err != nil {
