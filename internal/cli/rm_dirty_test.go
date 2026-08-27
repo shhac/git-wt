@@ -213,3 +213,12 @@ func TestWarnDiscarding(t *testing.T) {
 		})
 	}
 }
+
+func TestSubjectWorktrees(t *testing.T) {
+	if got, want := subjectWorktrees(1), "1 worktree has"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := subjectWorktrees(3), "3 worktrees have"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

@@ -93,12 +93,22 @@ func forceAll(targets []rmTarget) map[string]bool {
 // of discovering them one re-run at a time.
 func dirtyBailError(dirty []rmTarget) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d worktree(s) have uncommitted changes:", len(dirty))
+	fmt.Fprintf(&b, "%s uncommitted changes:", subjectWorktrees(len(dirty)))
 	for _, t := range dirty {
 		fmt.Fprintf(&b, "\n    %s (%s)", t.label(), t.dirty.Summary())
 	}
 	b.WriteString("\nuse --force to remove them anyway")
 	return fmt.Errorf("%s", b.String())
+}
+
+// subjectWorktrees renders the count as the subject of a verb — "1 worktree
+// has", "3 worktrees have". The "worktree(s)" shorthand used elsewhere reads
+// as broken English once a verb has to agree with it.
+func subjectWorktrees(n int) string {
+	if n == 1 {
+		return "1 worktree has"
+	}
+	return fmt.Sprintf("%d worktrees have", n)
 }
 
 // dirtyRows renders the multi-select rows for pickDirtyToForce, padding the
@@ -128,7 +138,7 @@ func pickDirtyToForce(dirty []rmTarget, total int) (_ map[string]bool, ok bool, 
 	defer func() { end(err) }()
 
 	title := fmt.Sprintf(
-		"%d of %d worktree(s) have uncommitted changes.\n"+
+		"%d of %d selected worktrees have uncommitted changes.\n"+
 			"Select any you want to remove anyway; unselected are skipped.\n"+
 			"(space toggles, enter continues, esc cancels)",
 		len(dirty), total,
