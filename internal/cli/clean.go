@@ -96,12 +96,28 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 		return nil
 	}
 
-	printCleanTargets(os.Stderr, targets)
+	wts = make([]wt.Worktree, len(targets))
+	for i, t := range targets {
+		wts[i] = t.wt
+	}
+	toRm := scanDirty(ctx, toRmTargets(wts))
+
+	printCleanTargets(os.Stderr, targets, dirtyByPath(toRm))
 	if flags.dryRun {
 		return nil
 	}
+
+	// A gone branch says nothing about whether the worktree still holds
+	// work, so clean refuses to destroy uncommitted changes even though the
+	// user asked for a sweep. `rm --force <branch>` is the way to insist.
+	toRm = skipDirty(os.Stderr, toRm)
+	if len(toRm) == 0 {
+		fmt.Fprintln(os.Stderr, "nothing to clean")
+		return nil
+	}
+
 	if interactive() {
-		ok, err := confirmClean(len(targets))
+		ok, err := confirmClean(len(toRm))
 		if err != nil {
 			return err
 		}
@@ -111,13 +127,10 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 		}
 	}
 
-	toRm := make([]wt.Worktree, len(targets))
-	for i, t := range targets {
-		toRm[i] = t.wt
-	}
-	// force=true: the branches/upstream are already gone, the user has
-	// confirmed (or asked for non-interactive cleanup).
-	return executeRm(ctx, repo, toRmTargets(toRm), cur, rmTreeAndBranch, true)
+	// branchForce=true: these branches are gone or merged by definition of
+	// how clean picked them, so -d would fail on exactly the ones it should
+	// remove.
+	return executeRm(ctx, repo, toRm, cur, rmTreeAndBranch, true)
 }
 
 // goneBranchesFn is the DI seam for the upstream-gone scan, mirroring
@@ -160,10 +173,14 @@ func collectCleanTargets(
 }
 
 // printCleanTargets writes the human-readable target list. Pure: takes any io.Writer.
-func printCleanTargets(w io.Writer, targets []taggedTarget) {
+func printCleanTargets(w io.Writer, targets []taggedTarget, dirty map[string]wt.DirtyStat) {
 	_, _ = fmt.Fprintln(w, "worktrees to remove:")
 	for _, t := range targets {
-		_, _ = fmt.Fprintf(w, "  %s  [%s]  (%s)\n", t.wt.Display(), t.reason, t.wt.Path)
+		note := ""
+		if d, ok := dirty[t.wt.Path]; ok {
+			note = fmt.Sprintf("  [dirty: %s]", d.Summary())
+		}
+		_, _ = fmt.Fprintf(w, "  %s  [%s]  (%s)%s\n", t.wt.Display(), t.reason, t.wt.Path, note)
 	}
 }
 

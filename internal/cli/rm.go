@@ -61,6 +61,14 @@ var rmCmd = &cobra.Command{
 			return nil // user cancelled the picker
 		}
 
+		targets, err = preflightDirty(ctx, targets, rmForce)
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			return nil // cancelled, or every target was skipped
+		}
+
 		action, err := chooseRmAction(targets, rmKeepBranch, rmDeleteBranch)
 		if err != nil {
 			return err
@@ -88,6 +96,8 @@ func init() {
 type rmTarget struct {
 	wt.Worktree
 	orphan bool
+	dirty  wt.DirtyStat // filled by scanDirty, before anything is deleted
+	force  forceReason
 }
 
 // label is the human-readable name used in prompts and progress output.
@@ -199,12 +209,14 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 	}
 }
 
-// executeRm performs the removals. If the current worktree is one of the
+// executeRm performs the removals. Whether a worktree with uncommitted work
+// is removed anyway is per-target (set by the dirty preflight); branchForce
+// governs only `git branch -d` vs `-D`. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
 // follows. The emit is deferred so a failure partway through the target
 // list still moves the shell — otherwise it would be left sitting in a
 // directory this function has already deleted.
-func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, force bool) (err error) {
+func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, branchForce bool) (err error) {
 	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(err) }()
 
@@ -223,21 +235,22 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 	}
 
 	branchFlag := "-d"
-	if force {
+	if branchForce {
 		branchFlag = "-D"
 	}
 
-	for _, t := range targets {
+	for i, t := range targets {
 		if t.orphan {
 			if err := deleteTreeWithProgress(t.label(), t.Path); err != nil {
-				return fmt.Errorf("remove %s: %w", t.Path, err)
+				return rmProgressError(targets, i, fmt.Errorf("remove %s: %w", t.Path, err))
 			}
 			fmt.Fprintf(os.Stderr, "removed %s\n", t.label())
 			continue
 		}
 
-		if err := removeWorktree(ctx, t.Worktree, force); err != nil {
-			return fmt.Errorf("remove worktree %s: %w", t.Display(), err)
+		warnDiscarding(os.Stderr, t)
+		if err := removeWorktree(ctx, t.Worktree, t.force != forceNone); err != nil {
+			return rmProgressError(targets, i, fmt.Errorf("remove worktree %s: %w", t.Display(), err))
 		}
 		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
 
@@ -251,6 +264,24 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 	}
 
 	return nil
+}
+
+// rmProgressError decorates a mid-list failure with what did and did not
+// happen. The per-target "removed" lines have usually scrolled away by the
+// time the error surfaces, and a re-run needs to know where to resume.
+func rmProgressError(targets []rmTarget, failed int, err error) error {
+	if len(targets) == 1 {
+		return err
+	}
+	suffix := fmt.Sprintf("\n  removed %d of %d", failed, len(targets))
+	if remaining := targets[failed+1:]; len(remaining) > 0 {
+		names := make([]string, len(remaining))
+		for i, t := range remaining {
+			names[i] = t.label()
+		}
+		suffix += "; not attempted: " + strings.Join(names, ", ")
+	}
+	return fmt.Errorf("%w%s", err, suffix)
 }
 
 // needsBounce reports whether any of targets is the current worktree, in

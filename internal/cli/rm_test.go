@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/shhac/git-wt/internal/wt"
@@ -133,5 +135,47 @@ func TestOrphanRmTarget_RefusesEscape(t *testing.T) {
 func TestOrphanRmTarget_MissingDir(t *testing.T) {
 	if _, ok := orphanRmTarget(nil, t.TempDir(), "nope"); ok {
 		t.Errorf("nonexistent dir must not resolve")
+	}
+}
+
+func TestRmProgressError_SingleTargetUnchanged(t *testing.T) {
+	targets := []rmTarget{{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}}}
+	base := errors.New("boom")
+	got := rmProgressError(targets, 0, base)
+	if got != base {
+		t.Errorf("got %v, want the original error untouched", got)
+	}
+}
+
+func TestRmProgressError_ReportsProgressAndRemainder(t *testing.T) {
+	targets := []rmTarget{
+		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}},
+		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}},
+		{Worktree: wt.Worktree{Path: "/p/c", Branch: "c"}},
+	}
+	base := errors.New("boom")
+	got := rmProgressError(targets, 1, base)
+	msg := got.Error()
+	for _, want := range []string{"boom", "removed 1 of 3", "not attempted", "c"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("missing %q\n--- got ---\n%s", want, msg)
+		}
+	}
+	if !errors.Is(got, base) {
+		t.Error("wrapped error should still unwrap to the cause")
+	}
+}
+
+func TestRmProgressError_LastTargetHasNoRemainder(t *testing.T) {
+	targets := []rmTarget{
+		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}},
+		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}},
+	}
+	msg := rmProgressError(targets, 1, errors.New("boom")).Error()
+	if strings.Contains(msg, "not attempted") {
+		t.Errorf("nothing was left over\n--- got ---\n%s", msg)
+	}
+	if !strings.Contains(msg, "removed 1 of 2") {
+		t.Errorf("missing progress count\n--- got ---\n%s", msg)
 	}
 }

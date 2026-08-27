@@ -162,12 +162,32 @@ func TestPrintCleanTargets(t *testing.T) {
 		{wt: wt.Worktree{Path: "/p/a", Branch: "a"}, reason: "branch deleted"},
 		{wt: wt.Worktree{Path: "/p/b", Branch: "b"}, reason: "upstream gone"},
 	}
-	printCleanTargets(&buf, targets)
+	printCleanTargets(&buf, targets, nil)
 	got := buf.String()
 	for _, want := range []string{"worktrees to remove:", "[branch deleted]", "[upstream gone]", "/p/a", "/p/b"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output missing %q\n--- got ---\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "dirty") {
+		t.Errorf("clean targets should carry no dirty note\n--- got ---\n%s", got)
+	}
+}
+
+func TestPrintCleanTargets_DirtyNote(t *testing.T) {
+	var buf strings.Builder
+	targets := []taggedTarget{
+		{wt: wt.Worktree{Path: "/p/a", Branch: "a"}, reason: "branch deleted"},
+		{wt: wt.Worktree{Path: "/p/b", Branch: "b"}, reason: "upstream gone"},
+	}
+	dirty := map[string]wt.DirtyStat{"/p/b": {Modified: 2, Untracked: 1}}
+	printCleanTargets(&buf, targets, dirty)
+	got := buf.String()
+	if !strings.Contains(got, "[dirty: 2 modified, 1 untracked]") {
+		t.Errorf("missing dirty note for /p/b\n--- got ---\n%s", got)
+	}
+	if strings.Count(got, "dirty") != 1 {
+		t.Errorf("clean target /p/a should have no dirty note\n--- got ---\n%s", got)
 	}
 }
 
