@@ -255,3 +255,42 @@ func TestFindByTreesDirLeaf_RefusesEscapingArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestRmTargetLabel(t *testing.T) {
+	tests := []struct {
+		name string
+		in   rmTarget
+		want string
+	}{
+		{"branch", rmTarget{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}}, "a"},
+		{
+			"detached carries its path, so two are distinguishable",
+			rmTarget{Worktree: wt.Worktree{Path: "/p/d", Detached: true}},
+			"(detached) /p/d",
+		},
+		{
+			"orphan",
+			rmTarget{Worktree: wt.Worktree{Path: "/p/o"}, orphan: true},
+			"/p/o (unregistered leftover)",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.in.label(); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Two detached worktrees must not present as the same line in the prompt
+// that precedes deleting them.
+func TestRmSummary_DistinguishesTwoDetachedWorktrees(t *testing.T) {
+	got := rmSummary([]rmTarget{
+		{Worktree: wt.Worktree{Path: "/p/one", Detached: true}},
+		{Worktree: wt.Worktree{Path: "/p/two", Detached: true}},
+	})
+	if !strings.Contains(got, "/p/one") || !strings.Contains(got, "/p/two") {
+		t.Errorf("both paths should appear\n--- got ---\n%s", got)
+	}
+}

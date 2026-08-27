@@ -111,6 +111,12 @@ func (t rmTarget) label() string {
 	if t.orphan {
 		return t.Path + " (unregistered leftover)"
 	}
+	if t.Branch == "" {
+		// Display() collapses to "(detached)" or "(bare)" for every such
+		// worktree, so the path is the only thing that tells two of them
+		// apart — and this label is what the delete confirmation shows.
+		return t.Display() + " " + t.Path
+	}
 	return t.Display()
 }
 
@@ -324,9 +330,9 @@ func removeTargets(ctx context.Context, targets []rmTarget, action rmAction, bra
 		}
 
 		if err := removeWorktree(ctx, t.Worktree, t.force); err != nil {
-			return rmProgressError(targets, i, fmt.Errorf("remove worktree %s: %w", t.Display(), err))
+			return rmProgressError(targets, i, fmt.Errorf("remove worktree %s: %w", t.label(), err))
 		}
-		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
+		fmt.Fprintf(os.Stderr, "removed %s\n", t.label())
 
 		deleteBranchIfAsked(ctx, t, action, branchFlag)
 	}
