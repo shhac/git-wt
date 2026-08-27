@@ -12,23 +12,16 @@ import (
 	"github.com/shhac/git-wt/internal/wt"
 )
 
-// forceReason records why a worktree with uncommitted changes is being
-// removed anyway. It decides whether executeRm warns about the work it is
-// discarding: someone who picked the worktree out of the dirty prompt has
-// just read the same counts, so repeating them is noise.
-type forceReason int
-
-const (
-	forceNone   forceReason = iota // clean, or not being forced
-	forceFlag                      // --force on the command line
-	forceChosen                    // explicitly toggled in the dirty prompt
-)
-
 // scanDirty annotates every target with its uncommitted-file counts, before
-// anything is deleted. Orphans are skipped — an unregistered leftover has no
-// worktree for git to report on. A worktree whose status can't be read is
-// left marked clean; the re-check inside removeWorktree is the backstop, and
-// it defers to git when it can't establish safety either.
+// anything is deleted. A target whose status can't be read is left marked
+// clean; the re-check inside removeWorktree is the backstop, and it defers
+// to git when it can't establish safety either.
+//
+// Orphans are scanned too. A leftover from a crashed removal has a .git file
+// pointing at records git has already pruned, so status fails there and it
+// reads as clean — but the trees dir can also hold a directory that is a
+// perfectly good repository of its own, and that one has work worth
+// reporting before it is deleted.
 func scanDirty(ctx context.Context, targets []rmTarget) []rmTarget {
 	end := debug.Op("rm.scan-dirty", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(nil) }()
@@ -36,9 +29,6 @@ func scanDirty(ctx context.Context, targets []rmTarget) []rmTarget {
 	out := make([]rmTarget, len(targets))
 	copy(out, targets)
 	for i := range out {
-		if out[i].orphan {
-			continue
-		}
 		stat, err := wt.WorkingTreeStatus(ctx, out[i].Path)
 		if err != nil {
 			debug.Logf("status %s: %v (treating as clean)", out[i].Path, err)
@@ -61,9 +51,9 @@ func dirtyTargets(targets []rmTarget) []rmTarget {
 }
 
 // applyDirtyChoice keeps every clean target plus the dirty ones whose path
-// appears in forced, marking those with reason. Dirty targets absent from
-// forced are dropped. Order is preserved.
-func applyDirtyChoice(targets []rmTarget, forced map[string]bool, reason forceReason) []rmTarget {
+// appears in forced. Dirty targets absent from forced are dropped. Order is
+// preserved.
+func applyDirtyChoice(targets []rmTarget, forced map[string]bool) []rmTarget {
 	out := make([]rmTarget, 0, len(targets))
 	for _, t := range targets {
 		if !t.dirty.Any() {
@@ -71,19 +61,31 @@ func applyDirtyChoice(targets []rmTarget, forced map[string]bool, reason forceRe
 			continue
 		}
 		if forced[t.Path] {
-			t.force = reason
+			t.force = true
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-// forceAll marks every path in targets, for the --force path where the user
-// has already opted into destroying whatever is there.
-func forceAll(targets []rmTarget) map[string]bool {
-	out := make(map[string]bool, len(targets))
-	for _, t := range targets {
-		out[t.Path] = true
+// forceEveryTarget clears the whole list for removal and reports the work
+// --force is about to destroy. Marking is unconditional: the flag means
+// "don't stop for anything", so a target whose status scan failed must still
+// be removed rather than refused by the re-check inside removeWorktree.
+//
+// This is where flag-forced work gets announced, so the user sees the full
+// list before the first deletion. Targets picked out of the interactive
+// prompt are marked elsewhere and stay silent — they have already been shown
+// these counts and chosen.
+func forceEveryTarget(w io.Writer, targets []rmTarget) []rmTarget {
+	out := make([]rmTarget, len(targets))
+	copy(out, targets)
+	for i := range out {
+		out[i].force = true
+		if out[i].dirty.Any() {
+			fmt.Fprintf(w, "warning: %s has uncommitted changes (%s); removing anyway\n",
+				out[i].label(), out[i].dirty.Summary())
+		}
 	}
 	return out
 }
@@ -159,13 +161,16 @@ func pickDirtyToForce(dirty []rmTarget, total int) (_ map[string]bool, ok bool, 
 // non-interactive refuses and names them all; interactive offers the
 // skip/force choice. Returns (nil, nil) when the user cancels.
 func resolveDirty(targets []rmTarget, force bool) ([]rmTarget, error) {
+	// Checked before the dirty list is consulted: a target whose scan failed
+	// reads as clean, and deciding from that list would leave it unforced for
+	// removeWorktree's re-check to refuse — on a run that passed --force.
+	if force {
+		return forceEveryTarget(os.Stderr, targets), nil
+	}
+
 	dirty := dirtyTargets(targets)
 	if len(dirty) == 0 {
 		return targets, nil
-	}
-
-	if force {
-		return applyDirtyChoice(targets, forceAll(dirty), forceFlag), nil
 	}
 	if !interactive() {
 		return nil, dirtyBailError(dirty)
@@ -179,10 +184,10 @@ func resolveDirty(targets []rmTarget, force bool) ([]rmTarget, error) {
 		fmt.Fprintln(os.Stderr, "cancelled")
 		return nil, nil
 	}
-	kept := applyDirtyChoice(targets, forced, forceChosen)
+	kept := applyDirtyChoice(targets, forced)
 	for _, t := range dirty {
 		if !forced[t.Path] {
-			fmt.Fprintf(os.Stderr, "skipping %s (%s)\n", t.label(), t.dirty.Summary())
+			reportSkipped(os.Stderr, t)
 		}
 	}
 	if len(kept) == 0 {
@@ -197,15 +202,10 @@ func preflightDirty(ctx context.Context, targets []rmTarget, force bool) ([]rmTa
 	return resolveDirty(scanDirty(ctx, targets), force)
 }
 
-// warnDiscarding notes work that --force is about to destroy. Targets the
-// user picked out of the dirty prompt stay silent: they have already read
-// these counts and chosen. --force never suppresses the scan, only the
-// refusal, so there is always something to report.
-func warnDiscarding(w io.Writer, t rmTarget) {
-	if t.force != forceFlag || !t.dirty.Any() {
-		return
-	}
-	fmt.Fprintf(w, "warning: %s has uncommitted changes (%s); removing anyway\n", t.label(), t.dirty.Summary())
+// reportSkipped names a worktree left alone for holding uncommitted work.
+// Shared so `rm` and `clean` report the same event in the same words.
+func reportSkipped(w io.Writer, t rmTarget) {
+	fmt.Fprintf(w, "skipping %s: uncommitted changes (%s)\n", t.label(), t.dirty.Summary())
 }
 
 // skipDirty drops every target with uncommitted work, warning about each.
@@ -217,7 +217,7 @@ func skipDirty(w io.Writer, targets []rmTarget) []rmTarget {
 	kept := make([]rmTarget, 0, len(targets))
 	for _, t := range targets {
 		if t.dirty.Any() {
-			fmt.Fprintf(w, "skipping %s: uncommitted changes (%s)\n", t.label(), t.dirty.Summary())
+			reportSkipped(w, t)
 			continue
 		}
 		kept = append(kept, t)

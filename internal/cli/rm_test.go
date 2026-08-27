@@ -183,7 +183,7 @@ func TestRmProgressError_LastTargetHasNoRemainder(t *testing.T) {
 func TestRmSummary_MarksDirtyTargets(t *testing.T) {
 	got := rmSummary([]rmTarget{
 		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}},
-		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Modified: 4, Untracked: 1}, force: forceChosen},
+		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Modified: 4, Untracked: 1}, force: true},
 	})
 	if !strings.Contains(got, "Remove 2 worktree(s):") {
 		t.Errorf("missing header\n--- got ---\n%s", got)

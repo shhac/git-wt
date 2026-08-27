@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -194,4 +195,56 @@ func TestRm_ForceBranchDropsUnmergedBranch(t *testing.T) {
 	if strings.Contains(mustGit(t, repo, "branch", "--list", "--format=%(refname:short)"), "fx-a") {
 		t.Error("--force-branch should have dropped the unmerged branch")
 	}
+}
+
+// The trees dir can hold a directory that is a repository in its own right
+// rather than the debris of a crashed removal. It is not a registered
+// worktree, so rm treats it as a leftover — but it can still hold real
+// uncommitted work, and --force must say what it destroyed.
+func TestRm_ForeignRepoUnderTreesDirReportsItsDirt(t *testing.T) {
+	repo := newRepo(t)
+	foreign := filepath.Join(repo, ".worktrees", "foreign")
+	if err := os.MkdirAll(foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, foreign, "init", "-q", "-b", "main", ".")
+	mustWrite(t, filepath.Join(foreign, "a.txt"), "committed\n")
+	mustGit(t, foreign, "add", "a.txt")
+	mustGit(t, foreign, "commit", "-q", "-m", "init")
+	mustWrite(t, filepath.Join(foreign, "a.txt"), "edited\n")
+	mustWrite(t, filepath.Join(foreign, "b.txt"), "new\n")
+
+	res := runWT(t, repo, "rm", "foreign", "--non-interactive", "--force")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, foreign)
+	if !strings.Contains(res.Stderr, "1 modified, 1 untracked") {
+		t.Errorf("expected the discarded counts\n--- got ---\n%s", res.Stderr)
+	}
+}
+
+// A leftover from a crashed removal has a .git file pointing at records git
+// has already pruned, so `git status` fails there. That must read as clean
+// rather than erroring the run.
+func TestRm_CrashedRemovalLeftoverStillRemovable(t *testing.T) {
+	repo := newRepo(t)
+	if r := runWT(t, repo, "new", "lo-a", "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+		t.Fatalf("setup: %s", r.Stderr)
+	}
+	wtPath := filepath.Join(repo, ".worktrees", "lo-a")
+	aside := filepath.Join(repo, ".worktrees", ".aside")
+	if err := os.Rename(wtPath, aside); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "worktree", "prune")
+	if err := os.Rename(aside, wtPath); err != nil {
+		t.Fatal(err)
+	}
+
+	res := runWT(t, repo, "rm", "lo-a", "--non-interactive", "--force")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, wtPath)
 }

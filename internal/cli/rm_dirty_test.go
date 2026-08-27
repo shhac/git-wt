@@ -40,54 +40,86 @@ func TestDirtyTargets_NoneDirty(t *testing.T) {
 }
 
 func TestApplyDirtyChoice_SkipsUnforced(t *testing.T) {
-	kept := applyDirtyChoice(dirtyFixture(), map[string]bool{"/p/b": true}, forceChosen)
+	kept := applyDirtyChoice(dirtyFixture(), map[string]bool{"/p/b": true})
 	if got, want := strings.Join(paths(kept), ","), "/p/a,/p/b,/p/c"; got != want {
 		t.Fatalf("kept %q, want %q (order preserved, /p/d skipped)", got, want)
 	}
 	for _, k := range kept {
 		switch k.Path {
 		case "/p/b":
-			if k.force != forceChosen {
-				t.Errorf("/p/b force = %v, want forceChosen", k.force)
+			if !k.force {
+				t.Error("/p/b should be marked forced")
 			}
 		default:
-			if k.force != forceNone {
-				t.Errorf("%s force = %v, want forceNone", k.Path, k.force)
+			if k.force {
+				t.Errorf("%s should not be marked forced", k.Path)
 			}
 		}
 	}
 }
 
 func TestApplyDirtyChoice_NothingForced(t *testing.T) {
-	kept := applyDirtyChoice(dirtyFixture(), nil, forceChosen)
+	kept := applyDirtyChoice(dirtyFixture(), nil)
 	if got, want := strings.Join(paths(kept), ","), "/p/a,/p/c"; got != want {
 		t.Errorf("kept %q, want %q", got, want)
 	}
 }
 
-func TestApplyDirtyChoice_ForceAll(t *testing.T) {
-	in := dirtyFixture()
-	kept := applyDirtyChoice(in, forceAll(dirtyTargets(in)), forceFlag)
+func TestForceEveryTarget_MarksAllAndWarnsOnlyForDirty(t *testing.T) {
+	var buf strings.Builder
+	kept := forceEveryTarget(&buf, dirtyFixture())
 	if len(kept) != 4 {
 		t.Fatalf("kept %v, want all four", paths(kept))
 	}
 	for _, k := range kept {
-		want := forceNone
-		if k.dirty.Any() {
-			want = forceFlag
+		if !k.force {
+			t.Errorf("%s should be marked forced", k.Path)
 		}
-		if k.force != want {
-			t.Errorf("%s force = %v, want %v", k.Path, k.force, want)
+	}
+	out := buf.String()
+	if strings.Count(out, "warning:") != 2 {
+		t.Errorf("want one warning per dirty target\n--- got ---\n%s", out)
+	}
+	for _, want := range []string{"4 modified, 1 untracked", "2 untracked"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("warning missing %q\n--- got ---\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "/p/a") || strings.Contains(out, "/p/c") {
+		t.Errorf("clean targets should draw no warning\n--- got ---\n%s", out)
+	}
+}
+
+func TestForceEveryTarget_DoesNotMutateInput(t *testing.T) {
+	in := dirtyFixture()
+	var buf strings.Builder
+	forceEveryTarget(&buf, in)
+	for _, tgt := range in {
+		if tgt.force {
+			t.Errorf("%s mutated to forced", tgt.Path)
 		}
 	}
 }
 
-func TestApplyDirtyChoice_DoesNotMutateInput(t *testing.T) {
-	in := dirtyFixture()
-	applyDirtyChoice(in, forceAll(dirtyTargets(in)), forceFlag)
-	for _, tgt := range in {
-		if tgt.force != forceNone {
-			t.Errorf("%s mutated to force = %v", tgt.Path, tgt.force)
+// A target whose `git status` call failed reads as clean, so it never lands
+// in dirtyTargets. Deciding the force list from that set left it unforced,
+// and removeWorktree's independent re-check then refused it with "use
+// --force to remove anyway" on a run that had passed exactly that.
+func TestResolveDirty_ForceMarksTargetsWhoseScanFailed(t *testing.T) {
+	scanFailed := []rmTarget{
+		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}}, // dirty is the zero value
+		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Modified: 1}},
+	}
+	got, err := resolveDirty(scanFailed, true)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %v, want both", paths(got))
+	}
+	for _, k := range got {
+		if !k.force {
+			t.Errorf("%s not forced; removeWorktree's re-check would refuse it", k.Path)
 		}
 	}
 }
@@ -174,51 +206,24 @@ func TestDirtyByPath(t *testing.T) {
 	}
 }
 
-func TestWarnDiscarding(t *testing.T) {
-	tests := []struct {
-		name string
-		in   rmTarget
-		want string
-	}{
-		{
-			"flag-forced dirty target warns",
-			rmTarget{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Modified: 4}, force: forceFlag},
-			"4 modified",
-		},
-		{
-			"prompt-chosen target stays silent",
-			rmTarget{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Modified: 4}, force: forceChosen},
-			"",
-		},
-		{
-			"clean target stays silent",
-			rmTarget{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}, force: forceFlag},
-			"",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var buf strings.Builder
-			warnDiscarding(&buf, tc.in)
-			got := buf.String()
-			if tc.want == "" {
-				if got != "" {
-					t.Errorf("want silence, got %q", got)
-				}
-				return
-			}
-			if !strings.Contains(got, tc.want) {
-				t.Errorf("got %q, want it to contain %q", got, tc.want)
-			}
-		})
+func TestReportSkipped(t *testing.T) {
+	var buf strings.Builder
+	reportSkipped(&buf, rmTarget{
+		Worktree: wt.Worktree{Path: "/p/b", Branch: "b"},
+		dirty:    wt.DirtyStat{Modified: 4, Untracked: 1},
+	})
+	if got, want := buf.String(), "skipping b: uncommitted changes (4 modified, 1 untracked)\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-func TestSubjectWorktrees(t *testing.T) {
-	if got, want := subjectWorktrees(1), "1 worktree has"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if got, want := subjectWorktrees(3), "3 worktrees have"; got != want {
-		t.Errorf("got %q, want %q", got, want)
+// rm and clean report the same event, so they must word it identically.
+func TestSkipDirty_UsesTheSharedSkipWording(t *testing.T) {
+	var shared, viaSkipDirty strings.Builder
+	dirty := rmTarget{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}, dirty: wt.DirtyStat{Untracked: 2}}
+	reportSkipped(&shared, dirty)
+	skipDirty(&viaSkipDirty, []rmTarget{dirty})
+	if shared.String() != viaSkipDirty.String() {
+		t.Errorf("clean's wording %q differs from rm's %q", viaSkipDirty.String(), shared.String())
 	}
 }

@@ -101,7 +101,7 @@ type rmTarget struct {
 	wt.Worktree
 	orphan bool
 	dirty  wt.DirtyStat // filled by scanDirty, before anything is deleted
-	force  forceReason
+	force  bool         // cleared to remove despite dirty
 }
 
 // label is the human-readable name used in prompts and progress output.
@@ -262,8 +262,7 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 			continue
 		}
 
-		warnDiscarding(os.Stderr, t)
-		if err := removeWorktree(ctx, t.Worktree, t.force != forceNone); err != nil {
+		if err := removeWorktree(ctx, t.Worktree, t.force); err != nil {
 			return rmProgressError(targets, i, fmt.Errorf("remove worktree %s: %w", t.Display(), err))
 		}
 		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
