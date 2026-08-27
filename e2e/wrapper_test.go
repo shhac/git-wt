@@ -95,3 +95,33 @@ func TestWrapper_RmOtherWorktreeStaysPut(t *testing.T) {
 	assertSamePath(t, "pwd after rm of other worktree", pwd, repo)
 	mustNotExist(t, filepath.Join(repo, ".worktrees", "wrap-rm-other"))
 }
+
+// TestWrapper_RmBouncesEvenWhenALaterTargetFails pins the fix in 28ff394.
+// Removing the worktree you are standing in chdirs the process to the main
+// repo up front, but the path only reaches the shell at the end of the run.
+// With three targets and a failure on the second, the shell used to be left
+// sitting in the first one's deleted directory.
+func TestWrapper_RmBouncesEvenWhenALaterTargetFails(t *testing.T) {
+	repo := newRepo(t)
+	for _, n := range []string{"wrap-cur", "wrap-locked"} {
+		if r := runWT(t, repo, "new", n, "--non-interactive", "--no-copy"); r.ExitCode != 0 {
+			t.Fatalf("setup %s: %s", n, r.Stderr)
+		}
+	}
+	curPath := filepath.Join(repo, ".worktrees", "wrap-cur")
+	lockedPath := filepath.Join(repo, ".worktrees", "wrap-locked")
+
+	// A locked worktree is refused by `git worktree remove`, giving a
+	// mid-list failure that has nothing to do with the dirty preflight.
+	mustGit(t, repo, "worktree", "lock", lockedPath)
+
+	script := "cd '" + curPath + "'\ngwt rm wrap-cur wrap-locked || true\npwd\n"
+	pwd, stderr := runUnderWrapper(t, repo, repo, script)
+
+	assertSamePath(t, "pwd after a failed multi-target rm", pwd, repo)
+	mustNotExist(t, curPath)
+	mustExist(t, lockedPath)
+	if !strings.Contains(stderr, "wrap-locked") {
+		t.Errorf("expected the failure to name the locked worktree\n--- got ---\n%s", stderr)
+	}
+}

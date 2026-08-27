@@ -227,27 +227,38 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 // is removed anyway is per-target (set by the dirty preflight); branchForce
 // governs only `git branch -d` vs `-D`. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
-// follows. The emit is deferred so a failure partway through the target
-// list still moves the shell — otherwise it would be left sitting in a
+// follows. The emit runs whether or not every removal succeeded — otherwise
+// a failure partway through the list would leave the shell sitting in a
 // directory this function has already deleted.
 func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, branchForce bool) (err error) {
 	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(err) }()
 
-	if needsBounce(cur, targets) {
+	bouncing := needsBounce(cur, targets)
+	if bouncing {
 		bounceEnd := debug.Op("chdir", repo.MainRoot)
-		err = os.Chdir(repo.MainRoot)
-		bounceEnd(err)
-		if err != nil {
-			return fmt.Errorf("chdir to main repo: %w", err)
+		chdirErr := os.Chdir(repo.MainRoot)
+		bounceEnd(chdirErr)
+		if chdirErr != nil {
+			return fmt.Errorf("chdir to main repo: %w", chdirErr)
 		}
-		defer func() {
-			if emitErr := emitTarget(repo.MainRoot); emitErr != nil && err == nil {
-				err = emitErr
-			}
-		}()
 	}
 
+	err = removeTargets(ctx, targets, action, branchForce)
+
+	if bouncing {
+		if emitErr := emitTarget(repo.MainRoot); emitErr != nil && err == nil {
+			err = emitErr
+		}
+	}
+	return err
+}
+
+// removeTargets deletes each target in order, reporting as it goes, and
+// stops at the first failure. Split out of executeRm so the bounce emit can
+// be a plain statement after it rather than a defer racing the debug span
+// for the named return.
+func removeTargets(ctx context.Context, targets []rmTarget, action rmAction, branchForce bool) error {
 	branchFlag := "-d"
 	if branchForce {
 		branchFlag = "-D"
@@ -267,16 +278,25 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 		}
 		fmt.Fprintf(os.Stderr, "removed %s\n", t.Display())
 
-		if action == rmTreeAndBranch && t.Branch != "" {
-			if _, err := git.Run(ctx, "branch", branchFlag, t.Branch); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: delete branch %s: %v\n", t.Branch, err)
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "deleted branch %s\n", t.Branch)
-		}
+		deleteBranchIfAsked(ctx, t, action, branchFlag)
 	}
 
 	return nil
+}
+
+// deleteBranchIfAsked removes t's local branch when the chosen action calls
+// for it. Failure is a warning rather than an error: the worktree is already
+// gone, and a surviving branch is recoverable where a half-done removal is
+// not.
+func deleteBranchIfAsked(ctx context.Context, t rmTarget, action rmAction, branchFlag string) {
+	if action != rmTreeAndBranch || t.Branch == "" {
+		return
+	}
+	if _, err := git.Run(ctx, "branch", branchFlag, t.Branch); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: delete branch %s: %v\n", t.Branch, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "deleted branch %s\n", t.Branch)
 }
 
 // rmProgressError decorates a mid-list failure with what did and did not
