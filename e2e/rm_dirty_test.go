@@ -278,3 +278,65 @@ func TestRm_DetachedWorktreeRemovableByLeafName(t *testing.T) {
 	}
 	mustNotExist(t, paths[0])
 }
+
+// breakStatus corrupts a worktree's own .git file so `git status` fails
+// inside it while the main repo still lists it as a registered worktree.
+// That is the one state where the dirty scan can't establish anything.
+func breakStatus(t *testing.T, wtPath string) {
+	t.Helper()
+	mustWrite(t, filepath.Join(wtPath, ".git"), "gitdir: /nonexistent/path\n")
+}
+
+// scanDirty treats a failed `git status` as clean, so such a target never
+// reaches dirtyTargets. Deciding the force list from that set left it
+// unforced, and removeWorktree's independent re-check then refused it — on a
+// run that passed --force. Verified against the pre-fix binary: it exits 1
+// and the worktree survives.
+func TestRm_ForceRemovesAWorktreeWhoseStatusCheckFails(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "sf-a")
+	breakStatus(t, paths[0])
+
+	res := runWT(t, repo, "rm", "sf-a", "--non-interactive", "--force")
+	if res.ExitCode != 0 {
+		t.Fatalf("--force must not be refused for an unscannable worktree: exit %d\n%s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, paths[0])
+}
+
+// Without --force the same worktree defers to git, which refuses it. The
+// point is that the refusal is git's own and nothing is half-removed.
+func TestRm_UnscannableWorktreeWithoutForceLeavesItIntact(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "sf-b")
+	breakStatus(t, paths[0])
+
+	res := runWT(t, repo, "rm", "sf-b", "--non-interactive")
+	if res.ExitCode == 0 {
+		t.Fatal("expected git to refuse a worktree it cannot validate")
+	}
+	mustExist(t, paths[0])
+	if !strings.Contains(res.Stderr, "sf-b") {
+		t.Errorf("error should name the worktree\n--- got ---\n%s", res.Stderr)
+	}
+}
+
+// A batch must not be stalled by one unscannable member: the others still go.
+func TestRm_UnscannableTargetDoesNotBlockItsBatchUnderForce(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "sf-x", "sf-y", "sf-z")
+	breakStatus(t, paths[1])
+	mustWrite(t, filepath.Join(paths[2], "wip.txt"), "work\n")
+
+	res := runWT(t, repo, "rm", "sf-x", "sf-y", "sf-z", "--non-interactive", "--force")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	for _, p := range paths {
+		mustNotExist(t, p)
+	}
+	// sf-z's dirt was scannable, so it is still reported; sf-y's was not.
+	if !strings.Contains(res.Stderr, "1 untracked") {
+		t.Errorf("expected the scannable target's counts\n--- got ---\n%s", res.Stderr)
+	}
+}
