@@ -201,19 +201,25 @@ func rmOptions(keepBranch, deleteBranch bool) []picker.Option[rmAction] {
 
 // executeRm performs the removals. If the current worktree is one of the
 // targets, we chdir to the main repo and emit its path so the parent shell
-// follows.
+// follows. The emit is deferred so a failure partway through the target
+// list still moves the shell — otherwise it would be left sitting in a
+// directory this function has already deleted.
 func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *wt.Worktree, action rmAction, force bool) (err error) {
 	end := debug.Op("rm.execute", fmt.Sprintf("%d-target(s)", len(targets)))
 	defer func() { end(err) }()
 
-	bouncing := needsBounce(cur, targets)
-	if bouncing {
+	if needsBounce(cur, targets) {
 		bounceEnd := debug.Op("chdir", repo.MainRoot)
 		err = os.Chdir(repo.MainRoot)
 		bounceEnd(err)
 		if err != nil {
 			return fmt.Errorf("chdir to main repo: %w", err)
 		}
+		defer func() {
+			if emitErr := emitTarget(repo.MainRoot); emitErr != nil && err == nil {
+				err = emitErr
+			}
+		}()
 	}
 
 	branchFlag := "-d"
@@ -244,9 +250,6 @@ func executeRm(ctx context.Context, repo *wt.RepoInfo, targets []rmTarget, cur *
 		}
 	}
 
-	if bouncing {
-		return emitTarget(repo.MainRoot)
-	}
 	return nil
 }
 
