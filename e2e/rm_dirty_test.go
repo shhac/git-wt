@@ -248,3 +248,33 @@ func TestRm_CrashedRemovalLeftoverStillRemovable(t *testing.T) {
 	}
 	mustNotExist(t, wtPath)
 }
+
+// Naming the same worktree twice used to remove it and then fail the second
+// pass with git complaining the path is not a working tree.
+func TestRm_DuplicateArgsRemoveOnceAndSucceed(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "dup-a")
+
+	res := runWT(t, repo, "rm", "dup-a", "dup-a", "--non-interactive")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, paths[0])
+	if n := strings.Count(res.Stderr, "removed "); n != 1 {
+		t.Errorf("removed reported %d times, want 1\n--- got ---\n%s", n, res.Stderr)
+	}
+}
+
+// A detached worktree has no branch, but `list` shows it as #leaf and that
+// is the only handle the user has for naming it.
+func TestRm_DetachedWorktreeRemovableByLeafName(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "det-a")
+	mustGit(t, paths[0], "checkout", "-q", "--detach", "HEAD")
+
+	res := runWT(t, repo, "rm", "det-a", "--non-interactive")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustNotExist(t, paths[0])
+}

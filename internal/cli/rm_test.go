@@ -202,3 +202,56 @@ func TestRmSummary_CleanTargetsStayQuiet(t *testing.T) {
 		t.Errorf("unexpected note\n--- got ---\n%s", got)
 	}
 }
+
+func TestDedupeTargets(t *testing.T) {
+	in := []rmTarget{
+		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}},
+		{Worktree: wt.Worktree{Path: "/p/b", Branch: "b"}},
+		{Worktree: wt.Worktree{Path: "/p/a", Branch: "a"}},
+	}
+	got := dedupeTargets(in)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Path != "/p/a" || got[1].Path != "/p/b" {
+		t.Errorf("first position not kept: %v, %v", got[0].Path, got[1].Path)
+	}
+}
+
+func TestDedupeTargets_NoDupesIsUnchanged(t *testing.T) {
+	in := []rmTarget{{Worktree: wt.Worktree{Path: "/p/a"}}, {Worktree: wt.Worktree{Path: "/p/b"}}}
+	if got := dedupeTargets(in); len(got) != 2 {
+		t.Errorf("len = %d, want 2", len(got))
+	}
+}
+
+func TestFindByTreesDirLeaf(t *testing.T) {
+	treesDir := filepath.Join("/repo", ".worktrees")
+	wts := []wt.Worktree{
+		{Path: "/repo", Branch: "main"},
+		{Path: filepath.Join(treesDir, "detached")}, // no branch
+		{Path: filepath.Join(treesDir, "feat"), Branch: "paul/feat"},
+	}
+	got := findByTreesDirLeaf(wts, treesDir, "detached")
+	if got == nil || got.Path != filepath.Join(treesDir, "detached") {
+		t.Fatalf("got %v, want the detached worktree", got)
+	}
+	if findByTreesDirLeaf(wts, treesDir, "nope") != nil {
+		t.Error("unknown leaf should not resolve")
+	}
+	if findByTreesDirLeaf(wts, "", "detached") != nil {
+		t.Error("empty treesDir should not resolve")
+	}
+}
+
+// The leaf lookup builds a path from user input, so it must not be usable to
+// reach a worktree outside the trees dir.
+func TestFindByTreesDirLeaf_RefusesEscapingArgs(t *testing.T) {
+	treesDir := filepath.Join("/repo", ".worktrees")
+	wts := []wt.Worktree{{Path: "/repo", Branch: "main"}}
+	for _, arg := range []string{"..", "../..", "/repo"} {
+		if got := findByTreesDirLeaf(wts, treesDir, arg); got != nil {
+			t.Errorf("findByTreesDirLeaf(%q) = %v, want nil", arg, got.Path)
+		}
+	}
+}

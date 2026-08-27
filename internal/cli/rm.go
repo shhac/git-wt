@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -148,6 +149,9 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string, tree
 	for _, a := range args {
 		t := findByBranch(wts, a)
 		if t == nil {
+			t = findByTreesDirLeaf(wts, treesDir, a)
+		}
+		if t == nil {
 			o, ok := orphanRmTarget(wts, treesDir, a)
 			if !ok {
 				return nil, fmt.Errorf("no worktree for branch %q", a)
@@ -163,7 +167,43 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string, tree
 		}
 		out = append(out, rmTarget{Worktree: *t})
 	}
-	return out, nil
+	return dedupeTargets(out), nil
+}
+
+// findByTreesDirLeaf resolves a name against the leaf directory of a
+// registered worktree inside the trees dir. A detached worktree has no branch
+// for findByBranch to match, but `list` shows it as `#leaf` and that is the
+// only handle the user has for it.
+func findByTreesDirLeaf(wts []wt.Worktree, treesDir, name string) *wt.Worktree {
+	if treesDir == "" || name == "" {
+		return nil
+	}
+	want := filepath.Join(treesDir, filepath.FromSlash(name))
+	if !strings.HasPrefix(want, treesDir+string(filepath.Separator)) {
+		return nil // absolute or ../ args must not escape
+	}
+	for i := range wts {
+		if wts[i].Path == want {
+			return &wts[i]
+		}
+	}
+	return nil
+}
+
+// dedupeTargets drops repeats by path, keeping first position. Naming the
+// same worktree twice used to remove it and then fail on the second pass
+// with git complaining the path is not a working tree.
+func dedupeTargets(targets []rmTarget) []rmTarget {
+	seen := make(map[string]bool, len(targets))
+	out := make([]rmTarget, 0, len(targets))
+	for _, t := range targets {
+		if seen[t.Path] {
+			continue
+		}
+		seen[t.Path] = true
+		out = append(out, t)
+	}
+	return out
 }
 
 // chooseRmAction implements the confirmation step. The keep/delete flags
