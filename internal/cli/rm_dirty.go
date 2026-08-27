@@ -84,7 +84,7 @@ func forceEveryTarget(w io.Writer, targets []rmTarget) []rmTarget {
 	for i := range out {
 		out[i].force = true
 		if out[i].dirty.Any() {
-			fmt.Fprintf(w, "warning: %s has uncommitted changes (%s); removing anyway\n",
+			_, _ = fmt.Fprintf(w, "warning: %s has uncommitted changes (%s); removing anyway\n",
 				out[i].label(), out[i].dirty.Summary())
 		}
 	}
@@ -192,7 +192,7 @@ func resolveDirty(targets []rmTarget, force bool) ([]rmTarget, error) {
 // reportSkipped names a worktree left alone for holding uncommitted work.
 // Shared so `rm` and `clean` report the same event in the same words.
 func reportSkipped(w io.Writer, t rmTarget) {
-	fmt.Fprintf(w, "skipping %s: uncommitted changes (%s)\n", t.label(), t.dirty.Summary())
+	_, _ = fmt.Fprintf(w, "skipping %s: uncommitted changes (%s)\n", t.label(), t.dirty.Summary())
 }
 
 // skipDirty drops every target with uncommitted work, warning about each.
