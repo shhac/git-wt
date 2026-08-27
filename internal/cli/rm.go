@@ -64,7 +64,7 @@ var rmCmd = &cobra.Command{
 			return nil // user cancelled the picker
 		}
 
-		targets, err = preflightDirty(ctx, targets, rmForce)
+		targets, err = resolveDirty(scanDirty(ctx, targets), rmForce)
 		if err != nil {
 			return err
 		}

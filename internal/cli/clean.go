@@ -96,11 +96,7 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 		return nil
 	}
 
-	wts = make([]wt.Worktree, len(targets))
-	for i, t := range targets {
-		wts[i] = t.wt
-	}
-	toRm := scanDirty(ctx, toRmTargets(wts))
+	toRm := scanDirty(ctx, cleanTargetsToRm(targets))
 
 	printCleanTargets(os.Stderr, targets, dirtyByPath(toRm))
 	if flags.dryRun {
@@ -213,6 +209,16 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanNoFetch, "no-fetch", false, "skip the leading `git fetch --prune`")
 	cleanCmd.Flags().BoolVar(&cleanOrphanedOnly, "orphaned-only", false, "only remove worktrees whose local branch is gone")
 	cleanCmd.Flags().BoolVar(&cleanGoneOnly, "upstream-gone-only", false, "only remove worktrees whose upstream tracking is gone")
+}
+
+// cleanTargetsToRm unwraps the cleanup reasons, which only the listing
+// needs, into the removal units the rm pipeline works in.
+func cleanTargetsToRm(targets []taggedTarget) []rmTarget {
+	out := make([]rmTarget, len(targets))
+	for i, t := range targets {
+		out[i] = rmTarget{Worktree: t.wt}
+	}
+	return out
 }
 
 // taggedTarget pairs a worktree with the reason it was selected for cleanup.

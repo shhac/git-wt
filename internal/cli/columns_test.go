@@ -78,3 +78,16 @@ func TestColumnWidths_EmptySlice(t *testing.T) {
 		t.Errorf("got (%d, %d), want (0, 0) for empty slice", branchW, parentW)
 	}
 }
+
+func TestMaxWidth(t *testing.T) {
+	if got := maxWidth(nil); got != 0 {
+		t.Errorf("maxWidth(nil) = %d, want 0", got)
+	}
+	if got := maxWidth([]string{"ab", "abcd", "a"}); got != 4 {
+		t.Errorf("maxWidth = %d, want 4", got)
+	}
+	// Measured by visible width, so escapes don't inflate the count.
+	if got := maxWidth([]string{"\x1b[2mabc\x1b[0m"}); got != 3 {
+		t.Errorf("maxWidth with ANSI = %d, want 3", got)
+	}
+}

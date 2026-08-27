@@ -9,6 +9,7 @@ import (
 
 	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/picker"
+	"github.com/shhac/git-wt/internal/ui"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -95,7 +96,7 @@ func forceEveryTarget(w io.Writer, targets []rmTarget) []rmTarget {
 // of discovering them one re-run at a time.
 func dirtyBailError(dirty []rmTarget) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s uncommitted changes:", subjectWorktrees(len(dirty)))
+	fmt.Fprintf(&b, "uncommitted changes in %d worktree(s):", len(dirty))
 	for _, t := range dirty {
 		fmt.Fprintf(&b, "\n    %s (%s)", t.label(), t.dirty.Summary())
 	}
@@ -103,29 +104,21 @@ func dirtyBailError(dirty []rmTarget) error {
 	return fmt.Errorf("%s", b.String())
 }
 
-// subjectWorktrees renders the count as the subject of a verb — "1 worktree
-// has", "3 worktrees have". The "worktree(s)" shorthand used elsewhere reads
-// as broken English once a verb has to agree with it.
-func subjectWorktrees(n int) string {
-	if n == 1 {
-		return "1 worktree has"
-	}
-	return fmt.Sprintf("%d worktrees have", n)
-}
-
 // dirtyRows renders the multi-select rows for pickDirtyToForce, padding the
-// labels so the counts line up.
+// labels so the counts line up. Uses the package's own column helpers rather
+// than a %-*s of its own, so the alignment measures visible width and the
+// rows carry the same dim-counts styling as every other picker.
 func dirtyRows(dirty []rmTarget) []picker.Row {
-	width := 0
-	for _, t := range dirty {
-		if n := len(t.label()); n > width {
-			width = n
-		}
+	labels := make([]string, len(dirty))
+	for i, t := range dirty {
+		labels[i] = t.label()
 	}
+	width := maxWidth(labels)
+
 	rows := make([]picker.Row, len(dirty))
 	for i, t := range dirty {
 		rows[i] = picker.Row{
-			Display: fmt.Sprintf("%-*s  %s", width, t.label(), t.dirty.Summary()),
+			Display: padRight(labels[i], width) + "  " + ui.Dim(t.dirty.Summary()),
 			Value:   t.Path,
 		}
 	}
@@ -194,12 +187,6 @@ func resolveDirty(targets []rmTarget, force bool) ([]rmTarget, error) {
 		fmt.Fprintln(os.Stderr, "nothing left to remove")
 	}
 	return kept, nil
-}
-
-// preflightDirty is scanDirty followed by resolveDirty — the whole
-// uncommitted-work gate for a caller that has nothing to print in between.
-func preflightDirty(ctx context.Context, targets []rmTarget, force bool) ([]rmTarget, error) {
-	return resolveDirty(scanDirty(ctx, targets), force)
 }
 
 // reportSkipped names a worktree left alone for holding uncommitted work.

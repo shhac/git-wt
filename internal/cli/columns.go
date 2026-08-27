@@ -25,6 +25,19 @@ func columnWidths(wts []wt.Worktree, mainRoot, treesDir string) (branchW, parent
 	return
 }
 
+// maxWidth returns the widest visible string in labels. Companion to
+// columnWidths for callers whose rows aren't worktree-shaped, so they can
+// reach padRight without measuring with len().
+func maxWidth(labels []string) int {
+	w := 0
+	for _, s := range labels {
+		if n := lipgloss.Width(s); n > w {
+			w = n
+		}
+	}
+	return w
+}
+
 // padRight pads s with spaces on the right so its visible width equals width.
 // No-op if s is already wider. Visible width is measured via lipgloss.Width
 // so embedded ANSI escapes don't inflate the count.
