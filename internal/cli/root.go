@@ -24,7 +24,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:           "git-wt",
 	Short:         "Manage git worktrees with enhanced features",
-	Long:          "git-wt creates worktrees in a sibling directory, copies project config, and offers interactive navigation between them.",
+	Long:          "git-wt creates worktrees under <repo>/.worktrees/, copies project config into them, and offers interactive navigation between them.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
