@@ -6,6 +6,8 @@ a shell wrapper that `cd`s your parent shell.
 
 **Website:** [git-wt.paulie.app](https://git-wt.paulie.app/)
 
+![Demo](assets/demo.gif)
+
 ## Features
 
 - **Create worktrees** with one command, branched from any ref
