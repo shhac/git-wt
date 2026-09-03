@@ -33,7 +33,7 @@ CLAUDE.local.md
 .claude/*
 !.claude/skills/
 !.claude/agents/
-!.claude/commands/
+!.claude/commands
 
 # Temporary files
 *.tmp
