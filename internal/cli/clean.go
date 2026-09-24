@@ -106,7 +106,7 @@ func runClean(ctx context.Context, flags cleanFlags) error {
 	// A gone branch says nothing about whether the worktree still holds
 	// work, so clean refuses to destroy uncommitted changes even though the
 	// user asked for a sweep. `rm --force <branch>` is the way to insist.
-	toRm = skipDirty(os.Stderr, toRm)
+	toRm = skipLocked(os.Stderr, skipDirty(os.Stderr, toRm))
 	if len(toRm) == 0 {
 		fmt.Fprintln(os.Stderr, "nothing left to clean")
 		return nil
@@ -175,6 +175,9 @@ func printCleanTargets(w io.Writer, targets []taggedTarget, dirty map[string]wt.
 		note := ""
 		if d, ok := dirty[t.wt.Path]; ok {
 			note = fmt.Sprintf("  [dirty: %s]", d.Summary())
+		}
+		if t.wt.Locked {
+			note += "  [" + strings.TrimSpace("locked "+lockAge(t.wt)) + "]"
 		}
 		_, _ = fmt.Fprintf(w, "  %s  [%s]  (%s)%s\n", t.wt.Display(), t.reason, t.wt.Path, note)
 	}

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/shhac/git-wt/internal/wt"
@@ -86,4 +88,55 @@ func filterRemovable(wts []wt.Worktree, repo *wt.RepoInfo) []wt.Worktree {
 		out = append(out, t)
 	}
 	return out
+}
+
+// findByTreesDirLeaf resolves a name against the leaf directory of a
+// registered worktree inside the trees dir. A detached worktree has no branch
+// for findByBranch to match, but `list` shows it as `#leaf` and that is the
+// only handle the user has for it.
+func findByTreesDirLeaf(wts []wt.Worktree, treesDir, name string) *wt.Worktree {
+	if treesDir == "" || name == "" {
+		return nil
+	}
+	want := filepath.Join(treesDir, filepath.FromSlash(name))
+	if !strings.HasPrefix(want, treesDir+string(filepath.Separator)) {
+		return nil // absolute or ../ args must not escape
+	}
+	for i := range wts {
+		if wts[i].Path == want {
+			return &wts[i]
+		}
+	}
+	return nil
+}
+
+// findNamedWorktree resolves a worktree named on the command line: by branch
+// (exact, then unique suffix), then by leaf directory under the trees dir.
+// (nil, nil) means nothing matched, which callers handle differently: rm
+// goes on to look for a leftover directory. Naming the main worktree is an
+// error — no command that takes names can act on it — and verb says which
+// command refused.
+func findNamedWorktree(wts []wt.Worktree, repo *wt.RepoInfo, treesDir, name, verb string) (*wt.Worktree, error) {
+	t := findByBranch(wts, name)
+	if t == nil {
+		t = findByTreesDirLeaf(wts, treesDir, name)
+	}
+	if t == nil {
+		return nil, nil
+	}
+	if t.Path == repo.MainRoot {
+		return nil, fmt.Errorf("cannot %s the main worktree (%q)", verb, t.Display())
+	}
+	return t, nil
+}
+
+// worktreeLabel is the human-readable name used in prompts and messages.
+func worktreeLabel(t wt.Worktree) string {
+	if t.Branch == "" {
+		// Display() collapses to "(detached)" or "(bare)" for every such
+		// worktree, so the path is the only thing that tells two of them
+		// apart.
+		return t.Display() + " " + t.Path
+	}
+	return t.Display()
 }

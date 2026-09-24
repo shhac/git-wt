@@ -23,6 +23,9 @@ type Worktree struct {
 	Locked   bool      // worktree is locked
 	Prunable bool      // worktree is prunable
 	ModTime  time.Time // mtime of the worktree directory; zero if unknown
+
+	LockReason string    // reason given when locking; "" if none
+	LockedAt   time.Time // when the lock was taken; zero if unknown or unlocked
 }
 
 // Display returns the branch name (or "(detached)" / "(bare)" if there isn't one).
@@ -91,6 +94,7 @@ func List(ctx context.Context, dir string) ([]Worktree, error) {
 			wts[i].ModTime = info.ModTime()
 		}
 	}
+	attachLockTimes(ctx, dir, wts)
 	return wts, nil
 }
 
@@ -179,6 +183,7 @@ func parsePorcelain(out string) []Worktree {
 		case "locked":
 			if cur != nil {
 				cur.Locked = true
+				cur.LockReason = parseLockReason(val)
 			}
 		case "prunable":
 			if cur != nil {

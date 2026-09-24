@@ -103,26 +103,23 @@ func TestWrapper_RmOtherWorktreeStaysPut(t *testing.T) {
 // sitting in the first one's deleted directory.
 func TestWrapper_RmBouncesEvenWhenALaterTargetFails(t *testing.T) {
 	repo := newRepo(t)
-	for _, n := range []string{"wrap-cur", "wrap-locked"} {
+	for _, n := range []string{"wrap-cur", "wrap-broken"} {
 		if r := runWT(t, repo, "new", n, "--non-interactive", "--no-copy"); r.ExitCode != 0 {
 			t.Fatalf("setup %s: %s", n, r.Stderr)
 		}
 	}
 	curPath := filepath.Join(repo, ".worktrees", "wrap-cur")
-	lockedPath := filepath.Join(repo, ".worktrees", "wrap-locked")
+	brokenPath := filepath.Join(repo, ".worktrees", "wrap-broken")
+	breakWorktreeLink(t, brokenPath)
 
-	// A locked worktree is refused by `git worktree remove`, giving a
-	// mid-list failure that has nothing to do with the dirty preflight.
-	mustGit(t, repo, "worktree", "lock", lockedPath)
-
-	script := "cd '" + curPath + "'\ngwt rm wrap-cur wrap-locked || true\npwd\n"
+	script := "cd '" + curPath + "'\ngwt rm wrap-cur wrap-broken || true\npwd\n"
 	pwd, stderr := runUnderWrapper(t, repo, repo, script)
 
 	assertSamePath(t, "pwd after a failed multi-target rm", pwd, repo)
 	mustNotExist(t, curPath)
-	mustExist(t, lockedPath)
-	if !strings.Contains(stderr, "wrap-locked") {
-		t.Errorf("expected the failure to name the locked worktree\n--- got ---\n%s", stderr)
+	mustExist(t, brokenPath)
+	if !strings.Contains(stderr, "wrap-broken") {
+		t.Errorf("expected the failure to name the broken worktree\n--- got ---\n%s", stderr)
 	}
 }
 
@@ -138,7 +135,7 @@ func TestWrapper_RmDoesNotBounceWhenTheCurrentWorktreeSurvives(t *testing.T) {
 	}
 	blockedPath := filepath.Join(repo, ".worktrees", "wrap-block")
 	stayPath := filepath.Join(repo, ".worktrees", "wrap-stay")
-	mustGit(t, repo, "worktree", "lock", blockedPath)
+	breakWorktreeLink(t, blockedPath)
 
 	// wrap-block is first, so it fails before wrap-stay is ever touched.
 	script := "cd '" + stayPath + "'\ngwt rm wrap-block wrap-stay || true\npwd\n"
@@ -147,4 +144,15 @@ func TestWrapper_RmDoesNotBounceWhenTheCurrentWorktreeSurvives(t *testing.T) {
 	assertSamePath(t, "pwd after a rm that never reached the current worktree", pwd, stayPath)
 	mustExist(t, stayPath)
 	mustExist(t, blockedPath)
+}
+
+// breakWorktreeLink points a worktree's .git file somewhere bogus, so it
+// fails at removal time rather than in any preflight: the dirty scan can't
+// read it and treats it as clean, the fast path can't establish safety and
+// defers to git, and `git worktree remove` refuses a .git that doesn't
+// point back at its admin dir. (A lock used to serve here, but rm now
+// refuses locked targets before deleting anything.)
+func breakWorktreeLink(t *testing.T, path string) {
+	t.Helper()
+	mustWrite(t, filepath.Join(path, ".git"), "gitdir: "+filepath.Join(t.TempDir(), "nowhere")+"\n")
 }

@@ -14,7 +14,10 @@ a shell wrapper that `cd`s your parent shell.
 - **Navigate** between worktrees with an arrow-key picker (or by branch name)
 - **Remove** one or many with a multi-select picker; safety check on the main
   worktree; bounce-and-delete when you remove the worktree you're in
-- **List** all worktrees with the current marker, sorted by last-modified
+- **List** all worktrees with the current marker, sorted by last-modified;
+  locked worktrees show how long they've been locked and why
+- **Lock / unlock** worktrees by branch name or from a picker, so a stale lock
+  left behind by an agent or script is easy to spot and clear
 - **Clean** worktrees whose local branch is gone or whose upstream was deleted
 - **Project config copy** controlled by `.git-wt-copy-files` (gitignore-style)
 - **Shell integration** via a generated function that talks to the binary
@@ -86,6 +89,8 @@ gwt go feature-branch               # direct nav
 gwt rm                              # multi-select picker
 gwt rm feature-branch --delete-branch
 gwt list                            # or `gwt ls`
+gwt lock feature-branch --reason "demo on Friday"
+gwt unlock                          # pick from the locked worktrees
 gwt clean --dry-run                 # show what would be removed
 ```
 
@@ -100,10 +105,12 @@ isn't). Override per-invocation with `--parent-dir <path>`.
 | `new <branch>` | Create new worktree with branch. Flags: `--from <ref>`, `--parent-dir <path>`, `--no-copy`, `--copy-file-config <path>`. |
 | `add [<leaf>] <branch\|remote-ref>` | Create a worktree for an existing local or remote branch. `<remote>/<rest>` (with a matching remote) creates a local branch tracking it; anything else resolves to a local branch. Optional `<leaf>` overrides the directory name. Flags: `--parent-dir <path>`, `--no-copy`, `--copy-file-config <path>`. |
 | `eject [<leaf>]` | Move the currently-checked-out branch into a new worktree. Stashes uncommitted changes (tracked + untracked), switches the main tree to `main`/`master` (or `--base`), creates the worktree, and restores the changes inside it. Refuses if HEAD is detached, the current branch is the base, or run from within a non-main worktree. Flags: `--parent-dir <path>`, `--base <branch>`. |
-| `rm [branch...]` | Remove worktree(s); interactive multi-select if no args. Every target is checked for uncommitted work before anything is deleted, so a dirty worktree can't leave you half-removed; interactively you pick which to remove anyway (default: skip). Deletion is parallel with a live progress line, and copes with read-only/immutable files that make `git worktree remove` die half-way. Also accepts the leaf directory name under the trees dir, which is the only handle a detached worktree has, and the name of a leftover directory there (the debris of a removal interrupted part-way, or one git abandoned because the parent directory was not writable). Naming the same worktree twice removes it once. Flags: `--keep-branch`, `--delete-branch`, `--force`, `--force-branch`. |
+| `rm [branch...]` | Remove worktree(s); interactive multi-select if no args. Every target is checked for uncommitted work before anything is deleted, so a dirty worktree can't leave you half-removed; interactively you pick which to remove anyway (default: skip). Deletion is parallel with a live progress line, and copes with read-only/immutable files that make `git worktree remove` die half-way. Also accepts the leaf directory name under the trees dir, which is the only handle a detached worktree has, and the name of a leftover directory there (the debris of a removal interrupted part-way, or one git abandoned because the parent directory was not writable). Naming the same worktree twice removes it once. Locked worktrees are refused up front, even with `--force` — `unlock` them first. Flags: `--keep-branch`, `--delete-branch`, `--force`, `--force-branch`. |
 | `go [branch]` | Navigate to a worktree. Suffix match works (`auth` → `paul/auth` if unique). |
-| `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. |
-| `clean` | Remove worktrees whose branch is gone (locally or upstream). Worktrees still holding uncommitted work are reported and skipped — use `gwt rm --force <branch>` to insist. Flags: `--dry-run`, `--no-fetch`, `--orphaned-only`, `--upstream-gone-only`. |
+| `list` (`ls`) | List worktrees. The first column is the branch, second is the location, third is mtime. Locked worktrees add how long ago they were locked and the (shortened) reason. |
+| `lock [branch...]` | Lock worktrees so `rm`, `clean` and `git worktree prune` leave them alone; interactive multi-select over the unlocked ones if no args. Already-locked worktrees keep their existing lock. Flags: `--reason <text>`. |
+| `unlock [branch...]` | Unlock worktrees; interactive multi-select over the locked ones if no args. Prints the age and reason of each lock it releases. |
+| `clean` | Remove worktrees whose branch is gone (locally or upstream). Worktrees still holding uncommitted work are reported and skipped — use `gwt rm --force <branch>` to insist. Locked worktrees are reported and skipped too. Flags: `--dry-run`, `--no-fetch`, `--orphaned-only`, `--upstream-gone-only`. |
 | `alias <name>` | Print a shell function wrapper. It cds whenever the binary emits a path, including on a failed run, so removing the worktree you are standing in always moves you out of it. Flags: `--fd <N>`, `--plain`, `-n`, `--debug`, `--no-completion`. |
 | `completion <bash\|zsh\|fish\|powershell>` | Print a shell completion script. See [Tab completion](#tab-completion-optional). |
 | `config [<key> [<value>]]` | Show or change persistent settings (stored in `git config wt.*`). See [Configuration](#configuration). |

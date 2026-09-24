@@ -22,9 +22,10 @@ func Initialize() {
 
 // Predefined styles. Each respects Plain by lazily checking the flag.
 var (
-	current = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // green + bold
+	current = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)  // green + bold
 	dim     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).TabWidth(-1) // bright black; preserve embedded tabs (lipgloss otherwise expands them to spaces)
-	branch  = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))            // cyan
+	branch  = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))             // cyan
+	locked  = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))             // yellow
 )
 
 // Current renders text in the "current worktree" style.
@@ -49,4 +50,12 @@ func Branch(s string) string {
 		return s
 	}
 	return branch.Render(s)
+}
+
+// Locked renders text in the "worktree is locked" style (yellow).
+func Locked(s string) string {
+	if Plain {
+		return s
+	}
+	return locked.Render(s)
 }

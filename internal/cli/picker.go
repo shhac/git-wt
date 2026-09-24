@@ -31,17 +31,14 @@ func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (_
 	return nil, nil
 }
 
-// pickWorktreesToRemove opens an interactive multi-select for the rm command.
-// Returns nil on cancel.
-func pickWorktreesToRemove(wts []wt.Worktree, mainRoot, treesDir string) (_ []wt.Worktree, err error) {
+// pickWorktrees opens an interactive multi-select over wts. Returns nil on
+// cancel or an empty selection.
+func pickWorktrees(title string, wts []wt.Worktree, mainRoot, treesDir string) (_ []wt.Worktree, err error) {
 	end := debug.Op("pick.many", fmt.Sprintf("%d-row(s)", len(wts)))
 	defer func() { end(err) }()
 
 	rows := buildWorktreeRows(wts, mainRoot, treesDir)
-	values, ok, err := picker.SelectMany(
-		"Select worktrees to remove (space to toggle, enter to continue, esc to cancel)",
-		rows,
-	)
+	values, ok, err := picker.SelectMany(title, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +72,10 @@ func buildWorktreeRows(wts []wt.Worktree, mainRoot, treesDir string) []picker.Ro
 }
 
 // formatPickerRow lays out one worktree row as "branch  location  mtime"
-// with aligned columns. The "location" column is the worktree's DisplayPath.
+// with aligned columns, plus the lock tag and reason when the worktree is locked. The "location" column is the worktree's DisplayPath.
 func formatPickerRow(t wt.Worktree, mainRoot, treesDir string, branchW, parentW int) string {
 	branch := padRight(t.Display(), branchW)
 	loc := padRight(t.DisplayPath(mainRoot, treesDir), parentW)
 	mtime := ui.HumanSince(t.ModTime)
-	return ui.Branch(branch) + "  " + ui.Dim(loc) + "  " + ui.Dim(mtime)
+	return withLockTag(ui.Branch(branch)+"  "+ui.Dim(loc)+"  "+ui.Dim(mtime), t, ui.Locked, ui.Dim)
 }
-

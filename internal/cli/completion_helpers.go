@@ -12,8 +12,9 @@ import (
 	"github.com/shhac/git-wt/internal/wt"
 )
 
-// completionDesc formats a worktree's display location + recency as
-// the description shown to the right of a completion candidate.
+// completionDesc formats a worktree's display location + recency (+ lock
+// age, when locked) as the description shown to the right of a completion
+// candidate.
 // Mirrors the columns rendered by `gwt ls`:
 //
 //   - location padded to parentW so the recency column lines up across
@@ -24,7 +25,11 @@ import (
 //
 // parentW comes from columnWidths over the whole candidate batch.
 func completionDesc(t wt.Worktree, mainRoot, treesDir string, parentW int) string {
-	return padRight(t.DisplayPath(mainRoot, treesDir), parentW) + "  " + ui.HumanSince(t.ModTime)
+	desc := padRight(t.DisplayPath(mainRoot, treesDir), parentW) + "  " + ui.HumanSince(t.ModTime)
+	if tag := lockTag(t); tag != "" {
+		desc += "  " + tag
+	}
+	return desc
 }
 
 // worktreeBranchesForGo returns the branches of every worktree the
@@ -59,6 +64,20 @@ func worktreeBranchesForGo(wts []wt.Worktree, cur *wt.Worktree, mainRoot, treesD
 // after `rm feat-a ` doesn't re-offer feat-a). Format is the same
 // `"branch\tdescription"` as worktreeBranchesForGo.
 func worktreeBranchesForRm(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string) []string {
+	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(wt.Worktree) bool { return true })
+}
+
+// worktreeBranchesForLock is worktreeBranchesForRm narrowed to the
+// worktrees whose lock state `lock` (locked=false) or `unlock`
+// (locked=true) would change.
+func worktreeBranchesForLock(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, locked bool) []string {
+	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(t wt.Worktree) bool { return t.Locked == locked })
+}
+
+// namedWorktreeBranches is the shared body of the multi-arg completers:
+// non-main worktree branches that pass keep and aren't already on the
+// command line, sorted.
+func namedWorktreeBranches(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, keep func(wt.Worktree) bool) []string {
 	taken := make(map[string]struct{}, len(alreadyChosen))
 	for _, a := range alreadyChosen {
 		taken[a] = struct{}{}
@@ -66,7 +85,7 @@ func worktreeBranchesForRm(wts []wt.Worktree, mainRoot, treesDir string, already
 	_, parentW := columnWidths(wts, mainRoot, treesDir)
 	out := make([]string, 0, len(wts))
 	for _, t := range wts {
-		if t.Branch == "" || t.Path == mainRoot {
+		if t.Branch == "" || t.Path == mainRoot || !keep(t) {
 			continue
 		}
 		if _, dup := taken[t.Branch]; dup {
@@ -184,6 +203,25 @@ func completeRmBranches(_ *cobra.Command, args []string, _ string) ([]string, co
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return worktreeBranchesForRm(wts, repo.MainRoot, wt.TreesDirFor(repo.MainRoot), args),
+		cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeLockBranches is the ValidArgsFunction for `git-wt lock`.
+func completeLockBranches(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return completeLockState(args, false)
+}
+
+// completeUnlockBranches is the ValidArgsFunction for `git-wt unlock`.
+func completeUnlockBranches(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return completeLockState(args, true)
+}
+
+func completeLockState(args []string, locked bool) ([]string, cobra.ShellCompDirective) {
+	repo, wts, _, err := loadRepoAndWorktrees(context.Background())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return worktreeBranchesForLock(wts, repo.MainRoot, wt.TreesDirFor(repo.MainRoot), args, locked),
 		cobra.ShellCompDirectiveNoFileComp
 }
 

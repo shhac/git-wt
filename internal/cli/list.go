@@ -32,9 +32,10 @@ func init() {
 }
 
 // printList renders the table to w using the user's --plain preference.
-// Columns: marker | branch | location | mtime. The "location" column follows
-// Worktree.DisplayPath rules (basename for main, # prefix when inside the
-// trees dir, rel-to-repo when inside the repo, absolute when outside).
+// Columns: marker | branch | location | mtime, then lock age and reason on
+// locked rows. The "location" column follows Worktree.DisplayPath rules
+// (basename for main, # prefix when inside the trees dir, rel-to-repo when
+// inside the repo, absolute when outside).
 func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, treesDir string) {
 	if len(wts) == 0 {
 		_, _ = fmt.Fprintln(w, "no worktrees")
@@ -56,13 +57,15 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, trees
 		// it stays visually consistent. Other rows get cyan branch + dim loc/mtime.
 		var row string
 		if isCurrent {
-			row = ui.Current(fmt.Sprintf("%s%s  %s  %s", marker, branch, loc, mtime))
+			row = ui.Current(withLockTag(fmt.Sprintf("%s%s  %s  %s", marker, branch, loc, mtime), *t, noStyle, noStyle))
 		} else {
-			row = fmt.Sprintf("%s%s  %s  %s", marker, ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime))
+			row = withLockTag(fmt.Sprintf("%s%s  %s  %s", marker, ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime)), *t, ui.Locked, ui.Dim)
 		}
 		_, _ = fmt.Fprintln(w, row)
 	}
 }
+
+func noStyle(s string) string { return s }
 
 // mustWD returns the current working directory, falling back to "." on error.
 func mustWD() string {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -65,6 +64,9 @@ var rmCmd = &cobra.Command{
 		if len(targets) == 0 {
 			return nil // user cancelled the picker
 		}
+		if err := refuseLocked(targets); err != nil {
+			return err
+		}
 
 		targets, err = resolveDirty(scanDirty(ctx, targets), rmForce)
 		if err != nil {
@@ -111,13 +113,7 @@ func (t rmTarget) label() string {
 	if t.orphan {
 		return t.Path + " (unregistered leftover)"
 	}
-	if t.Branch == "" {
-		// Display() collapses to "(detached)" or "(bare)" for every such
-		// worktree, so the path is the only thing that tells two of them
-		// apart — and this label is what the delete confirmation shows.
-		return t.Display() + " " + t.Path
-	}
-	return t.Display()
+	return worktreeLabel(t.Worktree)
 }
 
 func toRmTargets(wts []wt.Worktree) []rmTarget {
@@ -143,7 +139,10 @@ func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, trees
 	if !interactive() {
 		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
 	}
-	picked, err := pickWorktreesToRemove(pickable, repo.MainRoot, treesDir)
+	picked, err := pickWorktrees(
+		"Select worktrees to remove (space to toggle, enter to continue, esc to cancel)",
+		pickable, repo.MainRoot, treesDir,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +152,9 @@ func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, trees
 func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string, force bool) ([]rmTarget, error) {
 	out := make([]rmTarget, 0, len(args))
 	for _, a := range args {
-		t := findByBranch(wts, a)
-		if t == nil {
-			t = findByTreesDirLeaf(wts, treesDir, a)
+		t, err := findNamedWorktree(wts, repo, treesDir, a, "remove")
+		if err != nil {
+			return nil, err
 		}
 		if t == nil {
 			o, ok := orphanRmTarget(wts, treesDir, a)
@@ -168,32 +167,9 @@ func resolveRmFromArgs(wts []wt.Worktree, repo *wt.RepoInfo, args []string, tree
 			out = append(out, o)
 			continue
 		}
-		if t.Path == repo.MainRoot {
-			return nil, fmt.Errorf("cannot remove the main worktree (%q)", t.Display())
-		}
 		out = append(out, rmTarget{Worktree: *t})
 	}
 	return dedupeTargets(out), nil
-}
-
-// findByTreesDirLeaf resolves a name against the leaf directory of a
-// registered worktree inside the trees dir. A detached worktree has no branch
-// for findByBranch to match, but `list` shows it as `#leaf` and that is the
-// only handle the user has for it.
-func findByTreesDirLeaf(wts []wt.Worktree, treesDir, name string) *wt.Worktree {
-	if treesDir == "" || name == "" {
-		return nil
-	}
-	want := filepath.Join(treesDir, filepath.FromSlash(name))
-	if !strings.HasPrefix(want, treesDir+string(filepath.Separator)) {
-		return nil // absolute or ../ args must not escape
-	}
-	for i := range wts {
-		if wts[i].Path == want {
-			return &wts[i]
-		}
-	}
-	return nil
 }
 
 // dedupeTargets drops repeats by path, keeping first position. Naming the
