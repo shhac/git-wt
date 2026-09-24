@@ -136,18 +136,7 @@ func resolveRmTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, trees
 		return resolveRmFromArgs(wts, repo, args, treesDir, force)
 	}
 
-	pickable := filterRemovable(wts, repo)
-	if len(pickable) == 0 {
-		fmt.Fprintln(os.Stderr, "no worktrees to remove")
-		return nil, nil
-	}
-	if !interactive() {
-		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
-	}
-	picked, err := pickWorktrees(
-		"Select worktrees to remove (space to toggle, enter to continue, esc to cancel)",
-		pickable, repo.MainRoot, treesDir,
-	)
+	picked, err := pickWorktreesTo("remove", "no worktrees to remove", filterRemovable(wts, repo), repo.MainRoot, treesDir)
 	if err != nil {
 		return nil, err
 	}

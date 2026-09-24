@@ -100,15 +100,7 @@ func resolveLockTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, tre
 	}
 
 	pickable := filterNeedsLockChange(filterRemovable(wts, repo), lock)
-	if len(pickable) == 0 {
-		fmt.Fprintln(os.Stderr, nothingToLockChange(lock))
-		return nil, nil
-	}
-	if !interactive() {
-		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
-	}
-	return pickWorktrees("Select worktrees to "+verb+" (space to toggle, enter to continue, esc to cancel)",
-		pickable, repo.MainRoot, treesDir)
+	return pickWorktreesTo(verb, nothingToLockChange(lock), pickable, repo.MainRoot, treesDir)
 }
 
 func lockVerb(lock bool) string {

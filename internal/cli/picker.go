@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/shhac/git-wt/internal/debug"
 	"github.com/shhac/git-wt/internal/picker"
@@ -31,14 +32,25 @@ func pickWorktree(title string, wts []wt.Worktree, mainRoot, treesDir string) (_
 	return nil, nil
 }
 
-// pickWorktrees opens an interactive multi-select over wts. Returns nil on
-// cancel or an empty selection.
-func pickWorktrees(title string, wts []wt.Worktree, mainRoot, treesDir string) (_ []wt.Worktree, err error) {
+// pickWorktreesTo is the no-argument path of the commands that act on
+// worktrees named on the command line (rm, lock, unlock): say noneLeft when
+// nothing qualifies, insist on names without a terminal, otherwise open a
+// multi-select over wts titled with verb. Returns nil when there is nothing
+// to pick, or on cancel or an empty selection.
+func pickWorktreesTo(verb, noneLeft string, wts []wt.Worktree, mainRoot, treesDir string) (_ []wt.Worktree, err error) {
+	if len(wts) == 0 {
+		fmt.Fprintln(os.Stderr, noneLeft)
+		return nil, nil
+	}
+	if !interactive() {
+		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
+	}
+
 	end := debug.Op("pick.many", fmt.Sprintf("%d-row(s)", len(wts)))
 	defer func() { end(err) }()
 
-	rows := buildWorktreeRows(wts, mainRoot, treesDir)
-	values, ok, err := picker.SelectMany(title, rows)
+	title := "Select worktrees to " + verb + " (space to toggle, enter to continue, esc to cancel)"
+	values, ok, err := picker.SelectMany(title, buildWorktreeRows(wts, mainRoot, treesDir))
 	if err != nil {
 		return nil, err
 	}
