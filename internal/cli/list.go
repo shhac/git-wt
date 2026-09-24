@@ -43,25 +43,17 @@ func printList(w io.Writer, wts []wt.Worktree, cur *wt.Worktree, mainRoot, trees
 	}
 
 	branchW, parentW := columnWidths(wts, mainRoot, treesDir)
-	for i := range wts {
-		t := &wts[i]
-		isCurrent := cur != nil && t.Path == cur.Path
-		marker := "  "
-		if isCurrent {
-			marker = "* "
+	for _, t := range wts {
+		if cur == nil || t.Path != cur.Path {
+			_, _ = fmt.Fprintln(w, "  "+formatPickerRow(t, mainRoot, treesDir, branchW, parentW))
+			continue
 		}
+		// The current row takes the current/green style across the whole
+		// row, so its columns go in unstyled.
 		branch := padRight(t.Display(), branchW)
 		loc := padRight(t.DisplayPath(mainRoot, treesDir), parentW)
-		mtime := ui.HumanSince(t.ModTime)
-		// Current row gets the current/green style applied to the whole row so
-		// it stays visually consistent. Other rows get cyan branch + dim loc/mtime.
-		var row string
-		if isCurrent {
-			row = ui.Current(withLockTag(fmt.Sprintf("%s%s  %s  %s", marker, branch, loc, mtime), *t, noStyle, noStyle))
-		} else {
-			row = withLockTag(fmt.Sprintf("%s%s  %s  %s", marker, ui.Branch(branch), ui.Dim(loc), ui.Dim(mtime)), *t, ui.Locked, ui.Dim)
-		}
-		_, _ = fmt.Fprintln(w, row)
+		row := fmt.Sprintf("* %s  %s  %s", branch, loc, ui.HumanSince(t.ModTime))
+		_, _ = fmt.Fprintln(w, ui.Current(withLockTag(row, t, noStyle, noStyle)))
 	}
 }
 

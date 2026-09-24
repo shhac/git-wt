@@ -64,19 +64,6 @@ func worktreeBranchesForGo(wts []wt.Worktree, cur *wt.Worktree, mainRoot, treesD
 // after `rm feat-a ` doesn't re-offer feat-a). Format is the same
 // `"branch\tdescription"` as worktreeBranchesForGo.
 func worktreeBranchesForRm(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string) []string {
-	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(wt.Worktree) bool { return true })
-}
-
-// worktreeBranchesForLock is worktreeBranchesForRm narrowed to the
-// worktrees that locking (lock=true) or unlocking would change.
-func worktreeBranchesForLock(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, lock bool) []string {
-	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(t wt.Worktree) bool { return needsLockChange(t, lock) })
-}
-
-// namedWorktreeBranches is the shared body of the multi-arg completers:
-// non-main worktree branches that pass keep and aren't already on the
-// command line, sorted.
-func namedWorktreeBranches(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, keep func(wt.Worktree) bool) []string {
 	taken := make(map[string]struct{}, len(alreadyChosen))
 	for _, a := range alreadyChosen {
 		taken[a] = struct{}{}
@@ -84,7 +71,7 @@ func namedWorktreeBranches(wts []wt.Worktree, mainRoot, treesDir string, already
 	_, parentW := columnWidths(wts, mainRoot, treesDir)
 	out := make([]string, 0, len(wts))
 	for _, t := range wts {
-		if t.Branch == "" || t.Path == mainRoot || !keep(t) {
+		if t.Branch == "" || t.Path == mainRoot {
 			continue
 		}
 		if _, dup := taken[t.Branch]; dup {
@@ -94,6 +81,12 @@ func namedWorktreeBranches(wts []wt.Worktree, mainRoot, treesDir string, already
 	}
 	sort.Strings(out)
 	return out
+}
+
+// worktreeBranchesForLock is worktreeBranchesForRm over the worktrees that
+// locking (lock=true) or unlocking would change.
+func worktreeBranchesForLock(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, lock bool) []string {
+	return worktreeBranchesForRm(filterNeedsLockChange(wts, lock), mainRoot, treesDir, alreadyChosen)
 }
 
 // addCandidates returns ref names eligible for `git-wt add`: every
