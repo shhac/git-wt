@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,24 @@ func TestList_OnlyMain(t *testing.T) {
 	}
 	if !strings.HasPrefix(res.Stdout, "* ") {
 		t.Errorf("expected current marker `* `, got: %s", res.Stdout)
+	}
+}
+
+// TestList_FromMainSubdir: git prints the common dir relative to the
+// directory it ran in, so resolving it against the worktree root instead
+// put the main worktree two levels too high and mislabelled it.
+func TestList_FromMainSubdir(t *testing.T) {
+	repo := newRepo(t)
+	sub := filepath.Join(repo, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	res := runWT(t, sub, "--plain", "list")
+	if res.ExitCode != 0 {
+		t.Fatalf("list exit %d, stderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.HasPrefix(res.Stdout, "* main  demo ") {
+		t.Errorf("expected the main row labelled `demo`, got: %s", res.Stdout)
 	}
 }
 

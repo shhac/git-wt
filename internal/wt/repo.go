@@ -36,12 +36,9 @@ func Inspect(ctx context.Context, dir string) (*RepoInfo, error) {
 	}
 	bare := bareOut == "true"
 
-	commonDir, err := git.RunIn(ctx, dir, "rev-parse", "--git-common-dir")
+	commonDir, err := CommonDir(ctx, dir)
 	if err != nil {
 		return nil, err
-	}
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(root, commonDir)
 	}
 	mainRoot := filepath.Dir(commonDir) // common dir is `<main>/.git`
 
@@ -53,19 +50,27 @@ func Inspect(ctx context.Context, dir string) (*RepoInfo, error) {
 	}, nil
 }
 
+// CommonDir returns the absolute path of the repository's common git dir
+// (`<main>/.git`). git prints it relative to the directory it ran in when
+// that is inside the main worktree — `../../.git` from two levels down — so
+// it is resolved against that directory, not the worktree root.
+func CommonDir(ctx context.Context, dir string) (string, error) {
+	commonDir, err := git.RunIn(ctx, dir, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	if filepath.IsAbs(commonDir) {
+		return commonDir, nil
+	}
+	return filepath.Abs(filepath.Join(dir, commonDir))
+}
+
 // IsClean reports whether the repository has no in-progress operation
 // (merge, rebase, cherry-pick, bisect, revert).
 func IsClean(ctx context.Context, dir string) (bool, string, error) {
-	commonDir, err := git.RunIn(ctx, dir, "rev-parse", "--git-common-dir")
+	commonDir, err := CommonDir(ctx, dir)
 	if err != nil {
 		return false, "", err
-	}
-	if !filepath.IsAbs(commonDir) {
-		root, err := git.RunIn(ctx, dir, "rev-parse", "--show-toplevel")
-		if err != nil {
-			return false, "", err
-		}
-		commonDir = filepath.Join(root, commonDir)
 	}
 	if op := inProgressOp(commonDir); op != "" {
 		return false, op, nil
