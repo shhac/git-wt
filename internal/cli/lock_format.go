@@ -8,8 +8,9 @@ import (
 )
 
 // How a lock is described, in its three settings: the padded tag column in
-// list, picker and completion rows; the compact label in clean's listing;
-// and the full sentence in lock, unlock, rm and clean messages.
+// list, picker and completion rows; the compact label inside clean's and
+// rm's target listings; and the full sentence in lock, unlock, rm and clean
+// messages.
 
 // lockReasonWidth caps the reason shown in list and picker rows; the full
 // text is in the messages lock and unlock print.
