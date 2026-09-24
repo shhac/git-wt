@@ -83,18 +83,14 @@ func TestResolveNamedWorktrees(t *testing.T) {
 	}
 }
 
-func TestRefuseLocked(t *testing.T) {
+func TestLockedBailError(t *testing.T) {
 	targets := []rmTarget{
 		{Worktree: wt.Worktree{Branch: "free", Path: "/r/free"}},
 		{Worktree: wt.Worktree{Branch: "a", Path: "/r/a", Locked: true, LockReason: "agent a"}},
 		{Worktree: wt.Worktree{Branch: "b", Path: "/r/b", Locked: true}},
 	}
-	err := refuseLocked(targets)
-	if err == nil {
-		t.Fatal("expected an error naming the locked targets")
-	}
-	msg := err.Error()
-	for _, want := range []string{"2 worktree(s) locked", "a (locked: agent a)", "b (locked)", "nothing was removed"} {
+	msg := lockedBailError(lockedTargets(targets)).Error()
+	for _, want := range []string{"2 worktree(s) locked", "a (locked: agent a)", "b (locked)", "`git-wt unlock a b`", "nothing was removed"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error missing %q:\n%s", want, msg)
 		}
@@ -102,9 +98,40 @@ func TestRefuseLocked(t *testing.T) {
 	if strings.Contains(msg, "free") {
 		t.Errorf("error names an unlocked target:\n%s", msg)
 	}
+}
 
-	if err := refuseLocked(targets[:1]); err != nil {
-		t.Errorf("no locked targets: err = %v, want nil", err)
+func TestUnlockHint_BranchlessFallsBackToGit(t *testing.T) {
+	got := unlockHint([]rmTarget{
+		{Worktree: wt.Worktree{Branch: "a", Path: "/r/a", Locked: true}},
+		{Worktree: wt.Worktree{Detached: true, Path: "/r/d", Locked: true}},
+	})
+	if !strings.Contains(got, "git worktree unlock <path>") {
+		t.Errorf("hint = %q; git-wt unlock can't name a detached worktree by path", got)
+	}
+}
+
+func TestApplyUnlockChoice(t *testing.T) {
+	targets := []rmTarget{
+		{Worktree: wt.Worktree{Branch: "free", Path: "/r/free"}},
+		{Worktree: wt.Worktree{Branch: "a", Path: "/r/a", Locked: true}},
+		{Worktree: wt.Worktree{Branch: "b", Path: "/r/b", Locked: true}},
+	}
+	kept := applyUnlockChoice(targets, map[string]bool{"/r/b": true})
+	if got, want := strings.Join(paths(kept), ","), "/r/free,/r/b"; got != want {
+		t.Errorf("kept = %s, want %s", got, want)
+	}
+	if kept[0].unlock || !kept[1].unlock {
+		t.Errorf("only the chosen locked target should be marked to unlock: %+v", kept)
+	}
+	if targets[2].unlock {
+		t.Error("input slice was mutated")
+	}
+}
+
+func TestRmSummary_NamesTheLockBeingReleased(t *testing.T) {
+	got := rmSummary([]rmTarget{{Worktree: wt.Worktree{Branch: "a", Path: "/r/a", Locked: true}, unlock: true}})
+	if !strings.Contains(got, "a  [unlocks: locked]") {
+		t.Errorf("summary = %q", got)
 	}
 }
 

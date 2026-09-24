@@ -64,8 +64,12 @@ var rmCmd = &cobra.Command{
 		if len(targets) == 0 {
 			return nil // user cancelled the picker
 		}
-		if err := refuseLocked(targets); err != nil {
+		targets, err = resolveLocked(targets)
+		if err != nil {
 			return err
+		}
+		if len(targets) == 0 {
+			return nil // cancelled, or every locked target was skipped
 		}
 
 		targets, err = resolveDirty(scanDirty(ctx, targets), rmForce)
@@ -106,6 +110,7 @@ type rmTarget struct {
 	orphan bool
 	dirty  wt.DirtyStat // filled by scanDirty, before anything is deleted
 	force  bool         // cleared to remove despite dirty
+	unlock bool         // locked, and cleared to unlock just before removal
 }
 
 // label is the human-readable name used in prompts and progress output.
@@ -214,9 +219,10 @@ func chooseRmAction(targets []rmTarget, keepBranch, deleteBranch bool) (action r
 }
 
 // rmSummary is the target list shown above the final confirm. Worktrees
-// carrying uncommitted work are called out with their counts: this is the
-// last screen before the deletion, so it should say what is at stake rather
-// than leave the user to remember the dirty prompt two screens back.
+// carrying uncommitted work are called out with their counts, and locked
+// ones with the lock being released: this is the last screen before the
+// deletion, so it should say what is at stake rather than leave the user to
+// remember the prompts before it.
 func rmSummary(targets []rmTarget) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Remove %d worktree(s):", len(targets))
@@ -224,6 +230,9 @@ func rmSummary(targets []rmTarget) string {
 		b.WriteString("\n    " + t.label())
 		if t.dirty.Any() {
 			fmt.Fprintf(&b, "  [discards %s]", t.dirty.Summary())
+		}
+		if t.unlock {
+			fmt.Fprintf(&b, "  [unlocks: %s]", lockLabel(t.Worktree))
 		}
 	}
 	return b.String()
@@ -305,6 +314,12 @@ func removeTargets(ctx context.Context, targets []rmTarget, action rmAction, bra
 			continue
 		}
 
+		if t.unlock {
+			if err := wt.Unlock(ctx, t.Path); err != nil {
+				return rmProgressError(targets, i, fmt.Errorf("unlock %s: %w", t.label(), err))
+			}
+			t.Locked = false
+		}
 		if err := removeWorktree(ctx, t.Worktree, t.force); err != nil {
 			return rmProgressError(targets, i, fmt.Errorf("remove worktree %s: %w", t.label(), err))
 		}

@@ -163,11 +163,11 @@ func TestResolveDirty_NonInteractiveRefusesAndNamesAll(t *testing.T) {
 	}
 }
 
-func TestDirtyRows_AlignsCounts(t *testing.T) {
-	rows := dirtyRows([]rmTarget{
+func TestTargetRows_AlignsNotes(t *testing.T) {
+	rows := targetRows([]rmTarget{
 		{Worktree: wt.Worktree{Path: "/p/x", Branch: "short"}, dirty: wt.DirtyStat{Modified: 1}},
 		{Worktree: wt.Worktree{Path: "/p/y", Branch: "a-much-longer-branch"}, dirty: wt.DirtyStat{Untracked: 3}},
-	})
+	}, dirtyNote)
 	if len(rows) != 2 {
 		t.Fatalf("len = %d, want 2", len(rows))
 	}

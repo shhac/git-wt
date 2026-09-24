@@ -104,49 +104,46 @@ func dirtyBailError(dirty []rmTarget) error {
 	return fmt.Errorf("%s", b.String())
 }
 
-// dirtyRows renders the multi-select rows for pickDirtyToForce, padding the
-// labels so the counts line up. Uses the package's own column helpers rather
+// targetRows renders multi-select rows over targets, padding the labels so
+// each target's note lines up. Uses the package's own column helpers rather
 // than a %-*s of its own, so the alignment measures visible width and the
-// rows carry the same dim-counts styling as every other picker.
-func dirtyRows(dirty []rmTarget) []picker.Row {
-	labels := make([]string, len(dirty))
-	for i, t := range dirty {
+// rows carry the same dim styling as every other picker.
+func targetRows(targets []rmTarget, note func(rmTarget) string) []picker.Row {
+	labels := make([]string, len(targets))
+	for i, t := range targets {
 		labels[i] = t.label()
 	}
 	width := maxWidth(labels)
 
-	rows := make([]picker.Row, len(dirty))
-	for i, t := range dirty {
+	rows := make([]picker.Row, len(targets))
+	for i, t := range targets {
 		rows[i] = picker.Row{
-			Display: padRight(labels[i], width) + "  " + ui.Dim(t.dirty.Summary()),
+			Display: padRight(labels[i], width) + "  " + ui.Dim(note(t)),
 			Value:   t.Path,
 		}
 	}
 	return rows
 }
 
-// pickDirtyToForce asks which dirty worktrees to remove anyway. Toggling
-// nothing — the default — skips them all, which is the safe outcome.
-// ok=false means the user cancelled the whole operation.
-func pickDirtyToForce(dirty []rmTarget, total int) (_ map[string]bool, ok bool, err error) {
-	end := debug.Op("pick.many", fmt.Sprintf("%d-dirty", len(dirty)))
+func dirtyNote(t rmTarget) string { return t.dirty.Summary() }
+
+// pickTargetSubset asks which of targets to go ahead with, returning the
+// chosen paths. Toggling nothing — the default — chooses none, which is the
+// safe outcome for every question it is used for. ok=false means the user
+// cancelled the whole operation.
+func pickTargetSubset(title string, targets []rmTarget, note func(rmTarget) string) (_ map[string]bool, ok bool, err error) {
+	end := debug.Op("pick.many", fmt.Sprintf("%d-subset", len(targets)))
 	defer func() { end(err) }()
 
-	title := fmt.Sprintf(
-		"%d of %d selected worktrees have uncommitted changes.\n"+
-			"Select any you want to remove anyway; unselected are skipped.\n"+
-			"(space toggles, enter continues, esc cancels)",
-		len(dirty), total,
-	)
-	values, ok, err := picker.SelectMany(title, dirtyRows(dirty))
+	values, ok, err := picker.SelectMany(title, targetRows(targets, note))
 	if err != nil || !ok {
 		return nil, false, err
 	}
-	forced := make(map[string]bool, len(values))
+	chosen := make(map[string]bool, len(values))
 	for _, v := range values {
-		forced[v] = true
+		chosen[v] = true
 	}
-	return forced, true, nil
+	return chosen, true, nil
 }
 
 // resolveDirty decides what to do about targets carrying uncommitted work.
@@ -169,7 +166,13 @@ func resolveDirty(targets []rmTarget, force bool) ([]rmTarget, error) {
 		return nil, dirtyBailError(dirty)
 	}
 
-	forced, ok, err := pickDirtyToForce(dirty, len(targets))
+	title := fmt.Sprintf(
+		"%d of %d selected worktrees have uncommitted changes.\n"+
+			"Select any you want to remove anyway; unselected are skipped.\n"+
+			"(space toggles, enter continues, esc cancels)",
+		len(dirty), len(targets),
+	)
+	forced, ok, err := pickTargetSubset(title, dirty, dirtyNote)
 	if err != nil {
 		return nil, err
 	}
