@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -46,9 +47,17 @@ func TestList_LsAlias(t *testing.T) {
 	repo := newRepo(t)
 	a := runWT(t, repo, "list")
 	b := runWT(t, repo, "ls")
-	if a.Stdout != b.Stdout {
+	// The mtime column is relative to now, so two runs straddling a second
+	// boundary differ there without either command being wrong.
+	if withoutAges(a.Stdout) != withoutAges(b.Stdout) {
 		t.Errorf("`list` and `ls` produced different output:\n list:\n%s\n ls:\n%s", a.Stdout, b.Stdout)
 	}
+}
+
+var ageCell = regexp.MustCompile(`\d+(y|mo|wk|d|h|m|s)\b`)
+
+func withoutAges(s string) string {
+	return ageCell.ReplaceAllString(s, "N")
 }
 
 func TestNew_CreatesWorktree(t *testing.T) {
