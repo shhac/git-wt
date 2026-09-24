@@ -44,10 +44,10 @@ func isQuit(c tea.Cmd) bool {
 
 func TestMoveCursor(t *testing.T) {
 	cases := []struct {
-		name           string
-		cursor, n      int
-		key            string
-		want           int
+		name      string
+		cursor, n int
+		key       string
+		want      int
 	}{
 		{"up from middle", 1, 3, "up", 0},
 		{"k from middle (vim)", 1, 3, "k", 0},

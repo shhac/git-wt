@@ -6,8 +6,7 @@
 // File layout:
 //   - main_test.go      — TestMain (binary build) only
 //   - harness_test.go   — runWT/runWTFD/doRun, runResult, hermeticEnv
-//   - fixtures_test.go  — newRepo, newRepoWithRemote, mustGit, mustWrite,
-//                         mustExist, mustNotExist, orphanBranch
+//   - fixtures_test.go  — newRepo, newRepoWithRemote, and the must* helpers
 //   - commands_test.go  — the actual test functions
 package e2e
 

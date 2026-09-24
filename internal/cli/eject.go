@@ -227,4 +227,3 @@ func rollbackStash(ctx context.Context, dir, stashRef string) {
 			wt.ShortStashRef(stashRef), err)
 	}
 }
-

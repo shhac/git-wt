@@ -428,7 +428,6 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-
 // clean --orphaned-only selects worktrees precisely because their branch
 // ref is gone, so asking git to delete that branch afterwards is the normal
 // case there. It must not surface as a warning.

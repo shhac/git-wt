@@ -75,4 +75,3 @@ func init() {
 	addCmd.Flags().BoolVar(&addNoCopy, "no-copy", false, "skip copying project config files")
 	addCmd.Flags().StringVar(&addCopyFileConfig, "copy-file-config", "", "path to copy spec (default: <repo>/.git-wt-copy-files)")
 }
-

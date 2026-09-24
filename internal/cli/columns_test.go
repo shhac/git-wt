@@ -60,7 +60,7 @@ func TestPadRight_IgnoresANSI(t *testing.T) {
 func TestColumnWidths(t *testing.T) {
 	wts := []wt.Worktree{
 		{Path: "/repo", Branch: "main"},                       // branch=4, loc="repo" (parent)
-		{Path: "/repo/.worktrees/feat-a", Branch: "feat-a"},         // branch=6, loc="#feat-a"=7
+		{Path: "/repo/.worktrees/feat-a", Branch: "feat-a"},   // branch=6, loc="#feat-a"=7
 		{Path: "/repo/.conductor/abuja", Branch: "long-name"}, // branch=9, loc=".conductor/abuja"=16
 	}
 	branchW, parentW := columnWidths(wts, "/repo", "/repo/.worktrees")
