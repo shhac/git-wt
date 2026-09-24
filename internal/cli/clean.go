@@ -177,7 +177,7 @@ func printCleanTargets(w io.Writer, targets []taggedTarget, dirty map[string]wt.
 			note = fmt.Sprintf("  [dirty: %s]", d.Summary())
 		}
 		if t.wt.Locked {
-			note += "  [" + strings.TrimSpace("locked "+lockAge(t.wt)) + "]"
+			note += "  [" + lockLabel(t.wt) + "]"
 		}
 		_, _ = fmt.Fprintf(w, "  %s  [%s]  (%s)%s\n", t.wt.Display(), t.reason, t.wt.Path, note)
 	}

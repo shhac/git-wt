@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shhac/git-wt/internal/wt"
 )
@@ -188,6 +189,22 @@ func TestPrintCleanTargets_DirtyNote(t *testing.T) {
 	}
 	if strings.Count(got, "dirty") != 1 {
 		t.Errorf("clean target /p/a should have no dirty note\n--- got ---\n%s", got)
+	}
+}
+
+func TestPrintCleanTargets_LockNote(t *testing.T) {
+	var buf strings.Builder
+	targets := []taggedTarget{
+		{wt: wt.Worktree{Path: "/p/a", Branch: "a", Locked: true, LockedAt: time.Now().Add(-26 * time.Hour)}, reason: "branch deleted"},
+		{wt: wt.Worktree{Path: "/p/b", Branch: "b", Locked: true}, reason: "branch deleted"},
+		{wt: wt.Worktree{Path: "/p/c", Branch: "c"}, reason: "branch deleted"},
+	}
+	printCleanTargets(&buf, targets, nil)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	for i, want := range []string{"(/p/a)  [locked 1d 2h]", "(/p/b)  [locked]", "(/p/c)"} {
+		if !strings.HasSuffix(lines[i+1], want) {
+			t.Errorf("line %d = %q, want suffix %q", i+1, lines[i+1], want)
+		}
 	}
 }
 

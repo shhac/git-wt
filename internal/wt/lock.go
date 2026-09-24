@@ -96,19 +96,3 @@ func lockTimes(commonDir string) map[string]time.Time {
 	}
 	return out
 }
-
-// canonicalPath resolves symlinks (macOS reaches temp dirs via /var ->
-// /private/var) so paths from porcelain and from gitdir files compare
-// equal. A worktree whose directory is gone can't be resolved whole, so its
-// deepest existing ancestor is resolved and the missing tail re-appended.
-func canonicalPath(p string) string {
-	p = filepath.Clean(p)
-	if resolved, err := filepath.EvalSymlinks(p); err == nil {
-		return resolved
-	}
-	parent := filepath.Dir(p)
-	if parent == p {
-		return p
-	}
-	return filepath.Join(canonicalPath(parent), filepath.Base(p))
-}

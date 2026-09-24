@@ -20,8 +20,11 @@ import (
 // up immediately, unregisters it, then deletes the renamed directory with
 // wt.DeleteTree — which fixes read-only directories and immutable file flags
 // that make `git worktree remove` die mid-delete and strand a half-removed
-// tree. Locked worktrees and anything the fast path can't establish fall
-// back to plain `git worktree remove`, preserving git's own errors.
+// tree. Anything the fast path can't establish falls back to plain `git
+// worktree remove`, preserving git's own errors. rm and clean filter locked
+// worktrees out before this point; the Locked check stays as a backstop, since
+// the fast path would delete a locked worktree's directory, which git refuses
+// to do.
 func removeWorktree(ctx context.Context, t wt.Worktree, force bool) error {
 	if !t.Locked {
 		if handled, err := fastRemoveWorktree(ctx, t, force); handled {

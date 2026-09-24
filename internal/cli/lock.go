@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/shhac/git-wt/internal/ui"
 	"github.com/shhac/git-wt/internal/wt"
 )
 
@@ -165,30 +163,4 @@ func resolveNamedWorktrees(wts []wt.Worktree, repo *wt.RepoInfo, args []string, 
 		out = append(out, *t)
 	}
 	return out, nil
-}
-
-// lockStateDetail describes t's lock state for messages: "not locked", or
-// "locked" with how long ago and the full reason when known. Doubles as the
-// "nothing to do" note, where the existing lock's age and reason tell the
-// user whether it is the lock they meant to take.
-func lockStateDetail(t wt.Worktree) string {
-	if !t.Locked {
-		return "not locked"
-	}
-	detail := "locked"
-	if age := lockAge(t); age != "" {
-		detail += " " + age + " ago"
-	}
-	if reason := oneLine(t.LockReason); reason != "" {
-		detail += ": " + reason
-	}
-	return detail
-}
-
-// lockAge is how long t has been locked, unpadded ("3d 2h"); "" if unknown.
-func lockAge(t wt.Worktree) string {
-	if t.LockedAt.IsZero() {
-		return ""
-	}
-	return strings.Join(strings.Fields(ui.HumanSince(t.LockedAt)), " ")
 }

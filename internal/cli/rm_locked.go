@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -29,7 +30,7 @@ func refuseLocked(targets []rmTarget) error {
 		fmt.Fprintf(&b, "\n    %s (%s)", t.label(), lockStateDetail(t.Worktree))
 	}
 	b.WriteString("\nrun `git-wt unlock` on them first; nothing was removed")
-	return fmt.Errorf("%s", b.String())
+	return errors.New(b.String())
 }
 
 // skipLocked drops every locked target, saying so. `clean` uses it for the

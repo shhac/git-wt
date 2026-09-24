@@ -84,21 +84,3 @@ func writeAdmin(t *testing.T, commonDir, id, gitdir string, lockedAt *time.Time)
 		t.Fatal(err)
 	}
 }
-
-func TestCanonicalPath_MissingTailUnderSymlink(t *testing.T) {
-	root := t.TempDir()
-	real := filepath.Join(root, "real")
-	if err := os.Mkdir(real, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(root, "link")
-	if err := os.Symlink(real, link); err != nil {
-		t.Fatal(err)
-	}
-
-	got := canonicalPath(filepath.Join(link, "gone", "tree"))
-	want := filepath.Join(canonicalPath(real), "gone", "tree")
-	if got != want {
-		t.Errorf("canonicalPath = %q, want %q", got, want)
-	}
-}
