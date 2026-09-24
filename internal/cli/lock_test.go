@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -95,11 +97,11 @@ func TestWorktreeBranchesForLock(t *testing.T) {
 		{Branch: "held-too", Path: "/repo/.worktrees/held-too", Locked: true},
 		{Branch: "free", Path: "/repo/.worktrees/free"},
 	}
-	unlockable := branchesOnly(worktreeBranchesForLock(wts, "/repo", "/repo/.worktrees", []string{"held-too"}, true))
+	unlockable := branchesOnly(worktreeBranchesForLock(wts, "/repo", "/repo/.worktrees", []string{"held-too"}, false))
 	if want := []string{"held"}; !reflect.DeepEqual(unlockable, want) {
 		t.Errorf("unlock candidates = %v, want %v", unlockable, want)
 	}
-	lockable := branchesOnly(worktreeBranchesForLock(wts, "/repo", "/repo/.worktrees", nil, false))
+	lockable := branchesOnly(worktreeBranchesForLock(wts, "/repo", "/repo/.worktrees", nil, true))
 	if want := []string{"free"}; !reflect.DeepEqual(lockable, want) {
 		t.Errorf("lock candidates = %v, want %v", lockable, want)
 	}
@@ -172,4 +174,57 @@ func TestSkipLocked(t *testing.T) {
 	if got := buf.String(); got != "skipping a: locked: agent a\n" {
 		t.Errorf("report = %q", got)
 	}
+}
+
+func TestApplyLockChange(t *testing.T) {
+	held := wt.Worktree{Branch: "held", Path: "/r/held", Locked: true, LockReason: "agent a"}
+	free := wt.Worktree{Branch: "free", Path: "/r/free"}
+	boom := wt.Worktree{Branch: "boom", Path: "/r/boom"}
+	after := wt.Worktree{Branch: "after", Path: "/r/after"}
+
+	t.Run("lock skips the already-locked and reports the rest", func(t *testing.T) {
+		var changed []string
+		var buf strings.Builder
+		err := applyLockChange(&buf, []wt.Worktree{held, free}, true, func(w wt.Worktree) error {
+			changed = append(changed, w.Branch)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"free"}; !reflect.DeepEqual(changed, want) {
+			t.Errorf("changed = %v, want %v", changed, want)
+		}
+		if want := "held is locked: agent a\nlocked free\n"; buf.String() != want {
+			t.Errorf("report = %q, want %q", buf.String(), want)
+		}
+	})
+
+	t.Run("unlock names the lock it released", func(t *testing.T) {
+		var buf strings.Builder
+		err := applyLockChange(&buf, []wt.Worktree{held, free}, false, func(wt.Worktree) error { return nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "unlocked held (was locked: agent a)\nfree is not locked\n"; buf.String() != want {
+			t.Errorf("report = %q, want %q", buf.String(), want)
+		}
+	})
+
+	t.Run("stops at the first failure, naming it", func(t *testing.T) {
+		var changed []string
+		err := applyLockChange(io.Discard, []wt.Worktree{free, boom, after}, true, func(w wt.Worktree) error {
+			changed = append(changed, w.Branch)
+			if w.Branch == "boom" {
+				return errors.New("git said no")
+			}
+			return nil
+		})
+		if err == nil || err.Error() != "lock boom: git said no" {
+			t.Errorf("err = %v, want `lock boom: git said no`", err)
+		}
+		if want := []string{"free", "boom"}; !reflect.DeepEqual(changed, want) {
+			t.Errorf("changed = %v, want %v (nothing after the failure)", changed, want)
+		}
+	})
 }

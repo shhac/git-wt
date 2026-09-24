@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -24,15 +25,7 @@ var lockCmd = &cobra.Command{
 		"Locking a worktree that is already locked keeps the existing lock.",
 	ValidArgsFunction: completeLockBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runLockChange(cmd.Context(), args, lockChange{
-			verb:      "lock",
-			lock:      true,
-			pickTitle: "Select worktrees to lock (space to toggle, enter to continue, esc to cancel)",
-			noneLeft:  "no unlocked worktrees to lock",
-			apply: func(ctx context.Context, t wt.Worktree) error {
-				return wt.Lock(ctx, t.Path, lockReason)
-			},
-		})
+		return runLockChange(cmd.Context(), args, true, lockReason)
 	},
 }
 
@@ -45,15 +38,7 @@ var unlockCmd = &cobra.Command{
 		"has been locked and why.",
 	ValidArgsFunction: completeUnlockBranches,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runLockChange(cmd.Context(), args, lockChange{
-			verb:      "unlock",
-			lock:      false,
-			pickTitle: "Select worktrees to unlock (space to toggle, enter to continue, esc to cancel)",
-			noneLeft:  "no locked worktrees",
-			apply: func(ctx context.Context, t wt.Worktree) error {
-				return wt.Unlock(ctx, t.Path)
-			},
-		})
+		return runLockChange(cmd.Context(), args, false, "")
 	},
 }
 
@@ -62,57 +47,102 @@ func init() {
 	lockCmd.Flags().StringVar(&lockReason, "reason", "", "why the worktree is locked")
 }
 
-// lockChange describes one direction of lock/unlock; the two commands differ
-// only in these values.
-type lockChange struct {
-	verb      string
-	lock      bool // the state the targets end up in
-	pickTitle string
-	noneLeft  string // said when no worktree can be picked
-	apply     func(ctx context.Context, t wt.Worktree) error
-}
-
-func runLockChange(ctx context.Context, args []string, op lockChange) error {
+// runLockChange takes the named (or picked) worktrees to the wanted lock
+// state: lock=true locks them with reason, lock=false unlocks them.
+func runLockChange(ctx context.Context, args []string, lock bool, reason string) error {
 	repo, wts, _, err := loadRepoAndWorktrees(ctx)
 	if err != nil {
 		return err
 	}
-	treesDir := wt.TreesDirFor(repo.MainRoot)
-
-	targets, err := resolveLockTargets(wts, repo, args, treesDir, op)
+	targets, err := resolveLockTargets(wts, repo, args, wt.TreesDirFor(repo.MainRoot), lock)
 	if err != nil {
 		return err
 	}
+	return applyLockChange(os.Stderr, targets, lock, func(t wt.Worktree) error {
+		if lock {
+			return wt.Lock(ctx, t.Path, reason)
+		}
+		return wt.Unlock(ctx, t.Path)
+	})
+}
+
+// applyLockChange runs change on each target not already in the wanted
+// state, reporting to w, and stops at the first failure. A target already in
+// that state is a note rather than an error: the end state is what the user
+// asked for. change is the git call, taken as a parameter so the reporting
+// is testable without a repository.
+func applyLockChange(w io.Writer, targets []wt.Worktree, lock bool, change func(wt.Worktree) error) error {
 	for _, t := range targets {
-		if t.Locked == op.lock {
-			fmt.Fprintf(os.Stderr, "%s is %s\n", worktreeLabel(t), lockStateDetail(t))
+		label := worktreeLabel(t)
+		if !needsLockChange(t, lock) {
+			_, _ = fmt.Fprintf(w, "%s is %s\n", label, lockStateDetail(t))
 			continue
 		}
-		if err := op.apply(ctx, t); err != nil {
-			return fmt.Errorf("%s %s: %w", op.verb, worktreeLabel(t), err)
+		if err := change(t); err != nil {
+			return fmt.Errorf("%s %s: %w", lockVerb(lock), label, err)
 		}
-		fmt.Fprintf(os.Stderr, "%sed %s%s\n", op.verb, worktreeLabel(t), unlockedNote(t, op))
+		if lock {
+			_, _ = fmt.Fprintf(w, "locked %s\n", label)
+			continue
+		}
+		// Name the lock just released, so the user can see it was the one
+		// they meant to clear.
+		_, _ = fmt.Fprintf(w, "unlocked %s (was %s)\n", label, lockStateDetail(t))
 	}
 	return nil
 }
 
 // resolveLockTargets returns the named worktrees, or the ones picked
-// interactively from those not already in the target state. Returns an
-// empty slice when there is nothing to pick or the user cancels.
-func resolveLockTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string, op lockChange) ([]wt.Worktree, error) {
+// interactively from those lock/unlock would change. Returns an empty slice
+// when there is nothing to pick or the user cancels.
+func resolveLockTargets(wts []wt.Worktree, repo *wt.RepoInfo, args []string, treesDir string, lock bool) ([]wt.Worktree, error) {
+	verb := lockVerb(lock)
 	if len(args) > 0 {
-		return resolveNamedWorktrees(wts, repo, args, treesDir, op.verb)
+		return resolveNamedWorktrees(wts, repo, args, treesDir, verb)
 	}
 
-	pickable := filterLockable(filterRemovable(wts, repo), !op.lock)
+	pickable := filterNeedsLockChange(filterRemovable(wts, repo), lock)
 	if len(pickable) == 0 {
-		fmt.Fprintln(os.Stderr, op.noneLeft)
+		fmt.Fprintln(os.Stderr, nothingToLockChange(lock))
 		return nil, nil
 	}
 	if !interactive() {
 		return nil, fmt.Errorf("no branches specified (run with branch args in non-interactive mode)")
 	}
-	return pickWorktrees(op.pickTitle, pickable, repo.MainRoot, treesDir)
+	return pickWorktrees("Select worktrees to "+verb+" (space to toggle, enter to continue, esc to cancel)",
+		pickable, repo.MainRoot, treesDir)
+}
+
+func lockVerb(lock bool) string {
+	if lock {
+		return "lock"
+	}
+	return "unlock"
+}
+
+func nothingToLockChange(lock bool) string {
+	if lock {
+		return "no unlocked worktrees to lock"
+	}
+	return "no locked worktrees"
+}
+
+// needsLockChange reports whether t is not yet in the wanted lock state —
+// the one rule behind the skip note, the picker and tab completion.
+func needsLockChange(t wt.Worktree, wantLocked bool) bool {
+	return t.Locked != wantLocked
+}
+
+// filterNeedsLockChange keeps the worktrees that locking (wantLocked=true)
+// or unlocking would change.
+func filterNeedsLockChange(wts []wt.Worktree, wantLocked bool) []wt.Worktree {
+	out := make([]wt.Worktree, 0, len(wts))
+	for _, t := range wts {
+		if needsLockChange(t, wantLocked) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // resolveNamedWorktrees resolves each arg, refusing unknown names and the
@@ -135,17 +165,6 @@ func resolveNamedWorktrees(wts []wt.Worktree, repo *wt.RepoInfo, args []string, 
 		out = append(out, *t)
 	}
 	return out, nil
-}
-
-// filterLockable keeps the worktrees whose Locked matches locked.
-func filterLockable(wts []wt.Worktree, locked bool) []wt.Worktree {
-	out := make([]wt.Worktree, 0, len(wts))
-	for _, t := range wts {
-		if t.Locked == locked {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // lockStateDetail describes t's lock state for messages: "not locked", or
@@ -172,13 +191,4 @@ func lockAge(t wt.Worktree) string {
 		return ""
 	}
 	return strings.Join(strings.Fields(ui.HumanSince(t.LockedAt)), " ")
-}
-
-// unlockedNote says what lock was just released, so the user can see they
-// cleared the one they meant to.
-func unlockedNote(t wt.Worktree, op lockChange) string {
-	if op.lock {
-		return ""
-	}
-	return " (was " + lockStateDetail(t) + ")"
 }

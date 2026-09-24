@@ -68,10 +68,9 @@ func worktreeBranchesForRm(wts []wt.Worktree, mainRoot, treesDir string, already
 }
 
 // worktreeBranchesForLock is worktreeBranchesForRm narrowed to the
-// worktrees whose lock state `lock` (locked=false) or `unlock`
-// (locked=true) would change.
-func worktreeBranchesForLock(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, locked bool) []string {
-	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(t wt.Worktree) bool { return t.Locked == locked })
+// worktrees that locking (lock=true) or unlocking would change.
+func worktreeBranchesForLock(wts []wt.Worktree, mainRoot, treesDir string, alreadyChosen []string, lock bool) []string {
+	return namedWorktreeBranches(wts, mainRoot, treesDir, alreadyChosen, func(t wt.Worktree) bool { return needsLockChange(t, lock) })
 }
 
 // namedWorktreeBranches is the shared body of the multi-arg completers:
@@ -208,20 +207,20 @@ func completeRmBranches(_ *cobra.Command, args []string, _ string) ([]string, co
 
 // completeLockBranches is the ValidArgsFunction for `git-wt lock`.
 func completeLockBranches(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
-	return completeLockState(args, false)
+	return completeLockState(args, true)
 }
 
 // completeUnlockBranches is the ValidArgsFunction for `git-wt unlock`.
 func completeUnlockBranches(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
-	return completeLockState(args, true)
+	return completeLockState(args, false)
 }
 
-func completeLockState(args []string, locked bool) ([]string, cobra.ShellCompDirective) {
+func completeLockState(args []string, lock bool) ([]string, cobra.ShellCompDirective) {
 	repo, wts, _, err := loadRepoAndWorktrees(context.Background())
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return worktreeBranchesForLock(wts, repo.MainRoot, wt.TreesDirFor(repo.MainRoot), args, locked),
+	return worktreeBranchesForLock(wts, repo.MainRoot, wt.TreesDirFor(repo.MainRoot), args, lock),
 		cobra.ShellCompDirectiveNoFileComp
 }
 
