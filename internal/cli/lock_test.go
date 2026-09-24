@@ -46,6 +46,12 @@ func TestWorktreeBranchesForLock(t *testing.T) {
 	if want := []string{"free"}; !reflect.DeepEqual(lockable, want) {
 		t.Errorf("lock candidates = %v, want %v", lockable, want)
 	}
+
+	for _, line := range worktreeBranchesForLock(wts, "/repo", "/repo/.worktrees", nil, false) {
+		if !strings.HasSuffix(line, "  locked") {
+			t.Errorf("a locked candidate's description should end with its lock tag: %q", line)
+		}
+	}
 }
 
 func TestResolveNamedWorktrees(t *testing.T) {

@@ -150,3 +150,74 @@ func TestClean_SkipsLockedWorktrees(t *testing.T) {
 		t.Errorf("expected the locked worktree reported as skipped, got: %s", res.Stderr)
 	}
 }
+
+// backdateLock pushes a worktree's lock file into the past so its age shows.
+func backdateLock(t *testing.T, repo, id string, age time.Duration) {
+	t.Helper()
+	past := time.Now().Add(-age)
+	if err := os.Chtimes(filepath.Join(repo, ".git", "worktrees", id, "locked"), past, past); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Lock ages are looked up through the repo's common dir, which git reports
+// relative to wherever it runs; a wrong resolution only loses the age
+// silently, so check it from the places people actually stand.
+func TestLock_AgeShownFromLinkedWorktreeAndSubdir(t *testing.T) {
+	repo := newRepo(t)
+	paths := mkTrees(t, repo, "held", "free")
+	mustGit(t, repo, "worktree", "lock", paths[0])
+	backdateLock(t, repo, "held", 50*time.Hour)
+	sub := filepath.Join(repo, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dir := range []string{paths[1], sub} {
+		res := runWT(t, dir, "--plain", "list")
+		if !strings.Contains(res.Stdout, "locked  2d   2h") {
+			t.Errorf("from %s: lock age missing\n%s", dir, res.Stdout)
+		}
+	}
+}
+
+// The stale lock this feature exists for: an agent locked a worktree and
+// its directory is gone since. git keeps the registration (a lock blocks
+// pruning), list must still say how old the lock is, and unlock must clear
+// it so clean can finish the job.
+//
+// Under worktree.useRelativePaths (git 2.48+; older git ignores the key and
+// writes absolute paths) the gitdir file is relative, so matching it to
+// git's resolved path means resolving the missing directory's parents.
+func TestUnlock_WorktreeWhoseDirectoryIsGone(t *testing.T) {
+	for _, relative := range []string{"false", "true"} {
+		t.Run("useRelativePaths="+relative, func(t *testing.T) {
+			testUnlockMissingDirectory(t, relative)
+		})
+	}
+}
+
+func testUnlockMissingDirectory(t *testing.T, relativePaths string) {
+	repo := newRepo(t)
+	mustGit(t, repo, "config", "worktree.useRelativePaths", relativePaths)
+	paths := mkTrees(t, repo, "gone")
+	mustGit(t, repo, "worktree", "lock", "--reason", "agent q", paths[0])
+	backdateLock(t, repo, "gone", 50*time.Hour)
+	if err := os.RemoveAll(paths[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	list := runWT(t, repo, "--plain", "list")
+	if !strings.Contains(list.Stdout, "locked  2d   2h  agent q") {
+		t.Errorf("stale lock should show its age and reason:\n%s", list.Stdout)
+	}
+
+	res := runWT(t, repo, "unlock", "gone")
+	if res.ExitCode != 0 || !strings.Contains(res.Stderr, "unlocked gone (was locked 2d 2h ago: agent q)") {
+		t.Fatalf("unlock exit %d: %s", res.ExitCode, res.Stderr)
+	}
+	mustGit(t, repo, "worktree", "prune")
+	if porcelain := mustGit(t, repo, "worktree", "list", "--porcelain"); strings.Contains(porcelain, paths[0]) {
+		t.Errorf("once unlocked, prune should drop the missing worktree:\n%s", porcelain)
+	}
+}
